@@ -443,6 +443,7 @@
     proto:   { name: 'Prototype',     icon: '⚙️', value: 10000, half: 0.2 },
     chips:   { name: 'Chip Stack',    icon: '🎰', value: 6000,  half: 0.2 },
     bigchips: { name: 'Black Chips',  icon: '♠️', value: 15000, half: 0.22 },
+    knife:   { name: 'Knife',    icon: '🔪', value: 0, half: 0 },
     shotgun: { name: 'Shotgun',  icon: '💥', value: 0, half: 0 },
     sniper:  { name: 'Sniper',   icon: '🎯', value: 0, half: 0 },
     rifle:   { name: 'Assault Rifle', icon: '🔥', value: 0, half: 0 }
@@ -453,9 +454,10 @@
     pistol:  { name: 'Pistol',        price: 0,      dmg: 5,  pellets: 1, spread: 0,     size: 12, reserve: 60,  cd: 0.2,  auto: false, reload: 1.3, fov: 52, dist: 2.5, snd: 1.0, mz: -0.36, kick: 0.012 },
     shotgun: { name: 'Shotgun',       price: 25000,  dmg: 6,  pellets: 8, spread: 0.055, size: 6,  reserve: 30,  cd: 0.85, auto: false, reload: 2.0, fov: 50, dist: 2.5, snd: 1.6, mz: -0.84, kick: 0.05 },
     sniper:  { name: 'Sniper',        price: 100000, dmg: 50, pellets: 1, spread: 0,     size: 5,  reserve: 20,  cd: 1.3,  auto: false, reload: 2.4, fov: 18, dist: 2.0, snd: 1.8, mz: -1.08, kick: 0.07 },
+    knife:   { name: 'Knife',         price: 125000,  dmg: 25, pellets: 1, spread: 0,     size: 0,  reserve: 0,   cd: 0.5,  auto: false, reload: 0,   fov: 58, dist: 2.8, snd: 0.5, mz: -0.3,  kick: 0.0,  melee: true, range: 2.6 },
     rifle:   { name: 'Assault Rifle', price: 175000, dmg: 12, pellets: 1, spread: 0.009, size: 30, reserve: 150, cd: 0.1,  auto: true,  reload: 1.9, fov: 50, dist: 2.5, snd: 0.8, mz: -0.8,  kick: 0.016 }
   };
-  const SHOP_WEAPONS = ['shotgun', 'sniper', 'rifle'];
+  const SHOP_WEAPONS = ['knife', 'shotgun', 'sniper', 'rifle'];
 
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
@@ -701,6 +703,10 @@
     if (type === 'pistol') {
       part(0.05, 0.3, 0.07, metal, 0, -0.17, -0.01);
       part(0.05, 0.08, 0.09, dark, 0, -0.04, 0.07);
+    } else if (type === 'knife') {
+      part(0.03, 0.32, 0.075, mat(0xdfe5ee, { metalness: 0.9, roughness: 0.2 }), 0, -0.2, 0);   // blade
+      part(0.035, 0.05, 0.09, mat(0x8a929c, { metalness: 0.7, roughness: 0.3 }), 0, -0.035, 0); // guard
+      part(0.045, 0.14, 0.05, mat(0x2a1a10, { roughness: 0.8 }), 0, 0.04, 0);                  // handle
     } else if (type === 'shotgun') {
       part(0.05, 0.78, 0.05, metal, 0, -0.45, -0.02);        // barrel
       part(0.045, 0.6, 0.04, metal, 0, -0.4, 0.035);          // magazine tube
@@ -854,10 +860,33 @@
     }
   }
 
+  // knife: a short-range swing at whatever is under the crosshair
+  function stab(w) {
+    gun.cooldown = w.cd; gun.kick = 1; gun.fired = 0.6;
+    tone(320, 0.07, 'sawtooth', 0.04); tone(220, 0.07, 'sawtooth', 0.03, 0.04);
+    camera.updateMatrixWorld();
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    raycaster.far = 150;
+    const first = raycaster.intersectObjects(aimables, false)[0];
+    const target = first ? first.point.clone() : raycaster.ray.at(60, new THREE.Vector3());
+    const origin = new THREE.Vector3(player.pos.x, player.pos.y + 1.2, player.pos.z);
+    const dir = target.sub(origin).normalize();
+    raycaster.set(origin, dir);
+    raycaster.far = w.range;
+    const hit = raycaster.intersectObjects(aimables, false)[0];
+    if (!hit) return;
+    const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP.clone();
+    const cop = hit.object.userData.cop;
+    if (cop) damageCop(cop, hit.point, n, w.dmg);
+    else if (hit.object.userData.civilian) { toast('Hold off! The ' + LOC.staff + ' is unarmed.'); alertTeller('shot'); }
+    else addSparks(hit.point, n);
+  }
+
   function shoot() {
     if (phase !== 'play' && phase !== 'hq') return;
     if (!holdingGun() || gun.reload > 0 || gun.cooldown > 0) return;
     const w = WEAPONS[activeW];
+    if (w.melee) { stab(w); return; }
     if (gun.mag <= 0) {
       if (gun.reserve > 0) startReload(); else { tone(150, 0.05, 'square', 0.04); toast('Out of ammo!'); }
       return;
@@ -1583,7 +1612,7 @@
   // After a getaway you teleport to the headquarters: a hideout with an illegal gun shop.
   const HX = 1000;                       // the room sits far away from the heist area
   const SHOP_Z = -6.8;                   // pedestals along the back wall
-  const PED_X = [HX - 8, HX - 4, HX];
+  const PED_X = [HX - 9.5, HX - 6, HX - 2.5, HX + 1];
   const EXIT_POS = { x: HX + 9, z: 7 };
   const STORAGE_POS = { x: HX + 10.4, z: -1.0 };
   const hqSpin = [];
@@ -1632,7 +1661,7 @@
       addBox(2.2, 0.9, 1.3, mat(0x24222b, { roughness: 0.5 }), px, 0.45, SHOP_Z, o);
       addBox(2.3, 0.06, 1.4, mat(0xd4af37, { metalness: 0.8, roughness: 0.35 }), px, 0.93, SHOP_Z, { aim: false });
       const spin = new THREE.Group(); spin.position.set(px, 1.45, SHOP_Z);
-      const gm = makeWeaponModel(t); gm.rotation.z = Math.PI / 2; gm.scale.setScalar(t === 'sniper' ? 1.3 : 1.9);
+      const gm = makeWeaponModel(t); gm.rotation.z = Math.PI / 2; gm.scale.setScalar(t === 'sniper' ? 1.3 : t === 'knife' ? 3.2 : 1.9);
       gm.position.x = t === 'sniper' ? -0.15 : 0;
       spin.add(gm); scene.add(spin); hqSpin.push(spin);
       const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
@@ -1698,7 +1727,7 @@
       c.fillText(owned ? (carried ? 'CARRYING' : 'IN STORAGE') : money$(w.price), 256, 138);
       c.fillStyle = '#aab3c5'; c.font = '30px "Segoe UI", Arial';
       const dmg = w.pellets > 1 ? w.pellets + ' x ' + w.dmg : String(w.dmg);
-      c.fillText('DMG ' + dmg + '  ·  ' + w.size + ' RND' + (w.auto ? '  ·  AUTO' : ''), 256, 205);
+      c.fillText('DMG ' + dmg + '  ·  ' + (w.melee ? 'MELEE' : w.size + ' RND') + (w.auto ? '  ·  AUTO' : ''), 256, 205);
       sgn.tex.needsUpdate = true;
     }
   }
@@ -1759,7 +1788,7 @@
       const d = Math.hypot(player.pos.x - PED_X[i], player.pos.z - SHOP_Z);
       if (d < bd) { bd = d; best = { kind: 'weapon', type: t }; }
     });
-    if (!best && Math.hypot(player.pos.x - STORAGE_POS.x, player.pos.z - STORAGE_POS.z) < 3.2) best = { kind: 'storage' };
+    if (!best && player.pos.x > HX + 8 && player.pos.z > -4.6 && player.pos.z < 2.6) best = { kind: 'storage' };
     if (!best && Math.hypot(player.pos.x - EXIT_POS.x, player.pos.z - EXIT_POS.z) < 3.4) best = { kind: 'exit' };
     return best;
   }
@@ -1808,9 +1837,11 @@
     storageGrid.innerHTML = save.stash.map((t, i) => gunBtn(t, 'data-stash', i)).join('');
     storageMsg.textContent = msg || 'Click a gun to move it. Guns you carry take up inventory slots.';
   }
+  let storageOpenedAt = 0;
   function openStorage() {
     if (phase !== 'hq') return;
     phase = 'storage';
+    storageOpenedAt = performance.now();
     renderStorage();
     storageEl.classList.remove('hidden');
     aiming = false; mouseDown = false;
@@ -1853,7 +1884,7 @@
     else if (b.dataset.stash !== undefined) storageClick('stash', +b.dataset.stash);
   });
   document.addEventListener('keydown', e => {
-    if (phase === 'storage' && !e.repeat && (e.code === 'Escape' || e.code === 'KeyE')) closeStorage();
+    if (phase === 'storage' && !e.repeat && (e.code === 'Escape' || (e.code === 'KeyE' && performance.now() - storageOpenedAt > 300))) closeStorage();
   });
 
   // ---- choose the next job
@@ -1981,7 +2012,7 @@
       if (gun.reload > 0) { rArm = 0.7; lArm = 0.75; }
       else if (poseAim) { rArm = 1.45 + clamp(pitch, -0.6, 0.9) * 0.9; lArm = rArm - 0.1; }
       else { rArm = 0.8 + 0.03 * Math.sin(time * 2); lArm = swing * 0.6; }
-      rArm += gun.kick * 0.22;
+      rArm += gun.kick * (WEAPONS[activeW].melee ? 0.9 : 0.22);
     }
     if (model.heldMoney.visible || model.heldGold.visible) lArm = 0.9;
     model.armR.rotation.x = rArm;
@@ -2077,9 +2108,9 @@
     updateCamera(dt);
 
     // HUD
-    const showAmmo = holdingGun();
+    const showAmmo = holdingGun() && !WEAPONS[activeW].melee;
     ammoEl.classList.toggle('dim', !showAmmo);
-    crossEl.classList.toggle('hidden', !showAmmo && !aiming);
+    crossEl.classList.toggle('hidden', !holdingGun() && !aiming);
     ammoMagEl.textContent = gun.mag;
     ammoResEl.textContent = ' / ' + gun.reserve;
     reloadEl.classList.toggle('show', gun.reload > 0);
