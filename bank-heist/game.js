@@ -135,6 +135,7 @@
       loot: [['chips', 6.4, 0.02, -26.8], ['chips', 7.4, 0.02, -26.8], ['chips', 8.4, 0.02, -26.8], ['bigchips', 9.4, 0.02, -26.8], ['bigchips', 10.4, 0.02, -26.8]]
     }
   };
+  const SYMBOLS = ['🍒', '🍋', '🔔', '⭐', '7️⃣', '💎'];
   let LOC = LOCS.bank;
   try {
     const sv = JSON.parse(localStorage.getItem('bankheist-save-v1'));
@@ -204,6 +205,31 @@
         addBox(1.25, 0.25, 0.97, mat(0xffd84a, { metalness: 0.6, roughness: 0.4 }), x, 2.4, -28.8, { aim: false });
         light(c, 6, x, 1.8, -27.6);
       });
+      // the secret code: three clue notes (one per reel) hidden at random spots, different every visit
+      const flat = -Math.PI / 2, spots = [
+        [-8.5, 3.6, -29.35, 0, 0], [-5.5, 3.6, -29.35, 0, 0],            // back wall, above the slot machines
+        [-11.35, 2.4, -25.5, Math.PI / 2, 0], [-11.35, 2.4, -18.5, Math.PI / 2, 0],   // left wall
+        [11.35, 2.4, -23.5, -Math.PI / 2, 0], [11.35, 2.4, -18.5, -Math.PI / 2, 0],   // right wall
+        [-6, 2.4, -14.55, Math.PI, 0], [6.5, 2.4, -14.55, Math.PI, 0],   // inside of the front wall
+        [-9, 1.16, -21, 0, flat], [1.5, 1.16, -21, 0, flat],             // on the dealer's counter
+        [-7, 1.0, -15.9, 0, flat], [7, 1.0, -15.9, 0, flat]              // on the roulette tables
+      ].sort(() => Math.random() - 0.5).slice(0, 3);
+      LOC.code = SYMBOLS.map((_, i) => i).sort(() => Math.random() - 0.5).slice(0, 3);
+      LOC.clues = spots.map((sp, reel) => ({ reel, spot: sp.slice(0, 3) }));
+      spots.forEach((sp, reel) => {
+        const tex = canvasTex(256, 320, (c, w, h) => {
+          c.fillStyle = '#fff6c9'; c.fillRect(0, 0, w, h);
+          c.strokeStyle = '#c0152b'; c.lineWidth = 8; c.strokeRect(6, 6, w - 12, h - 12);
+          c.fillStyle = '#c0152b'; c.font = 'bold 34px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.fillText('REEL ' + (reel + 1), w / 2, 46);
+          c.fillStyle = '#222'; c.font = '150px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+          c.fillText(SYMBOLS[LOC.code[reel]], w / 2, h / 2 + 42);
+        });
+        const note = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.9), new THREE.MeshBasicMaterial({ map: tex }));
+        note.position.set(sp[0], sp[1], sp[2]); note.rotation.set(sp[4], sp[3], 0, 'YXZ');
+        scene.add(note);
+      });
+
       // the jackpot machine (locked until you crack the code)
       addBox(2.8, 3.6, 1.3, mat(0x3a1250, { metalness: 0.3, roughness: 0.5 }), 8.6, 1.8, -29.0, { block: true, cam: true });
       addBox(3.0, 0.35, 1.35, mat(0xffd84a, { metalness: 0.7, roughness: 0.35 }), 8.6, 3.75, -29.0, { aim: false });
@@ -462,14 +488,21 @@
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
   const STASH_SIZE = 10;
-  let save = { cash: 0, owned: [], carry: [], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false };
+  let save = { cash: 0, owned: ['pistol'], carry: ['pistol'], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false, v: 2 };
   try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [], stash: null, heists: s.heists || 0, next: LOCS[s.next] ? s.next : 'bank', go: !!s.go };
-      const carried = save.carry.filter(t => save.owned.includes(t));
-      let st = Array.isArray(s.stash) ? s.stash.filter(t => WEAPONS[t]) : save.owned.filter(t => WEAPONS[t] && !carried.includes(t));   // older saves: everything not carried is stored
-      st = st.filter(t => !carried.slice(0, 3).includes(t));
-      save.stash = st.slice(0, STASH_SIZE).concat(new Array(Math.max(0, STASH_SIZE - st.length)).fill(null));
+    const s0 = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (s0 && typeof s0.cash === 'number') {
+      const old = !(s0.v >= 2);           // older saves did not list the pistol: it was always carried
+      let owned = (s0.owned || []).filter(t => WEAPONS[t]);
+      let carry = (s0.carry || []).filter(t => WEAPONS[t]);
+      if (old) { owned = ['pistol'].concat(owned); carry = ['pistol'].concat(carry); }
+      owned = owned.filter((t, i) => owned.indexOf(t) === i);
+      carry = carry.filter((t, i) => owned.includes(t) && carry.indexOf(t) === i).slice(0, 4);
+      let st = (Array.isArray(s0.stash) ? s0.stash : []).filter(t => WEAPONS[t] && owned.includes(t) && !carry.includes(t));
+      owned.forEach(t => { if (!carry.includes(t) && !st.includes(t)) st.push(t); });          // anything owned but not carried is stored
+      st = st.slice(0, STASH_SIZE);
+      save = { cash: s0.cash, owned, carry, stash: st.concat(new Array(STASH_SIZE - st.length).fill(null)), heists: s0.heists || 0, next: LOCS[s0.next] ? s0.next : 'bank', go: !!s0.go, v: 2 };
+    }
   } catch (err) { /* storage can be blocked */ }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (err) { /* ignore */ } }
   const money$ = n => '$' + n.toLocaleString('en-US');
@@ -558,9 +591,9 @@
   if (!LOC.vault) for (const [type, x, y, z] of LOC.loot) spawnItem(type, x, y, z);
 
   // Inventory
-  const slots = [{ type: 'pistol' }, null, null, null];
-  save.carry.filter(t => save.owned.includes(t) && WEAPONS[t]).slice(0, 3).forEach((t, i) => { slots[i + 1] = { type: t }; });
-  let selected = 0;
+  const slots = [null, null, null, null];
+  save.carry.forEach((t, i) => { slots[i] = { type: t }; });
+  let selected = Math.max(0, slots.findIndex(Boolean));
   const slotEls = Array.from(document.querySelectorAll('#inventory .slot'));
   const lootEl = document.getElementById('loot');
   const objEl = document.getElementById('objective');
@@ -923,7 +956,7 @@
     const full = slots.every(Boolean);
     let t;
     const locked = LOC.vault && !machine.open;
-    if (locked && !alarm.policeHere) t = alarm.on ? 'Crack the jackpot machine at the back right (E) before the police arrive!' : 'Go to the jackpot machine at the back right of the casino and crack its code (E). Watch the dealer.';
+    if (locked && !alarm.policeHere) t = alarm.on ? 'Find the 3 clue notes, then crack the jackpot machine at the back right (E) before the police arrive!' : 'Search the casino for 3 hidden clue notes (one per reel), then crack the jackpot machine at the back right (E). Watch the dealer.';
     else if (!alarm.on) t = 'Go into the ' + LOC.place + ' and point your gun at the ' + LOC.staff + ' (hold right click).';
     else if (alarm.policeHere) t = carrying ? 'The police are here! Get to the getaway car!' : 'The police are here! Grab money and reach the getaway car, or fight them off.';
     else if (worldItems.length === 0) t = 'The ' + LOC.place + ' is empty. Get to the getaway car outside!';
@@ -1549,7 +1582,6 @@
   }
 
   // ---- the casino puzzle: crack the jackpot machine's 3-symbol code
-  const SYMBOLS = ['🍒', '🍋', '🔔', '⭐', '7️⃣', '💎'];
   const machine = { open: false, wrong: 0, code: null, doorT: 0 };
   const puzzle = { open: false, guess: [0, 1, 2], cursor: 0, rows: [] };
   const puzzleEl = document.getElementById('puzzle');
@@ -1564,10 +1596,7 @@
   }
   function openPuzzle() {
     if (puzzle.open || machine.open || phase !== 'play') return;
-    if (!machine.code) {                    // three different symbols
-      const pool = SYMBOLS.map((_, i) => i).sort(() => Math.random() - 0.5);
-      machine.code = pool.slice(0, 3);
-    }
+    if (!machine.code) machine.code = LOC.code;          // the code is the one hidden around the room
     puzzle.open = true; aiming = false; mouseDown = false;
     puzzleEl.classList.remove('hidden');
     renderPuzzle();
@@ -1661,7 +1690,8 @@
       addBox(2.2, 0.9, 1.3, mat(0x24222b, { roughness: 0.5 }), px, 0.45, SHOP_Z, o);
       addBox(2.3, 0.06, 1.4, mat(0xd4af37, { metalness: 0.8, roughness: 0.35 }), px, 0.93, SHOP_Z, { aim: false });
       const spin = new THREE.Group(); spin.position.set(px, 1.45, SHOP_Z);
-      const gm = makeWeaponModel(t); gm.rotation.z = Math.PI / 2; gm.scale.setScalar(t === 'sniper' ? 1.3 : t === 'knife' ? 3.2 : 1.9);
+      const gm = makeWeaponModel(t); gm.rotation.z = Math.PI / 2; gm.scale.setScalar(t === 'sniper' ? 1.3 : t === 'knife' ? 1.9 : 1.9);
+      if (t === 'knife') { gm.rotation.z = Math.PI; gm.position.y = 0.0; }
       gm.position.x = t === 'sniper' ? -0.15 : 0;
       spin.add(gm); scene.add(spin); hqSpin.push(spin);
       const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
@@ -1683,7 +1713,7 @@
     }
 
     // crates and barrels for the hideout look
-    [[-10.6, 6.8, 1.3], [-9.2, 6.9, 1.0], [-10.8, 5.4, 0.9], [-11, -6.8, 1.3]].forEach(([x, z, sz]) => {
+    [[-10.6, 6.8, 1.3], [-9.2, 6.9, 1.0], [-10.8, 5.4, 0.9]].forEach(([x, z, sz]) => {
       addBox(sz, sz, sz, crateM, HX + x, sz / 2, z, o);
     });
 
@@ -1751,7 +1781,7 @@
   }
 
   function saveCarry() {
-    save.carry = slots.filter(s => s && s.type !== 'pistol' && WEAPONS[s.type]).map(s => s.type);
+    save.carry = slots.filter(s => s && WEAPONS[s.type]).map(s => s.type);
     persist();
   }
 
@@ -1760,7 +1790,7 @@
     if (phase === 'hq') return;
     hq.sold = fresh ? 0 : lootValue();
     for (let i = 0; i < slots.length; i++) if (slots[i] && ITEM_TYPES[slots[i].type].value > 0) slots[i] = null;
-    selected = 0;
+    selected = Math.max(0, slots.findIndex(Boolean));
     save.cash += hq.sold;
     if (!fresh) save.heists++;
     saveCarry();
@@ -1831,7 +1861,6 @@
   const gunBtn = (t, attr, i) => '<button type="button" class="gun' + (t ? '' : ' empty') + '" ' + attr + '="' + i + '">' + (t ? '<span class="ic">' + ITEM_TYPES[t].icon + '</span><span class="nm">' + ITEM_TYPES[t].name + '</span>' : '') + '</button>';
   function renderStorage(msg) {
     storageCarry.innerHTML = slots.map((sl, i) => {
-      if (i === 0) return '<button type="button" class="gun locked" disabled><span class="ic">' + ITEM_TYPES.pistol.icon + '</span><span class="nm">Pistol</span></button>';
       return gunBtn(sl && WEAPONS[sl.type] ? sl.type : (sl ? sl.type : null), 'data-carry', i);
     }).join('');
     storageGrid.innerHTML = save.stash.map((t, i) => gunBtn(t, 'data-stash', i)).join('');
@@ -1858,17 +1887,17 @@
     if (phase !== 'storage') return;
     if (kind === 'carry') {
       const sl = slots[i];
-      if (i === 0 || !sl) return;
+      if (!sl) return;
       if (!WEAPONS[sl.type]) { renderStorage('You can only store guns.'); return; }
       const room = save.stash.indexOf(null);
       if (room < 0) { renderStorage('The storage is full (10 / 10).'); return; }
       save.stash[room] = sl.type; slots[i] = null;
-      if (selected === i) selected = 0;
+      if (selected === i) selected = Math.max(0, slots.findIndex(Boolean));
       renderStorage('Stored the ' + WEAPONS[sl.type].name + '.');
     } else {
       const t = save.stash[i];
       if (!t) return;
-      const free = slots.findIndex((x, k) => k > 0 && !x);
+      const free = slots.findIndex(x => !x);
       if (free < 0) { renderStorage('Your inventory is full. Store a gun first.'); return; }
       slots[free] = { type: t }; save.stash[i] = null;
       renderStorage('Took the ' + WEAPONS[t].name + ' (slot ' + (free + 1) + ').');
@@ -2045,6 +2074,7 @@
     if (camera.position.y < 0.25) camera.position.y = 0.25;
     camera.lookAt(pivot.clone().addScaledVector(dir, 10));
     model.group.visible = d > 0.9 && phase !== 'escaping';
+    if (window.__bhFree) { camera.position.set(...window.__bhFree.p); camera.lookAt(...window.__bhFree.t); model.group.visible = false; }   // debug only
 
     sun.position.set(player.pos.x + 30, 50, player.pos.z + 20);
     sun.target.position.copy(player.pos);
@@ -2147,7 +2177,7 @@
       teleport(x, z) { player.pos.set(x, 0, z); },
       aim(v) { aiming = v; },
       openStorage, storageClick, closeStorage, get stash() { return save.stash.slice(); },
-      openPuzzle, puzzleKey, machine, puzzle,
+      openPuzzle, puzzleKey, machine, puzzle, get clues() { return LOC.clues; }, get code() { return LOC.code; },
       arriveHQ, hqInteract, openChoose, pickJob, get loc() { return LOC.id; }, hqSpot, save, give(t) { save.cash += t; renderCash(); },
       shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
       alert() { alertTeller('gun'); },
