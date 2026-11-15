@@ -127,11 +127,12 @@
       loot: [['parts', -8, 1.2, -21], ['parts', -4, 1.2, -21], ['parts', 0, 1.2, -21], ['proto', 7.8, 1.0, -27.5], ['proto', 9.4, 1.0, -27.5]]
     },
     casino: {
-      id: 'casino', name: 'Golden Casino', place: 'casino', staff: 'dealer', tag: 'The richest job: chip stacks at the cashier cage.',
+      id: 'casino', name: 'Golden Casino', place: 'casino', staff: 'dealer', tag: 'The richest job, but the money is locked in the jackpot machine. Crack its code.',
       sign: 'GOLDEN CASINO', signBg: '#2a0f3d', signFg: '#ffd84a', signFont: 'Georgia, serif',
       wall: 0x4a2466, roof: 0x24122f, trim: 0xffd84a, floor: ['#8a1a2e', '#6d1424'], counter: 0x2a1a12,
       npc: { shirt: 0xf4f4f4, vest: 0x111111, tie: 0xb0122a, pants: 0x111111, hair: 0x2a1c12 },
-      loot: [['chips', -8, 1.2, -21], ['chips', -4, 1.2, -21], ['chips', 0, 1.2, -21], ['bigchips', 7.8, 1.0, -27.5], ['bigchips', 9.4, 1.0, -27.5]]
+      vault: true,       // the loot is locked inside the jackpot machine until you crack its code
+      loot: [['chips', 6.4, 0.02, -26.8], ['chips', 7.4, 0.02, -26.8], ['chips', 8.4, 0.02, -26.8], ['bigchips', 9.4, 0.02, -26.8], ['bigchips', 10.4, 0.02, -26.8]]
     }
   };
   let LOC = LOCS.bank;
@@ -203,6 +204,15 @@
         addBox(1.25, 0.25, 0.97, mat(0xffd84a, { metalness: 0.6, roughness: 0.4 }), x, 2.4, -28.8, { aim: false });
         light(c, 6, x, 1.8, -27.6);
       });
+      // the jackpot machine (locked until you crack the code)
+      addBox(2.8, 3.6, 1.3, mat(0x3a1250, { metalness: 0.3, roughness: 0.5 }), 8.6, 1.8, -29.0, { block: true, cam: true });
+      addBox(3.0, 0.35, 1.35, mat(0xffd84a, { metalness: 0.7, roughness: 0.35 }), 8.6, 3.75, -29.0, { aim: false });
+      addBox(1.9, 0.9, 0.05, glow(0xff3b6b), 8.6, 3.0, -28.32, { aim: false });
+      for (let i = 0; i < 3; i++) addBox(0.5, 0.65, 0.06, glow(0xfff2cc), 7.95 + i * 0.65, 3.0, -28.28, { aim: false });
+      const mDoor = addBox(2.0, 1.5, 0.12, mat(0x8a929c, { metalness: 0.7, roughness: 0.3 }), 8.6, 1.0, -28.32, { aim: false });
+      const lamp = addBox(0.3, 0.3, 0.1, glow(0xff2a2a), 8.6, 1.95, -28.27, { aim: false });
+      LOC.door = mDoor; LOC.lamp = lamp;
+      light(0xffd84a, 14, 8.6, 3.2, -27);
       // roulette tables where the lobby benches would be
       for (const x of [-7, 7]) {
         cyl(1.35, 1.35, 0.9, mat(0x1c1a22), x, 0.45, -16.5, { cam: true });
@@ -301,7 +311,7 @@
       scene.add(spoke);
     }
   } else buildProps(LOC.id);
-  addBox(3, 1.0, 1.2, steel, 8.6, 0.5, -27.5, { block: true });               // table holding the gold
+  if (LOC.id !== 'casino') addBox(3, 1.0, 1.2, steel, 8.6, 0.5, -27.5, { block: true });               // table holding the gold
 
   // Neighbouring buildings and skyline
   function windowTex(wallColor, rx, ry) {
@@ -449,10 +459,15 @@
 
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
-  let save = { cash: 0, owned: [], carry: [], heists: 0, next: 'bank' };
+  const STASH_SIZE = 10;
+  let save = { cash: 0, owned: [], carry: [], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank' };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [], heists: s.heists || 0, next: LOCS[s.next] ? s.next : 'bank' };
+    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [], stash: null, heists: s.heists || 0, next: LOCS[s.next] ? s.next : 'bank' };
+      const carried = save.carry.filter(t => save.owned.includes(t));
+      let st = Array.isArray(s.stash) ? s.stash.filter(t => WEAPONS[t]) : save.owned.filter(t => WEAPONS[t] && !carried.includes(t));   // older saves: everything not carried is stored
+      st = st.filter(t => !carried.slice(0, 3).includes(t));
+      save.stash = st.slice(0, STASH_SIZE).concat(new Array(Math.max(0, STASH_SIZE - st.length)).fill(null));
   } catch (err) { /* storage can be blocked */ }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (err) { /* ignore */ } }
   const money$ = n => '$' + n.toLocaleString('en-US');
@@ -538,7 +553,7 @@
   }
 
   // Money bags on the teller counter, gold bars on the vault table
-  for (const [type, x, y, z] of LOC.loot) spawnItem(type, x, y, z);
+  if (!LOC.vault) for (const [type, x, y, z] of LOC.loot) spawnItem(type, x, y, z);
 
   // Inventory
   const slots = [{ type: 'pistol' }, null, null, null];
@@ -873,12 +888,14 @@
   }
 
   function updateObjective() {
-    if (phase === 'hq') { objEl.textContent = 'Safe at the HQ. Buy guns at the pedestals (E), then step onto the green circle to pick your next heist.'; return; }
+    if (phase === 'hq') { objEl.textContent = 'Safe at the HQ. Buy guns at the pedestals (E), manage them at the storage unit, then step onto the green circle to pick your next heist.'; return; }
     if (phase !== 'play') return;
     const carrying = lootValue() > 0;
     const full = slots.every(Boolean);
     let t;
-    if (!alarm.on) t = 'Go into the ' + LOC.place + ' and point your gun at the ' + LOC.staff + ' (hold right click).';
+    const locked = LOC.vault && !machine.open;
+    if (locked && !alarm.policeHere) t = alarm.on ? 'Crack the jackpot machine at the back right (E) before the police arrive!' : 'Go to the jackpot machine at the back right of the casino and crack its code (E). Watch the dealer.';
+    else if (!alarm.on) t = 'Go into the ' + LOC.place + ' and point your gun at the ' + LOC.staff + ' (hold right click).';
     else if (alarm.policeHere) t = carrying ? 'The police are here! Get to the getaway car!' : 'The police are here! Grab money and reach the getaway car, or fight them off.';
     else if (worldItems.length === 0) t = 'The ' + LOC.place + ' is empty. Get to the getaway car outside!';
     else if (full) t = 'Inventory full! Get to the getaway car (or drop something with Q).';
@@ -957,6 +974,7 @@
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     keys[e.code] = true;
+    if (puzzle.open && isActive()) { if (!e.repeat) puzzleKey(e); return; }
     if (e.repeat || !isActive()) return;
     if (e.code === 'Digit1') selectSlot(0);
     else if (e.code === 'Digit2') selectSlot(1);
@@ -971,13 +989,14 @@
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; aiming = false; mouseDown = false; });
 
   document.addEventListener('mousemove', e => {
-    if (!isActive()) return;
+    if (!isActive() || puzzle.open) return;
     const sens = aiming ? 0.0016 * Math.min(1, camera.fov / 52) : 0.0022;
     yaw -= e.movementX * sens;
     pitch = clamp(pitch - e.movementY * sens, -0.85, 0.9);
   });
   document.addEventListener('mousedown', e => {
     if (!isActive()) return;
+    if (puzzle.open) return;
     if (e.button === 0) { mouseDown = true; shoot(); }
     else if (e.button === 2) aiming = true;
   });
@@ -994,7 +1013,7 @@
   });
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === renderer.domElement;
-    overlay.classList.toggle('hidden', locked || phase === 'won' || phase === 'lost' || phase === 'choosing' || phase === 'leaving');
+    overlay.classList.toggle('hidden', locked || phase === 'won' || phase === 'lost' || phase === 'choosing' || phase === 'leaving' || phase === 'storage');
     if (!locked) { aiming = false; mouseDown = false; overlayMsg.textContent = started ? 'Paused. Click to resume' : 'Click to play'; }
     else started = true;
   });
@@ -1128,7 +1147,7 @@
     teller.state = 'hands';
     alarm.on = true; alarm.t = 0;
     alarmSnd = makeSiren('alarm');
-    toast(reason === 'theft' ? 'The ' + LOC.staff + ' hits the silent alarm!' : 'Hands up! The ' + LOC.staff + ' hits the alarm!', 2.4);
+    toast(reason === 'machine' ? 'The jackpot machine trips the alarm!' : reason === 'theft' ? 'The ' + LOC.staff + ' hits the silent alarm!' : 'Hands up! The ' + LOC.staff + ' hits the alarm!', 2.4);
     tone(880, 0.12, 'square', 0.06);
     updateObjective();
   }
@@ -1432,6 +1451,7 @@
   function interact() {
     if (phase === 'hq') { hqInteract(); return; }
     if (phase !== 'play') return;
+    if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { openPuzzle(); return; }
     if (!nearestItem() && nearCar()) { enterCar(); return; }
     tryPickup();
   }
@@ -1471,6 +1491,7 @@
       if (hp < PLAYER_HP && time - lastHurt > 6) { hp = Math.min(PLAYER_HP, hp + 2.5 * dt); renderHp(); }
     }
     updateTeller(dt);
+    updateMachine(dt);
     updateCops(dt);
 
     // alarm lights and police lights
@@ -1498,12 +1519,73 @@
     }
   }
 
+  // ---- the casino puzzle: crack the jackpot machine's 3-symbol code
+  const SYMBOLS = ['🍒', '🍋', '🔔', '⭐', '7️⃣', '💎'];
+  const machine = { open: false, wrong: 0, code: null, doorT: 0 };
+  const puzzle = { open: false, guess: [0, 1, 2], cursor: 0, rows: [] };
+  const puzzleEl = document.getElementById('puzzle');
+  const puzzleReels = document.getElementById('puzzle-reels');
+  const puzzleRows = document.getElementById('puzzle-rows');
+  const puzzleInfo = document.getElementById('puzzle-info');
+  function nearMachine() { return Math.hypot(player.pos.x - 8.6, player.pos.z + 27.2) < 2.7; }
+  function renderPuzzle() {
+    puzzleReels.innerHTML = puzzle.guess.map((g, i) => '<div class="reel' + (i === puzzle.cursor ? ' sel' : '') + '"><span class="up">&#9650;</span><span class="sym">' + SYMBOLS[g] + '</span><span class="dn">&#9660;</span></div>').join('');
+    puzzleRows.innerHTML = puzzle.rows.map(r => '<div class="row"><span>' + r.g.map(x => SYMBOLS[x]).join(' ') + '</span><span class="fb">' + '&#9679;'.repeat(r.exact) + '<i>' + '&#9675;'.repeat(r.near) + '</i>' + (r.exact + r.near === 0 ? '&ndash;' : '') + '</span></div>').join('');
+    puzzleInfo.textContent = machine.wrong >= 3 ? 'The alarm is ringing! Hurry!' : 'Wrong tries: ' + machine.wrong + ' / 3 (the third one trips the alarm)';
+  }
+  function openPuzzle() {
+    if (puzzle.open || machine.open || phase !== 'play') return;
+    if (!machine.code) {                    // three different symbols
+      const pool = SYMBOLS.map((_, i) => i).sort(() => Math.random() - 0.5);
+      machine.code = pool.slice(0, 3);
+    }
+    puzzle.open = true; aiming = false; mouseDown = false;
+    puzzleEl.classList.remove('hidden');
+    renderPuzzle();
+  }
+  function closePuzzle() { puzzle.open = false; puzzleEl.classList.add('hidden'); }
+  function puzzleKey(e) {
+    if (e.code === 'Escape' || e.code === 'KeyE') { closePuzzle(); return; }
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') puzzle.cursor = (puzzle.cursor + 2) % 3;
+    else if (e.code === 'ArrowRight' || e.code === 'KeyD') puzzle.cursor = (puzzle.cursor + 1) % 3;
+    else if (e.code === 'ArrowUp' || e.code === 'KeyW') { puzzle.guess[puzzle.cursor] = (puzzle.guess[puzzle.cursor] + 1) % SYMBOLS.length; tone(520, 0.03, 'square', 0.03); }
+    else if (e.code === 'ArrowDown' || e.code === 'KeyS') { puzzle.guess[puzzle.cursor] = (puzzle.guess[puzzle.cursor] + SYMBOLS.length - 1) % SYMBOLS.length; tone(460, 0.03, 'square', 0.03); }
+    else if (e.code === 'Enter' || e.code === 'NumpadEnter') submitGuess();
+    renderPuzzle();
+  }
+  function submitGuess() {
+    const g = puzzle.guess.slice(), c = machine.code;
+    let exact = 0, near = 0;
+    g.forEach((x, i) => { if (x === c[i]) exact++; else if (c.includes(x)) near++; });
+    if (exact === 3) {
+      closePuzzle();
+      machine.open = true;
+      for (const [type, x, y, z] of LOC.loot) spawnItem(type, x, y, z);
+      tone(660, 0.1, 'square', 0.06); tone(880, 0.1, 'square', 0.06, 0.1); tone(1320, 0.25, 'square', 0.06, 0.2);
+      toast('JACKPOT! The machine pops open. Grab the chips and run!', 2.6);
+      updateObjective();
+      return;
+    }
+    puzzle.rows.push({ g, exact, near });
+    machine.wrong++;
+    tone(160, 0.2, 'sawtooth', 0.06);
+    if (machine.wrong === 3) alertTeller('machine');
+    renderPuzzle();
+  }
+  function updateMachine(dt) {
+    if (!LOC.vault) return;
+    if (machine.open && machine.doorT < 1) { machine.doorT = Math.min(1, machine.doorT + dt * 1.6); LOC.door.position.x = 8.6 + machine.doorT * 1.6; }
+    if (LOC.lamp) LOC.lamp.material.color.setHex(machine.open ? 0x5dff9a : 0xff2a2a);
+    if (puzzle.open && (phase !== 'play' || !nearMachine())) closePuzzle();
+  }
+
   // ================================================================ the HQ
   // After a getaway you teleport to the headquarters: a hideout with an illegal gun shop.
   const HX = 1000;                       // the room sits far away from the heist area
   const SHOP_Z = -6.8;                   // pedestals along the back wall
   const PED_X = [HX - 8, HX - 4, HX];
   const EXIT_POS = { x: HX + 9, z: 7 };
+  const STORAGE_POS = { x: HX + 10.4, z: -1.0 };
   const hqSpin = [];
   const hqSigns = [];
   const hq = { sold: 0 };
@@ -1572,9 +1654,22 @@
     }
 
     // crates and barrels for the hideout look
-    [[-10.6, 6.8, 1.3], [-9.2, 6.9, 1.0], [-10.8, 5.4, 0.9], [10.8, -1.5, 1.2], [10.9, 0.0, 0.9], [-11, -6.8, 1.3]].forEach(([x, z, sz]) => {
+    [[-10.6, 6.8, 1.3], [-9.2, 6.9, 1.0], [-10.8, 5.4, 0.9], [-11, -6.8, 1.3]].forEach(([x, z, sz]) => {
       addBox(sz, sz, sz, crateM, HX + x, sz / 2, z, o);
     });
+
+    // the storage unit: ten gun lockers on the right wall
+    addBox(0.9, 2.5, 5.2, mat(0x4b525c, { metalness: 0.5, roughness: 0.45 }), HX + 11.45, 1.25, -1.0, o);
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 2; c++) {
+      addBox(0.06, 0.8, 0.95, mat(0x2d333b, { metalness: 0.4 }), HX + 10.97, 0.5 + c * 1.1, -2.8 + r * 1.1 - 0.0, { aim: false });
+      addBox(0.04, 0.1, 0.3, new THREE.MeshBasicMaterial({ color: 0x5dff9a }), HX + 10.93, 0.55 + c * 1.1, -2.8 + r * 1.1, { aim: false, cast: false });
+    }
+    const stTex = canvasTex(512, 128, (c, w, h) => {
+      c.fillStyle = '#0c1a12'; c.fillRect(0, 0, w, h); c.fillStyle = '#5dff9a';
+      c.font = 'bold 56px "Segoe UI", Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('GUN STORAGE', w / 2, h / 2 + 3);
+    });
+    const stSign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85), new THREE.MeshBasicMaterial({ map: stTex }));
+    stSign.position.set(HX + 10.98, 3.3, -1.0); stSign.rotation.y = -Math.PI / 2; scene.add(stSign);
 
     // the exit door
     addBox(2.6, 3.4, 0.2, mat(0x0f2a18), EXIT_POS.x, 1.7, 7.88, { aim: false });
@@ -1594,13 +1689,13 @@
   function drawSigns() {
     for (const sgn of hqSigns) {
       const w = WEAPONS[sgn.type], c = sgn.cv.getContext('2d');
-      const owned = save.owned.includes(sgn.type), carried = slots.some(s => s && s.type === sgn.type);
+      const owned = ownedGun(sgn.type), carried = slots.some(s => s && s.type === sgn.type);
       c.fillStyle = '#100e16'; c.fillRect(0, 0, 512, 256);
       c.strokeStyle = owned ? '#5dff9a' : '#d4af37'; c.lineWidth = 8; c.strokeRect(6, 6, 500, 244);
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillStyle = '#fff'; c.font = 'bold 54px "Segoe UI", Arial'; c.fillText(w.name.toUpperCase(), 256, 62);
       c.fillStyle = owned ? '#5dff9a' : '#ffd23f'; c.font = 'bold 66px "Segoe UI", Arial';
-      c.fillText(owned ? (carried ? 'CARRYING' : 'OWNED') : money$(w.price), 256, 138);
+      c.fillText(owned ? (carried ? 'CARRYING' : 'IN STORAGE') : money$(w.price), 256, 138);
       c.fillStyle = '#aab3c5'; c.font = '30px "Segoe UI", Arial';
       const dmg = w.pellets > 1 ? w.pellets + ' x ' + w.dmg : String(w.dmg);
       c.fillText('DMG ' + dmg + '  ·  ' + w.size + ' RND' + (w.auto ? '  ·  AUTO' : ''), 256, 205);
@@ -1656,6 +1751,7 @@
     tone(660, 0.1, 'square', 0.05); tone(880, 0.1, 'square', 0.05, 0.1); tone(1320, 0.2, 'square', 0.05, 0.2);
   }
 
+  function ownedGun(t) { return save.owned.includes(t); }
   function hqSpot() {
     if (phase !== 'hq') return null;
     let best = null, bd = 2.9;
@@ -1663,45 +1759,102 @@
       const d = Math.hypot(player.pos.x - PED_X[i], player.pos.z - SHOP_Z);
       if (d < bd) { bd = d; best = { kind: 'weapon', type: t }; }
     });
+    if (!best && Math.hypot(player.pos.x - STORAGE_POS.x, player.pos.z - STORAGE_POS.z) < 3.2) best = { kind: 'storage' };
     if (!best && Math.hypot(player.pos.x - EXIT_POS.x, player.pos.z - EXIT_POS.z) < 3.4) best = { kind: 'exit' };
     return best;
   }
 
   function hqPrompt(sp) {
     if (sp.kind === 'exit') return 'Step onto the green circle to choose your next heist';
+    if (sp.kind === 'storage') return '<b>E</b> &nbsp;Open the gun storage (' + save.stash.filter(Boolean).length + ' / ' + STASH_SIZE + ' stored)';
     const w = WEAPONS[sp.type];
     if (!save.owned.includes(sp.type)) {
       const need = w.price - save.cash;
       return '<b>E</b> &nbsp;Buy ' + w.name + ' &ndash; ' + money$(w.price) + (need > 0 ? ' <span style="color:#ff6b6b">(need ' + money$(need) + ' more)</span>' : '');
     }
-    return slots.some(s => s && s.type === sp.type) ? '<b>E</b> &nbsp;Stash ' + w.name + ' in the locker' : '<b>E</b> &nbsp;Take ' + w.name;
+    return 'You already own the ' + w.name + ' (' + (slots.some(s => s && s.type === sp.type) ? 'carrying it' : 'in storage') + ')';
   }
 
   function hqInteract() {
     const sp = hqSpot();
     if (!sp) return;
     if (sp.kind === 'exit') { openChoose(); return; }
+    if (sp.kind === 'storage') { openStorage(); return; }
     const t = sp.type, w = WEAPONS[t];
-    const carriedAt = slots.findIndex(s => s && s.type === t);
+    if (save.owned.includes(t)) { toast('You already own the ' + w.name + '. Move it at the gun storage.'); return; }
+    if (save.cash < w.price) { toast('Not enough cash! You need ' + money$(w.price - save.cash) + ' more.'); tone(150, 0.15, 'square', 0.05); return; }
     const free = slots.findIndex(s => !s);
-    if (!save.owned.includes(t)) {
-      if (save.cash < w.price) { toast('Not enough cash! You need ' + money$(w.price - save.cash) + ' more.'); tone(150, 0.15, 'square', 0.05); return; }
-      save.cash -= w.price; save.owned.push(t);
-      tone(880, 0.08, 'square', 0.05); tone(1320, 0.12, 'square', 0.05, 0.08);
-      if (free >= 0) { slots[free] = { type: t }; selected = free; toast('Bought the ' + w.name + ' for ' + money$(w.price) + '!'); }
-      else toast('Bought the ' + w.name + '! Inventory full: it is in your locker. Stash a gun to carry it.');
-    } else if (carriedAt >= 0) {
-      slots[carriedAt] = null;
-      if (selected === carriedAt) selected = 0;
-      toast('Stashed the ' + w.name + ' in your locker');
-    } else if (free >= 0) {
-      slots[free] = { type: t }; selected = free;
-      toast('Took the ' + w.name + ' from your locker');
-    } else { toast('Inventory full. Stash a gun first.'); return; }
+    const room = save.stash.indexOf(null);
+    if (free < 0 && room < 0) { toast('No room: inventory and storage are both full.'); return; }
+    save.cash -= w.price; save.owned.push(t);
+    tone(880, 0.08, 'square', 0.05); tone(1320, 0.12, 'square', 0.05, 0.08);
+    if (free >= 0) { slots[free] = { type: t }; selected = free; toast('Bought the ' + w.name + ' for ' + money$(w.price) + '!'); }
+    else { save.stash[room] = t; toast('Bought the ' + w.name + '! Inventory full, so it went into your storage.'); }
     saveCarry();
     renderInventory(); renderCash(); drawSigns();
   }
 
+  // ---- the gun storage unit: ten slots for guns you are not carrying
+  const storageEl = document.getElementById('storage');
+  const storageCarry = document.getElementById('storage-carry');
+  const storageGrid = document.getElementById('storage-grid');
+  const storageMsg = document.getElementById('storage-msg');
+  const gunBtn = (t, attr, i) => '<button type="button" class="gun' + (t ? '' : ' empty') + '" ' + attr + '="' + i + '">' + (t ? '<span class="ic">' + ITEM_TYPES[t].icon + '</span><span class="nm">' + ITEM_TYPES[t].name + '</span>' : '') + '</button>';
+  function renderStorage(msg) {
+    storageCarry.innerHTML = slots.map((sl, i) => {
+      if (i === 0) return '<button type="button" class="gun locked" disabled><span class="ic">' + ITEM_TYPES.pistol.icon + '</span><span class="nm">Pistol</span></button>';
+      return gunBtn(sl && WEAPONS[sl.type] ? sl.type : (sl ? sl.type : null), 'data-carry', i);
+    }).join('');
+    storageGrid.innerHTML = save.stash.map((t, i) => gunBtn(t, 'data-stash', i)).join('');
+    storageMsg.textContent = msg || 'Click a gun to move it. Guns you carry take up inventory slots.';
+  }
+  function openStorage() {
+    if (phase !== 'hq') return;
+    phase = 'storage';
+    renderStorage();
+    storageEl.classList.remove('hidden');
+    aiming = false; mouseDown = false;
+    try { document.exitPointerLock(); } catch (err) { /* ignore */ }
+  }
+  function closeStorage() {
+    if (phase !== 'storage') return;
+    phase = 'hq';
+    storageEl.classList.add('hidden');
+    saveCarry(); renderInventory(); drawSigns();
+    try { renderer.domElement.requestPointerLock(); } catch (err) { /* ignore */ }
+  }
+  function storageClick(kind, i) {
+    if (phase !== 'storage') return;
+    if (kind === 'carry') {
+      const sl = slots[i];
+      if (i === 0 || !sl) return;
+      if (!WEAPONS[sl.type]) { renderStorage('You can only store guns.'); return; }
+      const room = save.stash.indexOf(null);
+      if (room < 0) { renderStorage('The storage is full (10 / 10).'); return; }
+      save.stash[room] = sl.type; slots[i] = null;
+      if (selected === i) selected = 0;
+      renderStorage('Stored the ' + WEAPONS[sl.type].name + '.');
+    } else {
+      const t = save.stash[i];
+      if (!t) return;
+      const free = slots.findIndex((x, k) => k > 0 && !x);
+      if (free < 0) { renderStorage('Your inventory is full. Store a gun first.'); return; }
+      slots[free] = { type: t }; save.stash[i] = null;
+      renderStorage('Took the ' + WEAPONS[t].name + ' (slot ' + (free + 1) + ').');
+    }
+    tone(700, 0.05, 'square', 0.04);
+    saveCarry(); renderInventory(); drawSigns();
+  }
+  storageEl.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'storage-close') closeStorage();
+    else if (b.dataset.carry !== undefined) storageClick('carry', +b.dataset.carry);
+    else if (b.dataset.stash !== undefined) storageClick('stash', +b.dataset.stash);
+  });
+  document.addEventListener('keydown', e => {
+    if (phase === 'storage' && !e.repeat && (e.code === 'Escape' || e.code === 'KeyE')) closeStorage();
+  });
 
   // ---- choose the next job
   const chooseEl = document.getElementById('choose');
@@ -1777,7 +1930,7 @@
 
   // ----------------------------------------------------------------- update
   function updatePlayer(dt) {
-    const ctl = phase === 'play' || phase === 'hq';
+    const ctl = (phase === 'play' && !puzzle.open) || phase === 'hq';
     const ix = ctl ? (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) : 0;
     const iz = ctl ? (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) : 0;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
@@ -1936,6 +2089,7 @@
     let p = '';
     if (it) p = '<b>E</b> &nbsp;Pick up ' + ITEM_TYPES[it.type].name + ' ($' + ITEM_TYPES[it.type].value.toLocaleString('en-US') + ')';
     if (phase === 'hq') { const sp = hqSpot(); if (sp) p = hqPrompt(sp); }
+    if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;Crack the jackpot machine';
     if (!it && phase === 'play' && nearCar()) p = '<b>E</b> &nbsp;' + (lootValue() > 0 ? 'Get in the getaway car and escape!' : 'Getaway car (grab some money first)');
     if (p !== lastPrompt) {
       lastPrompt = p;
@@ -1961,6 +2115,8 @@
       look(y, p) { yaw = y; pitch = p; },
       teleport(x, z) { player.pos.set(x, 0, z); },
       aim(v) { aiming = v; },
+      openStorage, storageClick, closeStorage, get stash() { return save.stash.slice(); },
+      openPuzzle, puzzleKey, machine, puzzle,
       arriveHQ, hqInteract, openChoose, pickJob, get loc() { return LOC.id; }, hqSpot, save, give(t) { save.cash += t; renderCash(); },
       shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
       alert() { alertTeller('gun'); },

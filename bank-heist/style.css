@@ -265,3 +265,42 @@ html, body {
 .job .v { grid-column: 2; grid-row: 1 / 3; font-size: 15px; font-weight: 700; color: #5dff9a; white-space: nowrap; }
 #choose-back { font: inherit; font-size: 15px; color: #cfd6e4; background: transparent; border: 1px solid #3a4152; border-radius: 6px; padding: 8px 16px; cursor: pointer; }
 #choose-back:hover { border-color: #ff8a1f; color: #fff; }
+
+/* ---------- casino puzzle ---------- */
+#puzzle {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 15; padding: 6px 12px;
+  background: rgba(20, 8, 32, .94); border: 3px solid #ffd84a; border-radius: 12px;
+  box-shadow: 0 0 40px rgba(255, 216, 74, .35);
+}
+#puzzle.hidden { display: none; }
+#puzzle h2 { margin: 0 0 6px; text-align: center; color: #ffd84a; letter-spacing: 3px; }
+#puzzle-reels { display: flex; gap: 14px; justify-content: center; margin: 10px 0 14px; }
+.reel { width: 86px; text-align: center; background: #0d0614; border: 3px solid #4a2466; border-radius: 10px; padding: 4px 0; color: #5a3a78; }
+.reel .sym { display: block; font-size: 48px; line-height: 1.25; }
+.reel.sel { border-color: #ffd84a; color: #ffd84a; box-shadow: 0 0 14px rgba(255, 216, 74, .6); }
+#puzzle-rows { min-height: 12px; max-height: 190px; overflow: hidden; margin-bottom: 6px; }
+#puzzle-rows .row { display: flex; justify-content: space-between; align-items: center; padding: 3px 14px; font-size: 26px; border-top: 1px solid rgba(255, 255, 255, .08); }
+#puzzle-rows .fb { font-size: 20px; color: #5dff9a; letter-spacing: 3px; }
+#puzzle-rows .fb i { font-style: normal; color: #ffd84a; }
+
+/* ---------- gun storage ---------- */
+#storage { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center; background: rgba(6, 8, 12, .9); }
+#storage.hidden { display: none; }
+#storage h1 { font-size: 40px; color: #5dff9a; text-shadow: 0 3px 0 #0b4a25; margin-bottom: 4px; }
+#storage .tag { margin: 12px 0 6px; font-weight: 700; letter-spacing: 1px; }
+.guns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.guns.grid10 { display: grid; grid-template-columns: repeat(5, 1fr); max-width: 520px; margin: 0 auto; }
+.gun {
+  width: 96px; height: 78px; font: inherit; color: #dfe6f3; cursor: pointer;
+  background: #151922; border: 2px solid #2a2f3b; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.gun.empty { cursor: default; background: rgba(21, 25, 34, .45); border-style: dashed; }
+.gun.locked { opacity: .6; cursor: default; }
+.gun:not(.empty):not(.locked):hover { border-color: #5dff9a; background: #1b2a22; }
+.gun .ic { font-size: 28px; }
+.gun .nm { font-size: 12px; }
+.guns.grid10 .gun { width: 100%; }
+.backbtn { margin-top: 10px; font: inherit; font-size: 15px; color: #cfd6e4; background: transparent; border: 1px solid #3a4152; border-radius: 6px; padding: 8px 18px; cursor: pointer; }
+.backbtn:hover { border-color: #5dff9a; color: #fff; }
