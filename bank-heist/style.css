@@ -224,3 +224,19 @@ html, body {
 #end-title.lose { color: #ff4d5e; text-shadow: 0 3px 0 #5a0b14; }
 #end-lines { font-size: 18px; line-height: 1.8; color: #dfe6f3; margin: 8px 0 18px; }
 #end-lines b { color: #5dff9a; }
+
+/* ---------- cash, scope, fade ---------- */
+#cash { font-size: 18px; font-weight: 800; color: #ffd23f; letter-spacing: 1px; margin-bottom: 2px; }
+#scope {
+  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; transition: opacity .12s;
+  background:
+    linear-gradient(#000, #000) center / 1px 100% no-repeat,
+    linear-gradient(#000, #000) center / 100% 1px no-repeat,
+    radial-gradient(circle at center, transparent 0, transparent 30vh, rgba(0, 0, 0, .96) 31vh);
+}
+#scope.on { opacity: 1; }
+#fade { position: fixed; inset: 0; background: #000; pointer-events: none; z-index: 30; opacity: 0; }
+#fade.fadein { animation: fadein 1.4s ease-out; }
+#fade.fadeout { animation: fadeout .7s ease-in forwards; }
+@keyframes fadein { from { opacity: 1; } to { opacity: 0; } }
+@keyframes fadeout { from { opacity: 0; } to { opacity: 1; } }

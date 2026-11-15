@@ -27,7 +27,8 @@
   const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 500);
   scene.add(camera);
 
-  scene.add(new THREE.HemisphereLight(0xdfefff, 0x6b6558, 1.0));
+  const hemi = new THREE.HemisphereLight(0xdfefff, 0x6b6558, 1.0);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
   sun.position.set(30, 50, 20);
   sun.castShadow = true;
@@ -299,8 +300,30 @@
   const ITEM_TYPES = {
     pistol: { name: 'Pistol',    icon: '🔫', value: 0,     half: 0 },
     money:  { name: 'Money Bag', icon: '💰', value: 2500,  half: 0.28 },
-    gold:   { name: 'Gold Bar',  icon: '🥇', value: 10000, half: 0.1 }
+    gold:   { name: 'Gold Bar',  icon: '🥇', value: 10000, half: 0.1 },
+    shotgun: { name: 'Shotgun',  icon: '💥', value: 0, half: 0 },
+    sniper:  { name: 'Sniper',   icon: '🎯', value: 0, half: 0 },
+    rifle:   { name: 'Assault Rifle', icon: '🔥', value: 0, half: 0 }
   };
+
+  // Weapons. The pistol does 5 damage; the black-market guns are bought at the HQ.
+  const WEAPONS = {
+    pistol:  { name: 'Pistol',        price: 0,      dmg: 5,  pellets: 1, spread: 0,     size: 12, reserve: 60,  cd: 0.2,  auto: false, reload: 1.3, fov: 52, dist: 2.5, snd: 1.0, mz: -0.36, kick: 0.012 },
+    shotgun: { name: 'Shotgun',       price: 25000,  dmg: 6,  pellets: 8, spread: 0.055, size: 6,  reserve: 30,  cd: 0.85, auto: false, reload: 2.0, fov: 50, dist: 2.5, snd: 1.6, mz: -0.84, kick: 0.05 },
+    sniper:  { name: 'Sniper',        price: 100000, dmg: 50, pellets: 1, spread: 0,     size: 5,  reserve: 20,  cd: 1.3,  auto: false, reload: 2.4, fov: 18, dist: 2.0, snd: 1.8, mz: -1.08, kick: 0.07 },
+    rifle:   { name: 'Assault Rifle', price: 175000, dmg: 12, pellets: 1, spread: 0.009, size: 30, reserve: 150, cd: 0.1,  auto: true,  reload: 1.9, fov: 50, dist: 2.5, snd: 0.8, mz: -0.8,  kick: 0.016 }
+  };
+  const SHOP_WEAPONS = ['shotgun', 'sniper', 'rifle'];
+
+  // Progress that survives between heists (cash and the guns you own)
+  const SAVE_KEY = 'bankheist-save-v1';
+  let save = { cash: 0, owned: [], carry: [] };
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [] };
+  } catch (err) { /* storage can be blocked */ }
+  function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (err) { /* ignore */ } }
+  const money$ = n => '$' + n.toLocaleString('en-US');
 
   const dollarTex = canvasTex(64, 64, (c, w, h) => {
     c.fillStyle = '#1f6b3a'; c.beginPath(); c.arc(w / 2, h / 2, 28, 0, Math.PI * 2); c.fill();
@@ -352,6 +375,7 @@
 
   // Inventory
   const slots = [{ type: 'pistol' }, null, null, null];
+  save.carry.filter(t => save.owned.includes(t) && WEAPONS[t]).slice(0, 3).forEach((t, i) => { slots[i + 1] = { type: t }; });
   let selected = 0;
   const slotEls = Array.from(document.querySelectorAll('#inventory .slot'));
   const lootEl = document.getElementById('loot');
@@ -463,10 +487,9 @@
 
     // Pistol (built along the arm's -Y axis so it points forward when the arm is raised)
     const gun = new THREE.Group(); gun.position.set(0, -0.68, 0); armR.add(gun);
-    const gunMat = mat(0x30343b, { metalness: 0.6, roughness: 0.4 });
-    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.07), gunMat); slide.position.set(0, -0.17, -0.01); gun.add(slide);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.09), mat(0x1c1c1f)); grip.position.set(0, -0.04, 0.07); gun.add(grip);
-    const muzzle = new THREE.Object3D(); muzzle.position.set(0, -0.36, -0.01); gun.add(muzzle);
+    const guns = {};
+    for (const t of Object.keys(WEAPONS)) { guns[t] = makeWeaponModel(t); guns[t].visible = t === 'pistol'; gun.add(guns[t]); }
+    const muzzle = new THREE.Object3D(); muzzle.position.set(0, WEAPONS.pistol.mz, -0.01); gun.add(muzzle);
 
     const flashMap = canvasTex(64, 64, (c, w, h) => {
       const gr = c.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2);
@@ -483,7 +506,43 @@
 
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     scene.add(g);
-    return { group: g, legs, armL, armR, head, torso, gun, muzzle, flash, flashLight, heldMoney, heldGold };
+    return { group: g, legs, armL, armR, head, torso, gun, guns, muzzle, flash, flashLight, heldMoney, heldGold };
+  }
+
+  // A gun model built along the -Y axis (so it points forward when the arm is raised); +Z side is the underside.
+  function makeWeaponModel(type) {
+    const g = new THREE.Group();
+    const metal = mat(0x30343b, { metalness: 0.6, roughness: 0.4 });
+    const dark = mat(0x1c1c1f, { metalness: 0.3, roughness: 0.6 });
+    const woodM = mat(0x7a4a22, { roughness: 0.7 });
+    const part = (w, h, d, m, x, y, z) => { const p = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); p.position.set(x, y, z); g.add(p); return p; };
+    if (type === 'pistol') {
+      part(0.05, 0.3, 0.07, metal, 0, -0.17, -0.01);
+      part(0.05, 0.08, 0.09, dark, 0, -0.04, 0.07);
+    } else if (type === 'shotgun') {
+      part(0.05, 0.78, 0.05, metal, 0, -0.45, -0.02);        // barrel
+      part(0.045, 0.6, 0.04, metal, 0, -0.4, 0.035);          // magazine tube
+      part(0.07, 0.22, 0.07, woodM, 0, -0.36, 0.03);          // pump
+      part(0.06, 0.3, 0.09, woodM, 0, 0.06, 0.02);            // stock
+      part(0.06, 0.16, 0.07, dark, 0, -0.12, 0.0);            // receiver
+    } else if (type === 'sniper') {
+      part(0.035, 1.0, 0.035, metal, 0, -0.6, -0.01);         // long barrel
+      part(0.075, 0.5, 0.09, dark, 0, -0.15, 0.0);            // body
+      part(0.06, 0.34, 0.09, woodM, 0, 0.2, 0.02);            // stock
+      part(0.055, 0.26, 0.055, metal, 0, -0.18, -0.09);       // scope
+      part(0.07, 0.04, 0.07, dark, 0, -0.07, -0.09);
+      part(0.07, 0.04, 0.07, dark, 0, -0.29, -0.09);
+      part(0.025, 0.2, 0.025, metal, 0, -0.42, 0.04);         // bipod
+    } else {
+      part(0.07, 0.5, 0.09, dark, 0, -0.2, 0.0);              // receiver
+      part(0.035, 0.34, 0.035, metal, 0, -0.62, -0.01);       // barrel
+      part(0.05, 0.2, 0.06, mat(0x2a2d33), 0, -0.22, 0.12);   // magazine
+      part(0.05, 0.08, 0.07, dark, 0, -0.06, 0.07);           // grip
+      part(0.06, 0.28, 0.08, dark, 0, 0.14, 0.0);             // stock
+      part(0.03, 0.05, 0.05, metal, 0, -0.1, -0.07);          // sight
+    }
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return g;
   }
 
   const model = buildPlayer();
@@ -544,37 +603,41 @@
     tracers.push({ m, life: 0.07 });
   }
 
-  function holdingGun() { return !!(slots[selected] && slots[selected].type === 'pistol'); }
+  let activeW = 'pistol';
+  const ammoStore = {};
+  for (const t of Object.keys(WEAPONS)) ammoStore[t] = { mag: WEAPONS[t].size, reserve: WEAPONS[t].reserve };
+  function curWeapon() { const s = slots[selected]; return s && WEAPONS[s.type] ? s.type : null; }
+  function holdingGun() { return !!curWeapon(); }
+  function setHeld(t) {
+    for (const k in model.guns) model.guns[k].visible = k === t;
+    model.muzzle.position.y = WEAPONS[t].mz;
+  }
+  // Switching weapons: keep each gun's own ammo
+  function syncWeapon() {
+    const t = curWeapon() || activeW;
+    if (t === activeW) return;
+    ammoStore[activeW].mag = gun.mag; ammoStore[activeW].reserve = gun.reserve;
+    activeW = t;
+    gun.size = WEAPONS[t].size; gun.mag = ammoStore[t].mag; gun.reserve = ammoStore[t].reserve;
+    gun.reload = 0; gun.cooldown = 0.25;
+    setHeld(t);
+  }
 
   function startReload() {
     if (!holdingGun() || gun.reload > 0 || gun.mag >= gun.size || gun.reserve <= 0) return;
-    gun.reload = 1.3;
+    gun.reload = WEAPONS[activeW].reload;
     tone(220, 0.05, 'square', 0.05); tone(330, 0.05, 'square', 0.05, 0.55);
   }
 
-  function shoot() {
-    if (phase !== 'play') return;
-    if (!holdingGun() || gun.reload > 0 || gun.cooldown > 0) return;
-    if (gun.mag <= 0) {
-      if (gun.reserve > 0) startReload(); else { tone(150, 0.05, 'square', 0.04); toast('Out of ammo!'); }
-      return;
-    }
-    gun.mag--;
-    gun.cooldown = 0.2;
-    gun.kick = 1;
-    gun.flash = 0.06;
-    gun.fired = 0.8;
-    sndShot();
-    if (insideBank(player.pos.x, player.pos.z)) alertTeller('shot');   // gunfire inside the bank sets off the alarm
-
-    // 1) ray from the camera through the crosshair
+  // one bullet (or one shotgun pellet) from the crosshair
+  function fireBullet(w, spread, state) {
     camera.updateMatrixWorld();
-    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    raycaster.setFromCamera({ x: (Math.random() - 0.5) * 2 * spread, y: (Math.random() - 0.5) * 2 * spread }, camera);
     raycaster.far = 150;
     const first = raycaster.intersectObjects(aimables, false)[0];
     const aimPoint = first ? first.point.clone() : raycaster.ray.at(120, new THREE.Vector3());
 
-    // 2) ray from the gun to that point (so cover between the gun and the target still blocks the shot)
+    // ray from the gun to that point (so cover between the gun and the target still blocks the shot)
     const from = model.muzzle.getWorldPosition(new THREE.Vector3());
     const dir = aimPoint.clone().sub(from);
     const dist = dir.length();
@@ -585,32 +648,49 @@
     if (!hit && first) hit = first;
     const end = hit ? hit.point.clone() : aimPoint;
     addTracer(from, end);
+    if (!hit) return;
 
-    // kick the camera a little
-    pitch = clamp(pitch + 0.012, -0.9, 0.9);
-
-    if (hit) {
-      const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP.clone();
-      const tgt = hit.object.userData.target;
-      const cop = hit.object.userData.cop;
-      if (cop) {
-        damageCop(cop, hit.point, n);
-      } else if (hit.object.userData.civilian) {
-        toast('Hold your fire! The teller is unarmed.');
-        alertTeller('shot');
-      } else if (tgt) {
-        if (!tgt.down) {
-          tgt.down = true; tgt.timer = 3;
-          hits++;
-          rangeEl.textContent = 'Targets hit: ' + hits;
-          tone(1100, 0.12, 'triangle', 0.08);
-        }
-        addSparks(hit.point, n);
-      } else {
-        addDecal(hit.point, n);
-        addSparks(hit.point, n);
+    const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP.clone();
+    const tgt = hit.object.userData.target;
+    const cop = hit.object.userData.cop;
+    if (cop) {
+      damageCop(cop, hit.point, n, w.dmg);
+    } else if (hit.object.userData.civilian) {
+      if (!state.warned) { state.warned = true; toast('Hold your fire! The teller is unarmed.'); }
+      alertTeller('shot');
+    } else if (tgt) {
+      if (!tgt.down) {
+        tgt.down = true; tgt.timer = 3;
+        hits++;
+        rangeEl.textContent = 'Targets hit: ' + hits;
+        tone(1100, 0.12, 'triangle', 0.08);
       }
+      addSparks(hit.point, n);
+    } else {
+      addDecal(hit.point, n);
+      addSparks(hit.point, n);
     }
+  }
+
+  function shoot() {
+    if (phase !== 'play' && phase !== 'hq') return;
+    if (!holdingGun() || gun.reload > 0 || gun.cooldown > 0) return;
+    const w = WEAPONS[activeW];
+    if (gun.mag <= 0) {
+      if (gun.reserve > 0) startReload(); else { tone(150, 0.05, 'square', 0.04); toast('Out of ammo!'); }
+      return;
+    }
+    gun.mag--;
+    gun.cooldown = w.cd;
+    gun.kick = 1;
+    gun.flash = 0.06;
+    gun.fired = 0.8;
+    sndShot(w.snd);
+    if (phase === 'play' && insideBank(player.pos.x, player.pos.z)) alertTeller('shot');   // gunfire inside the bank sets off the alarm
+
+    const state = { warned: false };
+    for (let i = 0; i < w.pellets; i++) fireBullet(w, w.spread, state);
+    pitch = clamp(pitch + w.kick, -0.9, 0.9);   // kick the camera a little
   }
 
   // ------------------------------------------------------------ interaction
@@ -626,6 +706,7 @@
   }
 
   function updateObjective() {
+    if (phase === 'hq') { objEl.textContent = 'Safe at the HQ. Buy guns at the pedestals (E), then take the green door for the next heist.'; return; }
     if (phase !== 'play') return;
     const carrying = lootValue() > 0;
     const full = slots.every(Boolean);
@@ -656,7 +737,7 @@
   function dropSelected() {
     const s = slots[selected];
     if (!s) return;
-    if (s.type === 'pistol') { toast("You can't drop your pistol"); return; }
+    if (WEAPONS[s.type]) { toast(phase === 'hq' ? 'Use E at the gun pedestal to stash a weapon' : "You can't drop your weapons"); return; }
     const p = new THREE.Vector3(player.pos.x - Math.sin(player.faceYaw) * 1.0, 0, player.pos.z - Math.cos(player.faceYaw) * 1.0);
     resolveCollisions(p, 0.3);
     spawnItem(s.type, p.x, insideBank(p.x, p.z) ? 0.02 : 0, p.z);
@@ -689,8 +770,10 @@
         else if (m === t) p.z = c.minZ - r; else p.z = c.maxZ + r;
       }
     }
-    p.x = clamp(p.x, -BOUND, BOUND);
-    p.z = clamp(p.z, -BOUND, BOUND);
+    if (Math.abs(p.x) < 500) {          // the HQ room is far away from the heist area and has its own walls
+      p.x = clamp(p.x, -BOUND, BOUND);
+      p.z = clamp(p.z, -BOUND, BOUND);
+    }
   }
 
   function angleLerp(a, b, t) {
@@ -700,6 +783,7 @@
 
   // ------------------------------------------------------------------ input
   const keys = {};
+  let mouseDown = false;
   let locked = false, forced = false;
   const isActive = () => locked || forced;
 
@@ -717,20 +801,20 @@
     else if (e.code === 'KeyM') { muted = !muted; toast(muted ? 'Sound off' : 'Sound on'); }
   });
   document.addEventListener('keyup', e => { keys[e.code] = false; });
-  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; aiming = false; });
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; aiming = false; mouseDown = false; });
 
   document.addEventListener('mousemove', e => {
     if (!isActive()) return;
-    const sens = aiming ? 0.0016 : 0.0022;
+    const sens = aiming ? 0.0016 * Math.min(1, camera.fov / 52) : 0.0022;
     yaw -= e.movementX * sens;
     pitch = clamp(pitch - e.movementY * sens, -0.85, 0.9);
   });
   document.addEventListener('mousedown', e => {
     if (!isActive()) return;
-    if (e.button === 0) shoot();
+    if (e.button === 0) { mouseDown = true; shoot(); }
     else if (e.button === 2) aiming = true;
   });
-  document.addEventListener('mouseup', e => { if (e.button === 2) aiming = false; });
+  document.addEventListener('mouseup', e => { if (e.button === 2) aiming = false; if (e.button === 0) mouseDown = false; });
   document.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('wheel', e => {
     if (!isActive()) return;
@@ -744,7 +828,7 @@
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === renderer.domElement;
     overlay.classList.toggle('hidden', locked || phase === 'won' || phase === 'lost');
-    if (!locked) { aiming = false; overlayMsg.textContent = started ? 'Paused. Click to resume' : 'Click to play'; }
+    if (!locked) { aiming = false; mouseDown = false; overlayMsg.textContent = started ? 'Paused. Click to resume' : 'Click to play'; }
     else started = true;
   });
   document.addEventListener('pointerlockerror', () => {
@@ -1019,9 +1103,9 @@
     c.m.group.traverse(m => { if (m.isMesh && m.material.emissive) m.material.emissive.setHex(on ? 0xff2020 : 0x000000); });
   }
 
-  function damageCop(c, point, normal) {
+  function damageCop(c, point, normal, dmg) {
     if (c.dead) return;
-    c.hp = Math.max(0, c.hp - PISTOL_DMG);
+    c.hp = Math.max(0, c.hp - (dmg || PISTOL_DMG));
     c.flash = 0.12; flashCop(c, true);
     c.bar.fg.scale.x = Math.max(0.001, 0.76 * c.hp / COP_HP);
     addSparks(point, normal);
@@ -1174,10 +1258,12 @@
     getawayCar.position.x += Math.min(16, 2 + escape.t * 7) * dt;   // floor it
     player.pos.set(getawayCar.position.x, 0, getawayCar.position.z);
     player.vel.set(0, 0, 0);
-    if (escape.t > 3) endGame(true);
+    if (escape.t > 2.2 && !escape.faded) { escape.faded = true; pulse(fadeEl, 'fadeout'); }
+    if (escape.t > 2.9) arriveHQ();
   }
 
   function interact() {
+    if (phase === 'hq') { hqInteract(); return; }
     if (phase !== 'play') return;
     if (!nearestItem() && nearCar()) { enterCar(); return; }
     tryPickup();
@@ -1208,7 +1294,8 @@
   endEl.addEventListener('click', () => location.reload());
 
   function updateHeist(dt) {
-    if (phase === 'won' || phase === 'lost') return;
+    if (phase === 'hq') { updateHQ(dt); return; }
+    if (phase === 'won' || phase === 'lost' || phase === 'leaving') return;
     if (phase === 'play') {
       playTime += dt;
       checkTellerFear();
@@ -1244,11 +1331,235 @@
     }
   }
 
+  // ================================================================ the HQ
+  // After a getaway you teleport to the headquarters: a hideout with an illegal gun shop.
+  const HX = 1000;                       // the room sits far away from the heist area
+  const SHOP_Z = -6.8;                   // pedestals along the back wall
+  const PED_X = [HX - 8, HX - 4, HX];
+  const EXIT_POS = { x: HX + 9, z: 7 };
+  const hqSpin = [];
+  const hqSigns = [];
+  const hq = { sold: 0 };
+
+  (function buildHQ() {
+    const wallM = mat(0x3b3744), trimM = mat(0x17151c), woodM = mat(0x5b3a1e), crateM = mat(0x5a4630);
+    const floorTexHQ = canvasTex(128, 128, (c, w, h) => {
+      c.fillStyle = '#2a2830'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#23212a'; c.fillRect(0, 0, w / 2, h / 2); c.fillRect(w / 2, h / 2, w / 2, h / 2);
+    });
+    floorTexHQ.wrapS = floorTexHQ.wrapT = THREE.RepeatWrapping; floorTexHQ.repeat.set(12, 8);
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(24, 16), new THREE.MeshStandardMaterial({ map: floorTexHQ, roughness: 0.45 }));
+    fl.rotation.x = -Math.PI / 2; fl.position.set(HX, 0.01, 0); fl.receiveShadow = true; scene.add(fl); aimables.push(fl);
+
+    const o = { block: true, cam: true };
+    addBox(24.8, 4.6, 0.6, wallM, HX, 2.3, -8.3, o);            // back wall
+    addBox(24.8, 4.6, 0.6, wallM, HX, 2.3, 8.3, o);             // front wall
+    addBox(0.6, 4.6, 17.2, wallM, HX - 12.3, 2.3, 0, o);        // side walls
+    addBox(0.6, 4.6, 17.2, wallM, HX + 12.3, 2.3, 0, o);
+    addBox(24.8, 0.3, 17.2, trimM, HX, 4.75, 0, { cam: true });  // ceiling
+    addBox(24, 0.25, 0.1, trimM, HX, 0.12, -7.95, { aim: false });   // skirting
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(9, 5), mat(0x6a1620, { roughness: 0.95 }));
+    rug.rotation.x = -Math.PI / 2; rug.position.set(HX - 2, 0.03, 1.8); scene.add(rug);
+
+    // lights
+    [[HX - 8, -3.5, 0xffd9a0], [HX, -3.5, 0xffd9a0], [HX - 6, 3.5, 0xb67bff], [HX + 6, 3.5, 0x6fd6ff], [HX + 7, -4, 0xffb070]].forEach(([x, z, col]) => {
+      const l = new THREE.PointLight(col, 40, 0, 2); l.position.set(x, 3.9, z); scene.add(l);
+      addBox(0.9, 0.08, 0.3, new THREE.MeshBasicMaterial({ color: col }), x, 4.55, z, { cast: false, aim: false });
+    });
+
+    // neon title
+    const neon = canvasTex(1024, 160, (c, w, h) => {
+      c.fillStyle = '#0c0a12'; c.fillRect(0, 0, w, h);
+      c.shadowColor = '#ff3fa4'; c.shadowBlur = 24; c.fillStyle = '#ff7cc6';
+      c.font = 'bold 84px "Segoe UI", Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('THE HQ  ·  BLACK MARKET', w / 2, h / 2 + 4);
+    });
+    const neonM = new THREE.Mesh(new THREE.PlaneGeometry(11, 1.72), new THREE.MeshBasicMaterial({ map: neon }));
+    neonM.position.set(HX, 4.05, -7.93); scene.add(neonM);
+
+    // weapon pedestals with a spinning gun and a price sign
+    SHOP_WEAPONS.forEach((t, i) => {
+      const px = PED_X[i];
+      addBox(2.2, 0.9, 1.3, mat(0x24222b, { roughness: 0.5 }), px, 0.45, SHOP_Z, o);
+      addBox(2.3, 0.06, 1.4, mat(0xd4af37, { metalness: 0.8, roughness: 0.35 }), px, 0.93, SHOP_Z, { aim: false });
+      const spin = new THREE.Group(); spin.position.set(px, 1.45, SHOP_Z);
+      const gm = makeWeaponModel(t); gm.rotation.z = Math.PI / 2; gm.scale.setScalar(t === 'sniper' ? 1.3 : 1.9);
+      gm.position.x = t === 'sniper' ? -0.15 : 0;
+      spin.add(gm); scene.add(spin); hqSpin.push(spin);
+      const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const sg = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3), new THREE.MeshBasicMaterial({ map: tex }));
+      sg.position.set(px, 2.75, -7.93); scene.add(sg);
+      hqSigns.push({ type: t, cv, tex });
+    });
+
+    // the dealer's counter and the dealer
+    addBox(3.4, 1.1, 1.2, woodM, HX + 6.5, 0.55, -6.0, o);
+    addBox(3.5, 0.08, 1.3, mat(0x22201a), HX + 6.5, 1.12, -6.0, { aim: false });
+    const dealer = buildNPC({ shirt: 0x5a1a1a, vest: 0x1a1a1f, pants: 0x222228, cap: 0x101012, skin: 0xc99a76 });
+    dealer.group.position.set(HX + 6.5, 0, -7.2); dealer.group.rotation.y = Math.PI;
+    scene.add(dealer.group); hq.dealer = dealer;
+    colliders.push({ minX: HX + 6.1, maxX: HX + 6.9, minZ: -7.6, maxZ: -6.8 });
+    for (const dx of [-0.9, 0, 0.9]) {
+      const m = makeItemMesh(dx === 0 ? 'gold' : 'money'); m.position.set(HX + 6.5 + dx, 1.12 + (dx === 0 ? 0.12 : 0.3), -6.0); scene.add(m);
+    }
+
+    // crates and barrels for the hideout look
+    [[-10.6, 6.8, 1.3], [-9.2, 6.9, 1.0], [-10.8, 5.4, 0.9], [10.8, -1.5, 1.2], [10.9, 0.0, 0.9], [-11, -6.8, 1.3]].forEach(([x, z, sz]) => {
+      addBox(sz, sz, sz, crateM, HX + x, sz / 2, z, o);
+    });
+
+    // the exit door
+    addBox(2.6, 3.4, 0.2, mat(0x0f2a18), EXIT_POS.x, 1.7, 7.88, { aim: false });
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.0), new THREE.MeshBasicMaterial({ color: 0x2fd37a }));
+    door.position.set(EXIT_POS.x, 1.55, 7.76); door.rotation.y = Math.PI; scene.add(door);
+    const exitTex = canvasTex(512, 128, (c, w, h) => {
+      c.fillStyle = '#0c1a12'; c.fillRect(0, 0, w, h); c.fillStyle = '#5dff9a';
+      c.font = 'bold 52px "Segoe UI", Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('NEXT HEIST ➜', w / 2, h / 2 + 3);
+    });
+    const exitSign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: exitTex }));
+    exitSign.position.set(EXIT_POS.x, 3.85, 7.76); exitSign.rotation.y = Math.PI; scene.add(exitSign);
+    const exitRing = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.65, 32), new THREE.MeshBasicMaterial({ color: 0x5dff9a, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+    exitRing.rotation.x = -Math.PI / 2; exitRing.position.set(EXIT_POS.x, 0.05, EXIT_POS.z - 0.6); scene.add(exitRing);
+    hq.exitRing = exitRing;
+  })();
+
+  function drawSigns() {
+    for (const sgn of hqSigns) {
+      const w = WEAPONS[sgn.type], c = sgn.cv.getContext('2d');
+      const owned = save.owned.includes(sgn.type), carried = slots.some(s => s && s.type === sgn.type);
+      c.fillStyle = '#100e16'; c.fillRect(0, 0, 512, 256);
+      c.strokeStyle = owned ? '#5dff9a' : '#d4af37'; c.lineWidth = 8; c.strokeRect(6, 6, 500, 244);
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = '#fff'; c.font = 'bold 54px "Segoe UI", Arial'; c.fillText(w.name.toUpperCase(), 256, 62);
+      c.fillStyle = owned ? '#5dff9a' : '#ffd23f'; c.font = 'bold 66px "Segoe UI", Arial';
+      c.fillText(owned ? (carried ? 'CARRYING' : 'OWNED') : money$(w.price), 256, 138);
+      c.fillStyle = '#aab3c5'; c.font = '30px "Segoe UI", Arial';
+      const dmg = w.pellets > 1 ? w.pellets + ' x ' + w.dmg : String(w.dmg);
+      c.fillText('DMG ' + dmg + '  ·  ' + w.size + ' RND' + (w.auto ? '  ·  AUTO' : ''), 256, 205);
+      sgn.tex.needsUpdate = true;
+    }
+  }
+  drawSigns();
+
+  const fadeEl = document.getElementById('fade');
+  const cashEl = document.getElementById('cash');
+  const scopeEl = document.getElementById('scope');
+  function renderCash() {
+    cashEl.textContent = 'CASH ' + money$(save.cash);
+    lootEl.style.display = phase === 'hq' ? 'none' : '';
+  }
+  renderCash();
+
+  function setHqLook(on) {
+    scene.background.setHex(on ? 0x0a0a10 : SKY);
+    scene.fog.color.setHex(on ? 0x0a0a10 : SKY);
+    scene.fog.near = on ? 40 : 70; scene.fog.far = on ? 120 : 210;
+    hemi.intensity = on ? 0.9 : 1.0;
+    sun.visible = !on;
+  }
+
+  function saveCarry() {
+    save.carry = slots.filter(s => s && s.type !== 'pistol' && WEAPONS[s.type]).map(s => s.type);
+    persist();
+  }
+
+  // the getaway worked: sell the loot and teleport to the HQ
+  function arriveHQ() {
+    if (phase === 'hq') return;
+    hq.sold = lootValue();
+    for (let i = 0; i < slots.length; i++) if (slots[i] && ITEM_TYPES[slots[i].type].value > 0) slots[i] = null;
+    selected = 0;
+    save.cash += hq.sold;
+    saveCarry();
+    phase = 'hq';
+    stopSirens();
+    alarm.on = false;
+    alarmEl.classList.remove('on'); glowEl.classList.remove('on');
+    hp = PLAYER_HP; renderHp();
+    player.pos.set(HX - 3, 0, 4.8); player.vel.set(0, 0, 0); player.vy = 0; player.faceYaw = 0;
+    yaw = 0; pitch = 0.12; aiming = false;
+    gun.reload = 0;
+    setHqLook(true);
+    renderInventory(); renderCash(); drawSigns(); updateObjective();
+    fadeEl.classList.remove('fadeout');
+    pulse(fadeEl, 'fadein');
+    toast('Welcome to the HQ. Loot sold for ' + money$(hq.sold) + '!');
+    tone(660, 0.1, 'square', 0.05); tone(880, 0.1, 'square', 0.05, 0.1); tone(1320, 0.2, 'square', 0.05, 0.2);
+  }
+
+  function hqSpot() {
+    if (phase !== 'hq') return null;
+    let best = null, bd = 2.9;
+    SHOP_WEAPONS.forEach((t, i) => {
+      const d = Math.hypot(player.pos.x - PED_X[i], player.pos.z - SHOP_Z);
+      if (d < bd) { bd = d; best = { kind: 'weapon', type: t }; }
+    });
+    if (!best && Math.hypot(player.pos.x - EXIT_POS.x, player.pos.z - EXIT_POS.z) < 3.4) best = { kind: 'exit' };
+    return best;
+  }
+
+  function hqPrompt(sp) {
+    if (sp.kind === 'exit') return '<b>E</b> &nbsp;Head out for the next heist';
+    const w = WEAPONS[sp.type];
+    if (!save.owned.includes(sp.type)) {
+      const need = w.price - save.cash;
+      return '<b>E</b> &nbsp;Buy ' + w.name + ' &ndash; ' + money$(w.price) + (need > 0 ? ' <span style="color:#ff6b6b">(need ' + money$(need) + ' more)</span>' : '');
+    }
+    return slots.some(s => s && s.type === sp.type) ? '<b>E</b> &nbsp;Stash ' + w.name + ' in the locker' : '<b>E</b> &nbsp;Take ' + w.name;
+  }
+
+  function hqInteract() {
+    const sp = hqSpot();
+    if (!sp) return;
+    if (sp.kind === 'exit') {
+      phase = 'leaving';
+      saveCarry();
+      pulse(fadeEl, 'fadeout');
+      toast('Off to the next job...');
+      setTimeout(() => location.reload(), 750);
+      return;
+    }
+    const t = sp.type, w = WEAPONS[t];
+    const carriedAt = slots.findIndex(s => s && s.type === t);
+    const free = slots.findIndex(s => !s);
+    if (!save.owned.includes(t)) {
+      if (save.cash < w.price) { toast('Not enough cash! You need ' + money$(w.price - save.cash) + ' more.'); tone(150, 0.15, 'square', 0.05); return; }
+      save.cash -= w.price; save.owned.push(t);
+      tone(880, 0.08, 'square', 0.05); tone(1320, 0.12, 'square', 0.05, 0.08);
+      if (free >= 0) { slots[free] = { type: t }; selected = free; toast('Bought the ' + w.name + ' for ' + money$(w.price) + '!'); }
+      else toast('Bought the ' + w.name + '! Inventory full: it is in your locker. Stash a gun to carry it.');
+    } else if (carriedAt >= 0) {
+      slots[carriedAt] = null;
+      if (selected === carriedAt) selected = 0;
+      toast('Stashed the ' + w.name + ' in your locker');
+    } else if (free >= 0) {
+      slots[free] = { type: t }; selected = free;
+      toast('Took the ' + w.name + ' from your locker');
+    } else { toast('Inventory full. Stash a gun first.'); return; }
+    saveCarry();
+    renderInventory(); renderCash(); drawSigns();
+  }
+
+  function updateHQ(dt) {
+    alarmEl.classList.remove('on'); glowEl.classList.remove('on');
+    hqSpin.forEach((g, i) => { g.rotation.y += dt * 0.8; g.position.y = 1.45 + Math.sin(time * 1.6 + i) * 0.05; });
+    const d = hq.dealer;
+    if (d) {
+      const want = Math.atan2(-(player.pos.x - d.group.position.x), -(player.pos.z - d.group.position.z));
+      const rel = ((want - Math.PI + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      d.head.rotation.y = clamp(rel, -0.9, 0.9);
+      d.torso.position.y = 1.22 + Math.sin(time * 1.5) * 0.008;
+    }
+    hq.exitRing.material.opacity = 0.35 + 0.25 * Math.sin(time * 3);
+    scopeEl.classList.remove('on');
+  }
+
   renderHp();
 
   // ----------------------------------------------------------------- update
   function updatePlayer(dt) {
-    const ctl = phase === 'play';
+    const ctl = phase === 'play' || phase === 'hq';
     const ix = ctl ? (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) : 0;
     const iz = ctl ? (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) : 0;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
@@ -1310,9 +1621,10 @@
 
   function updateCamera(dt) {
     const k = Math.min(1, 10 * dt);
-    camDist += ((aiming ? 2.5 : 3.8) - camDist) * k;
+    const wz = holdingGun() ? WEAPONS[activeW] : WEAPONS.pistol;
+    camDist += ((aiming ? wz.dist : 3.8) - camDist) * k;
     camShoulder += ((aiming ? 0.75 : 0.6) - camShoulder) * k;
-    camera.fov += ((aiming ? 52 : 65) - camera.fov) * k;
+    camera.fov += ((aiming ? wz.fov : 65) - camera.fov) * k;
     camera.updateProjectionMatrix();
 
     const cp = Math.cos(pitch);
@@ -1371,6 +1683,8 @@
 
     if (!isActive()) return;
 
+    syncWeapon();
+    if (mouseDown && WEAPONS[activeW].auto) shoot();
     // weapon timers
     if (gun.cooldown > 0) gun.cooldown -= dt;
     if (gun.fired > 0) gun.fired -= dt;
@@ -1398,10 +1712,12 @@
     ammoMagEl.textContent = gun.mag;
     ammoResEl.textContent = ' / ' + gun.reserve;
     reloadEl.classList.toggle('show', gun.reload > 0);
+    scopeEl.classList.toggle('on', aiming && showAmmo && activeW === 'sniper' && camera.fov < 40);
 
     const it = nearestItem();
     let p = '';
     if (it) p = '<b>E</b> &nbsp;Pick up ' + ITEM_TYPES[it.type].name + ' ($' + ITEM_TYPES[it.type].value.toLocaleString('en-US') + ')';
+    if (phase === 'hq') { const sp = hqSpot(); if (sp) p = hqPrompt(sp); }
     if (!it && phase === 'play' && nearCar()) p = '<b>E</b> &nbsp;' + (lootValue() > 0 ? 'Get in the getaway car and escape!' : 'Getaway car (grab some money first)');
     if (p !== lastPrompt) {
       lastPrompt = p;
@@ -1414,6 +1730,7 @@
   renderInventory();
   updateObjective();
   gun.mag = gun.size;
+  setHeld('pistol');
 
   // Optional test hooks: open the page with #debug in the URL
   if (location.hash === '#debug') {
@@ -1423,12 +1740,13 @@
       look(y, p) { yaw = y; pitch = p; },
       teleport(x, z) { player.pos.set(x, 0, z); },
       aim(v) { aiming = v; },
+      arriveHQ, hqInteract, hqSpot, save, give(t) { save.cash += t; renderCash(); },
       shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
       alert() { alertTeller('gun'); },
       skipAlarm(s) { alarm.t += s; },
       copsInfo() { return cops.map(c => ({ hp: c.hp, dead: c.dead, pos: [+c.pos.x.toFixed(1), +c.pos.z.toFixed(1)], los: c.los })); },
       get info() {
-        return { pos: player.pos.toArray(), slots: slots.map(s => s && s.type), selected, mag: gun.mag, reserve: gun.reserve, hits, items: worldItems.length, decals: decals.length, loot: lootValue(), camera: camera.position.toArray(), phase, hp: Math.round(hp), alarm: { on: alarm.on, t: +alarm.t.toFixed(1), here: alarm.policeHere }, teller: teller.state, cops: cops.filter(c => !c.dead).length, kills };
+        return { pos: player.pos.toArray(), slots: slots.map(s => s && s.type), selected, activeW, cash: save.cash, owned: save.owned.slice(), mag: gun.mag, reserve: gun.reserve, hits, items: worldItems.length, decals: decals.length, loot: lootValue(), camera: camera.position.toArray(), phase, hp: Math.round(hp), alarm: { on: alarm.on, t: +alarm.t.toFixed(1), here: alarm.policeHere }, teller: teller.state, cops: cops.filter(c => !c.dead).length, kills };
       }
     };
   }
