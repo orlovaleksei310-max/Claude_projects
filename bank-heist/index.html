@@ -8,8 +8,11 @@
 </head>
 <body>
   <div id="game"></div>
+  <div id="alarm-glow"></div>
+  <div id="damage"></div>
 
   <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmarker"></div>
 
   <div id="hud-top">
     <div id="loot">LOOT $0</div>
@@ -17,8 +20,18 @@
     <div id="range">Targets hit: 0</div>
   </div>
 
+  <div id="alarm">
+    <div id="alarm-title">ALARM!</div>
+    <div id="alarm-sub"></div>
+  </div>
+
   <div id="prompt"></div>
   <div id="toast"></div>
+
+  <div id="hp">
+    <div id="hp-label">HEALTH <span id="hp-text">100</span></div>
+    <div id="hp-bar"><div id="hp-fill"></div></div>
+  </div>
 
   <div id="ammo">
     <div><span id="ammo-mag">12</span><span id="ammo-res"> / 60</span></div>
@@ -35,21 +48,30 @@
   <div id="overlay">
     <div class="panel">
       <h1>BANK HEIST</h1>
-      <p class="tag">You're outside the National Bank with a pistol and an empty bag. Make it count.</p>
+      <p class="tag">Hold up the teller, grab the cash and escape in the getaway car outside. The police show up 30 seconds after the alarm goes off.</p>
       <table>
         <tr><td>W A S D</td><td>Move</td></tr>
         <tr><td>Mouse</td><td>Look around</td></tr>
+        <tr><td>Right click (hold)</td><td>Hold your gun out: aim, closer camera, slower walk</td></tr>
         <tr><td>Left click</td><td>Shoot (pistol must be selected)</td></tr>
-        <tr><td>Right click (hold)</td><td>Aim: closer camera, slower walk</td></tr>
         <tr><td>Shift / Space</td><td>Sprint / Jump</td></tr>
         <tr><td>R</td><td>Reload</td></tr>
         <tr><td>1 2 3 4 / Wheel</td><td>Pick an inventory slot</td></tr>
-        <tr><td>E / Q</td><td>Pick up / drop the selected item</td></tr>
+        <tr><td>E</td><td>Pick up loot / get in the getaway car</td></tr>
+        <tr><td>Q</td><td>Drop the selected item</td></tr>
         <tr><td>M</td><td>Mute sound</td></tr>
         <tr><td>Esc</td><td>Pause</td></tr>
       </table>
       <p id="overlay-msg" class="start">Click to play</p>
       <p class="note">Desktop only (keyboard and mouse). <a href="../">&larr; All games</a></p>
+    </div>
+  </div>
+
+  <div id="endscreen" class="hidden">
+    <div class="panel">
+      <h1 id="end-title"></h1>
+      <p id="end-lines"></p>
+      <p class="start">Click to play again</p>
     </div>
   </div>
 

@@ -7,7 +7,14 @@ A growing collection of small games that run right in the browser. No build step
 | Game | Folder | Description |
 |------|--------|-------------|
 | Criminal Runaway | [`criminal-runaway/`](criminal-runaway/) | Top-down escape game. Grab all the cash, dodge the police, reach the getaway car. |
-| Bank Heist 3D | [`bank-heist/`](bank-heist/) | Third-person 3D game. You spawn outside the bank with a pistol and a 4-slot inventory. Shoot targets, walk in, and take the loot. Desktop only (keyboard and mouse). |
+| Bank Heist 3D | [`bank-heist/`](bank-heist/) | Third-person 3D heist. A teller works inside the bank: hold out your gun and they put their hands up and the alarm goes off. Grab the money and get in the getaway car outside. Stay 30 seconds after the alarm and the police arrive (50 HP each; your pistol does 5 damage). Desktop only (keyboard and mouse). |
+
+### Bank Heist rules
+
+- Point your gun at the teller (hold right click) and they raise their hands. The alarm also goes off if you fire inside the bank or steal money in the teller's view.
+- Police arrive 30 seconds after the alarm. There are 4 officers, each with 50 HP. Your pistol does 5 damage per hit. They shoot back; you have 100 HP with slow regeneration.
+- The teller is unarmed and can't be hurt.
+- Pick up loot, then walk to the getaway car (parked outside the bank) and press E to escape. You need at least some loot to leave.
 
 ### Bank Heist controls
 
@@ -16,11 +23,12 @@ A growing collection of small games that run right in the browser. No build step
 | W A S D | Move |
 | Mouse | Look around (click the game to capture the mouse, Esc to pause) |
 | Left click | Shoot (pistol must be selected) |
-| Right click (hold) | Aim: closer camera, slower walk |
+| Right click (hold) | Hold your gun out: aim, closer camera, slower walk |
 | Shift / Space | Sprint / jump |
 | R | Reload |
 | 1 2 3 4 / mouse wheel | Select inventory slot |
-| E / Q | Pick up / drop the selected item |
+| E | Pick up loot / get in the getaway car |
+| Q | Drop the selected item |
 | M | Mute |
 
 ## How to play locally

@@ -263,8 +263,9 @@
     scene.add(g);
     camSolids.push(body); aimables.push(body, cabin);
     colliders.push({ minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.95, maxZ: z + 0.95 });
+    return g;
   }
-  addCar(-12, 17, 0x111114);   // the getaway car
+  const getawayCar = addCar(-12, -2.5, 0x111114);   // the getaway car, parked outside the bank
   addCar(16, 19, 0xb3202a);
 
   // Shooting-range targets
@@ -403,18 +404,18 @@
     }
     return actx;
   }
-  function sndShot() {
+  function sndShot(v = 1) {
     if (muted || !audio()) return;
     const t = actx.currentTime;
     const src = actx.createBufferSource(); src.buffer = noiseBuf;
     const f = actx.createBiquadFilter(); f.type = 'lowpass';
     f.frequency.setValueAtTime(5000, t); f.frequency.exponentialRampToValueAtTime(300, t + 0.2);
     const g = actx.createGain();
-    g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+    g.gain.setValueAtTime(0.9 * v, t); g.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
     src.connect(f); f.connect(g); g.connect(actx.destination); src.start(t);
     const o = actx.createOscillator(); const og = actx.createGain();
     o.type = 'sine'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
-    og.gain.setValueAtTime(0.7, t); og.gain.exponentialRampToValueAtTime(0.01, t + 0.14);
+    og.gain.setValueAtTime(0.7 * v, t); og.gain.exponentialRampToValueAtTime(0.01, t + 0.14);
     o.connect(og); og.connect(actx.destination); o.start(t); o.stop(t + 0.15);
   }
   function tone(freq, dur, type, vol, delay) {
@@ -552,6 +553,7 @@
   }
 
   function shoot() {
+    if (phase !== 'play') return;
     if (!holdingGun() || gun.reload > 0 || gun.cooldown > 0) return;
     if (gun.mag <= 0) {
       if (gun.reserve > 0) startReload(); else { tone(150, 0.05, 'square', 0.04); toast('Out of ammo!'); }
@@ -563,6 +565,7 @@
     gun.flash = 0.06;
     gun.fired = 0.8;
     sndShot();
+    if (insideBank(player.pos.x, player.pos.z)) alertTeller('shot');   // gunfire inside the bank sets off the alarm
 
     // 1) ray from the camera through the crosshair
     camera.updateMatrixWorld();
@@ -589,7 +592,13 @@
     if (hit) {
       const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP.clone();
       const tgt = hit.object.userData.target;
-      if (tgt) {
+      const cop = hit.object.userData.cop;
+      if (cop) {
+        damageCop(cop, hit.point, n);
+      } else if (hit.object.userData.civilian) {
+        toast('Hold your fire! The teller is unarmed.');
+        alertTeller('shot');
+      } else if (tgt) {
         if (!tgt.down) {
           tgt.down = true; tgt.timer = 3;
           hits++;
@@ -617,11 +626,16 @@
   }
 
   function updateObjective() {
-    const left = worldItems.length;
+    if (phase !== 'play') return;
+    const carrying = lootValue() > 0;
     const full = slots.every(Boolean);
-    if (left === 0) objEl.textContent = 'You cleaned the place out. Nice work.';
-    else if (full) objEl.textContent = 'Inventory full. Drop something with Q to carry more.';
-    else objEl.textContent = left + ' loot item' + (left === 1 ? '' : 's') + ' left in the bank.';
+    let t;
+    if (!alarm.on) t = 'Go into the bank and point your gun at the teller (hold right click).';
+    else if (alarm.policeHere) t = carrying ? 'The police are here! Get to the getaway car!' : 'The police are here! Grab money and reach the getaway car, or fight them off.';
+    else if (worldItems.length === 0) t = 'The bank is empty. Get to the getaway car outside!';
+    else if (full) t = 'Inventory full! Get to the getaway car (or drop something with Q).';
+    else t = carrying ? 'Grab more if you dare, then get to the getaway car outside.' : 'Grab the money, then get to the getaway car outside.';
+    objEl.textContent = t;
   }
 
   function tryPickup() {
@@ -636,6 +650,7 @@
     toast('Picked up ' + ITEM_TYPES[it.type].name + ' ($' + ITEM_TYPES[it.type].value.toLocaleString('en-US') + ')');
     renderInventory();
     updateObjective();
+    onLootTaken();
   }
 
   function dropSelected() {
@@ -696,7 +711,7 @@
     else if (e.code === 'Digit2') selectSlot(1);
     else if (e.code === 'Digit3') selectSlot(2);
     else if (e.code === 'Digit4') selectSlot(3);
-    else if (e.code === 'KeyE') tryPickup();
+    else if (e.code === 'KeyE') interact();
     else if (e.code === 'KeyQ') dropSelected();
     else if (e.code === 'KeyR') startReload();
     else if (e.code === 'KeyM') { muted = !muted; toast(muted ? 'Sound off' : 'Sound on'); }
@@ -728,7 +743,7 @@
   });
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === renderer.domElement;
-    overlay.classList.toggle('hidden', locked);
+    overlay.classList.toggle('hidden', locked || phase === 'won' || phase === 'lost');
     if (!locked) { aiming = false; overlayMsg.textContent = started ? 'Paused. Click to resume' : 'Click to play'; }
     else started = true;
   });
@@ -737,10 +752,505 @@
   });
   let started = false;
 
+  // ================================================================ the heist
+  // The teller, the bank alarm, the police and the getaway car.
+  const hpEl = document.getElementById('hp');
+  const hpFill = document.getElementById('hp-fill');
+  const hpText = document.getElementById('hp-text');
+  const alarmEl = document.getElementById('alarm');
+  const alarmSub = document.getElementById('alarm-sub');
+  const glowEl = document.getElementById('alarm-glow');
+  const damageEl = document.getElementById('damage');
+  const hitEl = document.getElementById('hitmarker');
+  const endEl = document.getElementById('endscreen');
+  const endTitle = document.getElementById('end-title');
+  const endLines = document.getElementById('end-lines');
+
+  const PLAYER_HP = 100;
+  const COP_HP = 50;            // police have 50 HP
+  const PISTOL_DMG = 5;         // your pistol does 5 damage per hit
+  const COP_DMG = 6;            // damage of a police bullet that hits you
+  const POLICE_DELAY = 30;      // seconds from the alarm until the police arrive
+  const POLICE_DRIVE = 4;       // the last seconds of that delay are the cars driving in
+
+  let phase = 'play';           // play | escaping | won | lost
+  let hp = PLAYER_HP, lastHurt = -99, kills = 0, playTime = 0;
+  const alarm = { on: false, t: 0, dispatched: false, policeHere: false };
+
+  function pulse(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function renderHp() {
+    const v = Math.max(0, Math.ceil(hp));
+    hpFill.style.width = v + '%';
+    hpText.textContent = v;
+    hpEl.classList.toggle('low', v <= 30);
+  }
+
+  // What blocks a line of sight (walls, columns, cars). Computed before any people exist.
+  const losBlockers = aimables.filter(m => m !== road && m !== floor && !m.userData.target);
+  const losRay = new THREE.Raycaster();
+  const _los = new THREE.Vector3();
+  function hasLOS(from, to) {
+    _los.copy(to).sub(from);
+    const d = _los.length();
+    if (d < 0.01) return true;
+    losRay.set(from, _los.divideScalar(d));
+    losRay.far = d - 0.2;
+    return losRay.intersectObjects(losBlockers, false).length === 0;
+  }
+
+  // ---- people (teller and police share one blocky model)
+  function buildNPC(o) {
+    const g = new THREE.Group();
+    g.rotation.order = 'YXZ';
+    const skin = mat(o.skin || 0xe0b48f), shirt = mat(o.shirt), pants = mat(o.pants), shoe = mat(0x15151a), dark = mat(0x0c0c0e);
+
+    const legs = [-1, 1].map(s => {
+      const piv = new THREE.Group(); piv.position.set(s * 0.14, 0.88, 0);
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.8, 0.26), pants); leg.position.y = -0.4; piv.add(leg);
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.1, 0.36), shoe); foot.position.set(0, -0.83, -0.04); piv.add(foot);
+      g.add(piv); return piv;
+    });
+
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.72, 0.3), shirt);
+    torso.position.y = 1.22; g.add(torso);
+    if (o.vest) { const v = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.5, 0.32), mat(o.vest)); v.position.y = 1.3; g.add(v); }
+    if (o.tie) { const t = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.38, 0.02), mat(o.tie)); t.position.set(0, 1.28, -0.17); g.add(t); }
+    if (o.badge) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.02), mat(0xd4af37, { metalness: 0.8, roughness: 0.35 }));
+      b.position.set(0.15, 1.38, -0.16); g.add(b);
+    }
+
+    const head = new THREE.Group(); head.position.y = 1.62; g.add(head);
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32), skin); face.position.y = 0.18; head.add(face);
+    if (o.cap) {
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.11, 0.36), mat(o.cap)); cap.position.y = 0.37; head.add(cap);
+      const brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.16), mat(o.cap)); brim.position.set(0, 0.32, -0.24); head.add(brim);
+    } else {
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.35), mat(o.hair || 0x3a2a1c)); hair.position.y = 0.36; head.add(hair);
+    }
+    for (const ex of [-0.07, 0.07]) {
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.01), dark);
+      eye.position.set(ex, 0.19, -0.166); head.add(eye);
+    }
+
+    const arms = [-1, 1].map(s => {
+      const piv = new THREE.Group(); piv.position.set(s * 0.37, 1.52, 0);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.62, 0.17), shirt); arm.position.y = -0.31; piv.add(arm);
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.12), skin); hand.position.y = -0.68; piv.add(hand);
+      g.add(piv); return piv;
+    });
+    const armL = arms[0], armR = arms[1];
+
+    let pistol = null, muzzle = null;
+    if (o.gun) {
+      pistol = new THREE.Group(); pistol.position.set(0, -0.68, 0); armR.add(pistol);
+      const gm = mat(0x30343b, { metalness: 0.6, roughness: 0.4 });
+      const slide = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.07), gm); slide.position.set(0, -0.17, -0.01); pistol.add(slide);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.09), mat(0x1c1c1f)); grip.position.set(0, -0.04, 0.07); pistol.add(grip);
+      muzzle = new THREE.Object3D(); muzzle.position.set(0, -0.36, -0.01); pistol.add(muzzle);
+    }
+
+    // Invisible box that bullets can hit
+    const hitbox = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.85, 0.55), new THREE.MeshBasicMaterial());
+    hitbox.position.y = 0.92; hitbox.visible = false; g.add(hitbox);
+
+    g.traverse(m => { if (m.isMesh && m !== hitbox) m.castShadow = true; });
+    return { group: g, legs, armL, armR, head, torso, pistol, muzzle, hitbox };
+  }
+
+  // ---- the teller, working behind the counter
+  const tellerNPC = buildNPC({ shirt: 0xf1f1f1, vest: 0x8a1c2b, tie: 0x2a2a2a, pants: 0x2b2b33, hair: 0x4a3322 });
+  tellerNPC.group.position.set(-4, 0, -22.3);
+  tellerNPC.group.rotation.y = Math.PI;                         // faces the lobby
+  scene.add(tellerNPC.group);
+  colliders.push({ minX: -4.4, maxX: -3.6, minZ: -22.7, maxZ: -21.9 });
+  tellerNPC.hitbox.userData.civilian = true;
+  aimables.push(tellerNPC.hitbox);
+  const teller = { m: tellerNPC, pos: new THREE.Vector3(-4, 0, -22.3), state: 'working', up: 0, headYaw: 0 };
+
+  function tellerEye() { return new THREE.Vector3(teller.pos.x, 1.6, teller.pos.z); }
+  function playerEye() { return new THREE.Vector3(player.pos.x, player.pos.y + 1.5, player.pos.z); }
+
+  // Holding your gun out at the teller (or firing inside the bank, or stealing in front of them) sets off the alarm.
+  function alertTeller(reason) {
+    if (teller.state !== 'working' || phase !== 'play') return;
+    teller.state = 'hands';
+    alarm.on = true; alarm.t = 0;
+    alarmSnd = makeSiren('alarm');
+    toast(reason === 'theft' ? 'The teller hits the silent alarm!' : 'Hands up! The teller hits the alarm!', 2.4);
+    tone(880, 0.12, 'square', 0.06);
+    updateObjective();
+  }
+
+  function checkTellerFear() {
+    if (teller.state !== 'working') return;
+    if (!(holdingGun() && (aiming || gun.fired > 0))) return;      // gun must be held out
+    const dx = teller.pos.x - player.pos.x, dz = teller.pos.z - player.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 18) return;
+    const dot = (-Math.sin(yaw) * dx - Math.cos(yaw) * dz) / dist;  // is the gun pointing their way?
+    if (dot < 0.5) return;
+    if (!hasLOS(tellerEye(), playerEye())) return;
+    alertTeller('gun');
+  }
+
+  function onLootTaken() {
+    if (teller.state === 'working' && hasLOS(tellerEye(), playerEye())) alertTeller('theft');
+  }
+
+  function updateTeller(dt) {
+    const m = teller.m;
+    teller.up += ((teller.state === 'working' ? 0 : 1) - teller.up) * Math.min(1, 9 * dt);
+    const type = Math.sin(time * 9) * 0.06;
+    const shake = teller.up > 0.6 ? Math.sin(time * 38) * 0.025 : 0;
+    m.armR.rotation.x = 1.2 + type + (2.85 + shake - 1.2 - type) * teller.up;
+    m.armL.rotation.x = 1.2 - type + (2.85 - shake - 1.2 + type) * teller.up;
+    m.armR.rotation.z = 0.32 * teller.up;
+    m.armL.rotation.z = -0.32 * teller.up;
+    m.torso.position.y = 1.22 + Math.sin(time * 1.6) * 0.008;
+
+    // look at the player when they are in the bank
+    const dx = player.pos.x - teller.pos.x, dz = player.pos.z - teller.pos.z;
+    let d = Math.atan2(-dx, -dz) - Math.PI;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    const want = Math.hypot(dx, dz) < 20 ? clamp(d, -1.1, 1.1) : 0;
+    teller.headYaw += (want - teller.headYaw) * Math.min(1, 5 * dt);
+    m.head.rotation.y = teller.headYaw;
+  }
+
+  // ---- police
+  function buildPoliceCar() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.7, 1.9), mat(0xf4f4f6, { metalness: 0.4, roughness: 0.4 }));
+    body.position.y = 0.65; body.castShadow = true; g.add(body);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.42, 0.2, 1.92), mat(0x14284b)); stripe.position.y = 0.6; g.add(stripe);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.65, 1.7), mat(0x1a2330, { metalness: 0.6, roughness: 0.2 }));
+    cabin.position.set(-0.2, 1.3, 0); cabin.castShadow = true; g.add(cabin);
+    for (const [wx, wz] of [[1.4, 0.95], [1.4, -0.95], [-1.4, 0.95], [-1.4, -0.95]]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.3, 16), mat(0x111111));
+      w.rotation.x = Math.PI / 2; w.position.set(wx, 0.38, wz); g.add(w);
+    }
+    const red = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.7), new THREE.MeshBasicMaterial({ color: 0x401010 }));
+    red.position.set(-0.2, 1.7, -0.42); g.add(red);
+    const blue = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.7), new THREE.MeshBasicMaterial({ color: 0x102040 }));
+    blue.position.set(-0.2, 1.7, 0.42); g.add(blue);
+    return { g, body, cabin, red, blue };
+  }
+
+  // Pre-built and parked far away so nothing has to compile when they arrive.
+  const policeCars = [-1, 1].map(side => {
+    const pc = buildPoliceCar();
+    pc.side = side;
+    pc.g.position.set(side * 300, 0, 8);
+    pc.light = new THREE.PointLight(0xff2020, 0, 22, 2);
+    pc.light.position.set(0, 2.6, 0);
+    pc.g.add(pc.light);
+    scene.add(pc.g);
+    return pc;
+  });
+
+  const cops = [];
+  function makeBar() {
+    const g = new THREE.Group(); g.position.y = 2.2;
+    const bg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x151515, depthWrite: false })); bg.scale.set(0.8, 0.1, 1);
+    const fg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3b30, depthWrite: false })); fg.scale.set(0.76, 0.07, 1);
+    g.add(bg, fg);
+    return { g, fg };
+  }
+
+  function spawnCop(x, z) {
+    const npc = buildNPC({ shirt: 0x24407a, pants: 0x151c2e, cap: 0x101a33, badge: true, gun: true });
+    npc.group.position.set(x, 0, z);
+    scene.add(npc.group);
+    const bar = makeBar();
+    npc.group.add(bar.g);
+    const c = {
+      m: npc, pos: new THREE.Vector3(x, 0, z), hp: COP_HP, dead: false, deadT: 0,
+      cd: 1 + Math.random() * 1.2, losT: 0, los: false, aim: 0, walk: Math.random() * 6,
+      flash: 0, faceYaw: 0, moveYaw: 0, bar
+    };
+    npc.hitbox.userData.cop = c;
+    aimables.push(npc.hitbox);
+    cops.push(c);
+  }
+
+  function parkPoliceCar(pc) {
+    const x = pc.g.position.x, z = pc.g.position.z;
+    colliders.push({ minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.95, maxZ: z + 0.95 });
+    camSolids.push(pc.body); aimables.push(pc.body, pc.cabin); losBlockers.push(pc.body, pc.cabin);
+    spawnCop(x - 1.2, z - 2.0);
+    spawnCop(x + 1.2, z - 2.0);
+  }
+
+  function updatePolice() {
+    if (!alarm.on) return;
+    const driveFrom = POLICE_DELAY - POLICE_DRIVE;
+    if (!alarm.dispatched && alarm.t >= driveFrom) {
+      alarm.dispatched = true;
+      policeSnd = makeSiren('police');
+      toast('Sirens! The police are on their way!', 2.4);
+    }
+    if (!alarm.dispatched) return;
+    const p = clamp((alarm.t - driveFrom) / POLICE_DRIVE, 0, 1);
+    const e = 1 - (1 - p) * (1 - p);
+    for (const pc of policeCars) {
+      const target = pc.side * 22, start = pc.side * 62;
+      pc.g.position.x = start + (target - start) * e;
+      pc.g.rotation.y = pc.side < 0 ? 0 : Math.PI;
+    }
+    if (p >= 1 && !alarm.policeHere) {
+      alarm.policeHere = true;
+      for (const pc of policeCars) parkPoliceCar(pc);
+      toast('The police have arrived!', 2.4);
+      tone(300, 0.2, 'sawtooth', 0.06);
+      updateObjective();
+    }
+  }
+
+  const WP_OUT = { x: 0, z: -10.2 }, WP_IN = { x: 0, z: -17 }, WP_DOOR = { x: 0, z: -12.8 };
+  function copTarget(c) {                 // route through the bank door when the player is inside
+    const pIn = insideBank(player.pos.x, player.pos.z), cIn = insideBank(c.pos.x, c.pos.z);
+    if (pIn && !cIn) return (c.pos.z > -11.5 && Math.abs(c.pos.x) > 1.3) ? WP_OUT : WP_IN;
+    if (!pIn && cIn) return c.pos.z < -13.8 ? WP_DOOR : WP_OUT;
+    return player.pos;
+  }
+
+  function flashCop(c, on) {
+    c.m.group.traverse(m => { if (m.isMesh && m.material.emissive) m.material.emissive.setHex(on ? 0xff2020 : 0x000000); });
+  }
+
+  function damageCop(c, point, normal) {
+    if (c.dead) return;
+    c.hp = Math.max(0, c.hp - PISTOL_DMG);
+    c.flash = 0.12; flashCop(c, true);
+    c.bar.fg.scale.x = Math.max(0.001, 0.76 * c.hp / COP_HP);
+    addSparks(point, normal);
+    pulse(hitEl, 'show');
+    tone(900, 0.05, 'triangle', 0.06);
+    if (c.hp <= 0) {
+      c.dead = true; c.deadT = 0; kills++;
+      c.bar.g.visible = false;
+      const i = aimables.indexOf(c.m.hitbox);
+      if (i >= 0) aimables.splice(i, 1);
+      tone(200, 0.25, 'sawtooth', 0.05);
+      const alive = cops.filter(k => !k.dead).length;
+      toast(alive === 0 ? 'All officers down! Get to the getaway car.' : 'Officer down!', 1.8);
+    }
+  }
+
+  function hurt(d) {
+    if (phase !== 'play') return;
+    hp = clamp(hp - d, 0, PLAYER_HP);
+    if (d > 0) { lastHurt = time; pulse(damageEl, 'flash'); tone(120, 0.12, 'sawtooth', 0.07); }
+    renderHp();
+    if (hp <= 0) endGame(false);
+  }
+
+  function copShoot(c, dist) {
+    c.aim = 0.35;
+    c.m.group.updateMatrixWorld(true);
+    const from = c.m.muzzle.getWorldPosition(new THREE.Vector3());
+    const to = new THREE.Vector3(player.pos.x, player.pos.y + 1.2, player.pos.z);
+    const hitIt = Math.random() < clamp(0.6 - dist * 0.017, 0.18, 0.5);
+    if (!hitIt) to.add(new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 3));
+    addTracer(from, to);
+    if (dist < 45) sndShot(0.35);
+    if (hitIt) hurt(COP_DMG);
+  }
+
+  function updateCops(dt) {
+    for (const c of cops) {
+      const g = c.m.group;
+      if (c.flash > 0) { c.flash -= dt; if (c.flash <= 0) flashCop(c, false); }
+      if (c.dead) {
+        c.deadT += dt;
+        g.rotation.x = Math.min(Math.PI / 2, c.deadT * 4.5);       // falls over backwards
+        if (c.deadT > 8 && g.parent) scene.remove(g);
+        continue;
+      }
+      if (phase !== 'play') continue;
+
+      const dx = player.pos.x - c.pos.x, dz = player.pos.z - c.pos.z;
+      const dist = Math.hypot(dx, dz);
+      c.losT -= dt;
+      if (c.losT <= 0) {
+        c.losT = 0.2;
+        c.los = dist < 40 && hasLOS(new THREE.Vector3(c.pos.x, 1.5, c.pos.z), new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z));
+      }
+
+      let moving = false;
+      if (!(c.los && dist < 11)) {                                   // close in until they can shoot comfortably
+        const t = copTarget(c);
+        const tx = t.x - c.pos.x, tz = t.z - c.pos.z, td = Math.hypot(tx, tz);
+        if (td > 0.05) {
+          const sp = Math.min(3.8 * dt, td);
+          c.pos.x += (tx / td) * sp; c.pos.z += (tz / td) * sp;
+          c.moveYaw = Math.atan2(-tx, -tz);
+          moving = true;
+        }
+        resolveCollisions(c.pos, 0.4);
+      }
+      for (const o of cops) {                                        // do not stack on top of each other
+        if (o === c || o.dead) continue;
+        const ox = c.pos.x - o.pos.x, oz = c.pos.z - o.pos.z, od = Math.hypot(ox, oz);
+        if (od > 0.001 && od < 0.9) { c.pos.x += (ox / od) * (0.9 - od) * 0.5; c.pos.z += (oz / od) * (0.9 - od) * 0.5; }
+      }
+
+      const aimYaw = Math.atan2(-dx, -dz);
+      c.faceYaw = angleLerp(c.faceYaw, (c.los && dist < 30) ? aimYaw : (moving ? c.moveYaw : c.faceYaw), 1 - Math.exp(-10 * dt));
+
+      c.cd -= dt;
+      if (c.cd <= 0 && c.los && dist < 28) { copShoot(c, dist); c.cd = 1.3 + Math.random() * 1.1; }
+      if (c.aim > 0) c.aim -= dt;
+
+      c.walk += dt * (moving ? 7 : 0);
+      const swing = moving ? Math.sin(c.walk) * 0.8 : 0;
+      const raised = c.los && dist < 30;
+      c.m.legs[0].rotation.x = swing; c.m.legs[1].rotation.x = -swing;
+      const rk = Math.min(1, 12 * dt);
+      c.m.armR.rotation.x += ((raised ? 1.45 : 0.8) + (c.aim > 0 ? 0.15 : 0) - c.m.armR.rotation.x) * rk;
+      c.m.armL.rotation.x += ((raised ? 1.35 : -swing * 0.6) - c.m.armL.rotation.x) * rk;
+      g.position.copy(c.pos);
+      g.rotation.y = c.faceYaw;
+    }
+  }
+
+  // ---- sirens
+  let alarmSnd = null, policeSnd = null;
+  function makeSiren(kind) {
+    if (!audio()) return null;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = kind === 'alarm' ? 'square' : 'sawtooth';
+    g.gain.value = 0;
+    o.connect(g); g.connect(actx.destination); o.start();
+    return { o, g, kind };
+  }
+  function tickSiren(s) {
+    if (!s) return;
+    const f = s.kind === 'alarm' ? ((Math.floor(time * 3) % 2) ? 980 : 740) : 600 + 400 * Math.abs(Math.sin(time * 1.8));
+    s.o.frequency.setTargetAtTime(f, actx.currentTime, 0.015);
+    s.g.gain.value = muted ? 0 : (s.kind === 'alarm' ? 0.03 : 0.025);
+  }
+  function stopSirens() {
+    for (const s of [alarmSnd, policeSnd]) { try { if (s) s.o.stop(); } catch (err) { /* ignore */ } }
+    alarmSnd = policeSnd = null;
+  }
+
+  // ---- alarm lights on the bank front
+  const bulbMats = [];
+  for (const x of [-5.3, 5.3]) {
+    const m = new THREE.MeshBasicMaterial({ color: 0x3a0d0d });
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.36, 14, 10), m);
+    b.position.set(x, 8.6, -13.65);
+    scene.add(b);
+    bulbMats.push(m);
+  }
+  const alarmLight = new THREE.PointLight(0xff2020, 0, 45, 2);
+  alarmLight.position.set(0, 7.5, -11);
+  scene.add(alarmLight);
+
+  // ---- the getaway car
+  const marker = new THREE.Group();
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8, 4), new THREE.MeshBasicMaterial({ color: 0x5dff9a }));
+  cone.rotation.x = Math.PI; cone.position.y = 3.2; marker.add(cone);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.7, 3.0, 40), new THREE.MeshBasicMaterial({ color: 0x5dff9a, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; marker.add(ring);
+  getawayCar.add(marker);
+
+  const escape = { t: 0 };
+  function nearCar() { return Math.hypot(getawayCar.position.x - player.pos.x, getawayCar.position.z - player.pos.z) < 3.6; }
+
+  function enterCar() {
+    if (phase !== 'play') return;
+    if (lootValue() <= 0) { toast('Grab some money first!'); return; }
+    phase = 'escaping'; escape.t = 0;
+    gun.reload = 0;
+    toast('Go go go!', 2);
+    tone(440, 0.1, 'square', 0.05); tone(660, 0.15, 'square', 0.05, 0.1);
+  }
+
+  function updateEscape(dt) {
+    escape.t += dt;
+    getawayCar.position.x += Math.min(16, 2 + escape.t * 7) * dt;   // floor it
+    player.pos.set(getawayCar.position.x, 0, getawayCar.position.z);
+    player.vel.set(0, 0, 0);
+    if (escape.t > 3) endGame(true);
+  }
+
+  function interact() {
+    if (phase !== 'play') return;
+    if (!nearestItem() && nearCar()) { enterCar(); return; }
+    tryPickup();
+  }
+
+  function endGame(won) {
+    if (phase === 'won' || phase === 'lost') return;
+    const carried = lootValue();
+    phase = won ? 'won' : 'lost';
+    stopSirens();
+    endTitle.textContent = won ? 'YOU GOT AWAY!' : 'BUSTED!';
+    endTitle.className = won ? 'win' : 'lose';
+    const lines = [];
+    if (won) {
+      lines.push('You escaped with <b>$' + carried.toLocaleString('en-US') + '</b>');
+      lines.push(alarm.policeHere ? 'The police showed up, but you made it out anyway.' : 'Clean getaway: you left before the police arrived.');
+    } else {
+      lines.push('The police took you down.');
+      lines.push('You lost <b>$' + carried.toLocaleString('en-US') + '</b> of loot.');
+    }
+    lines.push('Officers taken down: ' + kills);
+    lines.push('Time: ' + Math.round(playTime) + 's');
+    endLines.innerHTML = lines.join('<br>');
+    endEl.classList.remove('hidden');
+    overlay.classList.add('hidden');
+    try { document.exitPointerLock(); } catch (err) { /* ignore */ }
+  }
+  endEl.addEventListener('click', () => location.reload());
+
+  function updateHeist(dt) {
+    if (phase === 'won' || phase === 'lost') return;
+    if (phase === 'play') {
+      playTime += dt;
+      checkTellerFear();
+      if (alarm.on) alarm.t += dt;
+      updatePolice();
+      if (hp < PLAYER_HP && time - lastHurt > 6) { hp = Math.min(PLAYER_HP, hp + 2.5 * dt); renderHp(); }
+    }
+    updateTeller(dt);
+    updateCops(dt);
+
+    // alarm lights and police lights
+    const strobe = Math.floor(time * 3) % 2 === 0;
+    for (const bm of bulbMats) bm.color.setHex(alarm.on ? (strobe ? 0xff3030 : 0x601010) : 0x3a0d0d);
+    alarmLight.intensity = alarm.on && strobe ? 450 : 0;
+    const flip = Math.floor(time * 6) % 2 === 0;
+    for (const pc of policeCars) {
+      pc.red.material.color.setHex(alarm.dispatched ? (flip ? 0xff2a2a : 0x401010) : 0x401010);
+      pc.blue.material.color.setHex(alarm.dispatched ? (flip ? 0x102040 : 0x3a7bff) : 0x102040);
+      pc.light.color.setHex(flip ? 0xff2020 : 0x2a50ff);
+      pc.light.intensity = alarm.dispatched ? 260 : 0;
+    }
+    tickSiren(alarmSnd); tickSiren(policeSnd);
+    cone.position.y = 3.2 + Math.sin(time * 3) * 0.2;
+    cone.rotation.y += dt * 2;
+
+    // alarm banner
+    alarmEl.classList.toggle('on', alarm.on);
+    glowEl.classList.toggle('on', alarm.on);
+    if (alarm.on) {
+      const alive = cops.filter(c => !c.dead).length;
+      if (!alarm.policeHere) alarmSub.textContent = 'Police arrive in ' + Math.max(0, Math.ceil(POLICE_DELAY - alarm.t)) + 's';
+      else alarmSub.textContent = alive === 0 ? 'ALL OFFICERS DOWN - get out!' : 'POLICE ON SITE: ' + alive + ' officer' + (alive === 1 ? '' : 's') + ' left';
+    }
+  }
+
+  renderHp();
+
   // ----------------------------------------------------------------- update
   function updatePlayer(dt) {
-    const ix = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-    const iz = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+    const ctl = phase === 'play';
+    const ix = ctl ? (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) : 0;
+    const iz = ctl ? (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) : 0;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     const rx = Math.cos(yaw), rz = -Math.sin(yaw);
     let wx = fx * iz + rx * ix, wz = fz * iz + rz * ix;
@@ -753,7 +1263,7 @@
     player.vel.x += (wx * speed - player.vel.x) * k;
     player.vel.z += (wz * speed - player.vel.z) * k;
 
-    if (keys.Space && player.onGround) { player.vy = 6.8; player.onGround = false; }
+    if (ctl && keys.Space && player.onGround) { player.vy = 6.8; player.onGround = false; }
     player.vy -= 20 * dt;
     player.pos.y += player.vy * dt;
     if (player.pos.y <= 0) { player.pos.y = 0; player.vy = 0; player.onGround = true; }
@@ -820,7 +1330,7 @@
     camera.position.copy(pivot).addScaledVector(dir, -d);
     if (camera.position.y < 0.25) camera.position.y = 0.25;
     camera.lookAt(pivot.clone().addScaledVector(dir, 10));
-    model.group.visible = d > 0.9;
+    model.group.visible = d > 0.9 && phase !== 'escaping';
 
     sun.position.set(player.pos.x + 30, 50, player.pos.z + 20);
     sun.target.position.copy(player.pos);
@@ -877,7 +1387,8 @@
       model.flash.visible = true; model.flashLight.intensity = 40;
     } else { model.flash.visible = false; model.flashLight.intensity = 0; }
 
-    updatePlayer(dt);
+    updateHeist(dt);
+    if (phase === 'escaping') updateEscape(dt); else updatePlayer(dt);
     updateCamera(dt);
 
     // HUD
@@ -891,6 +1402,7 @@
     const it = nearestItem();
     let p = '';
     if (it) p = '<b>E</b> &nbsp;Pick up ' + ITEM_TYPES[it.type].name + ' ($' + ITEM_TYPES[it.type].value.toLocaleString('en-US') + ')';
+    if (!it && phase === 'play' && nearCar()) p = '<b>E</b> &nbsp;' + (lootValue() > 0 ? 'Get in the getaway car and escape!' : 'Getaway car (grab some money first)');
     if (p !== lastPrompt) {
       lastPrompt = p;
       promptEl.innerHTML = p;
@@ -911,9 +1423,12 @@
       look(y, p) { yaw = y; pitch = p; },
       teleport(x, z) { player.pos.set(x, 0, z); },
       aim(v) { aiming = v; },
-      shoot, tryPickup, dropSelected, selectSlot, startReload,
+      shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
+      alert() { alertTeller('gun'); },
+      skipAlarm(s) { alarm.t += s; },
+      copsInfo() { return cops.map(c => ({ hp: c.hp, dead: c.dead, pos: [+c.pos.x.toFixed(1), +c.pos.z.toFixed(1)], los: c.los })); },
       get info() {
-        return { pos: player.pos.toArray(), slots: slots.map(s => s && s.type), selected, mag: gun.mag, reserve: gun.reserve, hits, items: worldItems.length, decals: decals.length, loot: lootValue(), camera: camera.position.toArray() };
+        return { pos: player.pos.toArray(), slots: slots.map(s => s && s.type), selected, mag: gun.mag, reserve: gun.reserve, hits, items: worldItems.length, decals: decals.length, loot: lootValue(), camera: camera.position.toArray(), phase, hp: Math.round(hp), alarm: { on: alarm.on, t: +alarm.t.toFixed(1), here: alarm.policeHere }, teller: teller.state, cops: cops.filter(c => !c.dead).length, kills };
       }
     };
   }
