@@ -248,20 +248,20 @@ html, body {
   background: rgba(6, 8, 12, .88);
 }
 #choose.hidden { display: none; }
-.panel.wide { max-width: 940px; width: 94vw; }
+.panel.wide { max-width: 640px; width: 94vw; }
 #choose h1 { color: #ff7cc6; text-shadow: 0 3px 0 #4a1236; }
-#choose-list { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin: 6px 0 18px; }
+#choose-list { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 18px; }
 .job {
-  position: relative; width: 250px; padding: 22px 16px 16px;
+  position: relative; width: 100%; padding: 14px 18px 14px 54px;
   background: #151922; border: 2px solid #2a2f3b; border-radius: 10px;
-  color: #dfe6f3; font: inherit; text-align: center; cursor: pointer;
-  display: flex; flex-direction: column; gap: 8px;
+  color: #dfe6f3; font: inherit; text-align: left; cursor: pointer;
+  display: grid; grid-template-columns: 1fr auto; column-gap: 16px; row-gap: 2px; align-items: center;
   transition: transform .12s, border-color .12s, background .12s;
 }
-.job:hover { transform: translateY(-4px); border-color: #ff8a1f; background: #1b2030; }
-.job .k { position: absolute; left: 10px; top: 8px; font-weight: 800; color: #ffd23f; }
-.job .n { font-size: 24px; font-weight: 800; color: #ff8a1f; letter-spacing: 1px; }
-.job .t { font-size: 14px; line-height: 1.4; color: #aab3c5; }
-.job .v { font-size: 14px; font-weight: 700; color: #5dff9a; margin-top: 4px; }
+.job:hover { transform: translateX(4px); border-color: #ff8a1f; background: #1b2030; }
+.job .k { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font-size: 26px; font-weight: 800; color: #ffd23f; }
+.job .n { grid-column: 1; font-size: 22px; font-weight: 800; color: #ff8a1f; letter-spacing: 1px; }
+.job .t { grid-column: 1; font-size: 14px; line-height: 1.4; color: #aab3c5; }
+.job .v { grid-column: 2; grid-row: 1 / 3; font-size: 15px; font-weight: 700; color: #5dff9a; white-space: nowrap; }
 #choose-back { font: inherit; font-size: 15px; color: #cfd6e4; background: transparent; border: 1px solid #3a4152; border-radius: 6px; padding: 8px 16px; cursor: pointer; }
 #choose-back:hover { border-color: #ff8a1f; color: #fff; }

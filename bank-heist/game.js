@@ -873,7 +873,7 @@
   }
 
   function updateObjective() {
-    if (phase === 'hq') { objEl.textContent = 'Safe at the HQ. Buy guns at the pedestals (E), then take the green door for the next heist.'; return; }
+    if (phase === 'hq') { objEl.textContent = 'Safe at the HQ. Buy guns at the pedestals (E), then step onto the green circle to pick your next heist.'; return; }
     if (phase !== 'play') return;
     const carrying = lootValue() > 0;
     const full = slots.every(Boolean);
@@ -1668,7 +1668,7 @@
   }
 
   function hqPrompt(sp) {
-    if (sp.kind === 'exit') return '<b>E</b> &nbsp;Choose your next heist';
+    if (sp.kind === 'exit') return 'Step onto the green circle to choose your next heist';
     const w = WEAPONS[sp.type];
     if (!save.owned.includes(sp.type)) {
       const need = w.price - save.cash;
@@ -1732,6 +1732,7 @@
   function closeChoose() {
     if (phase !== 'choosing') return;
     phase = 'hq';
+    hq.ringLock = true;
     chooseEl.classList.add('hidden');
     try { renderer.domElement.requestPointerLock(); } catch (err) { /* ignore */ }
   }
@@ -1765,6 +1766,10 @@
       d.torso.position.y = 1.22 + Math.sin(time * 1.5) * 0.008;
     }
     hq.exitRing.material.opacity = 0.35 + 0.25 * Math.sin(time * 3);
+    // stepping onto the green circle opens the job list (after Back, step off and on again to reopen it)
+    const onRing = Math.hypot(player.pos.x - EXIT_POS.x, player.pos.z - (EXIT_POS.z - 0.6)) < 1.6;
+    if (onRing && !hq.ringLock) openChoose();
+    if (!onRing) hq.ringLock = false;
     scopeEl.classList.remove('on');
   }
 
