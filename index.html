@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Projects &ndash; Browser Games</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0b0d12;
+      color: #cfd6e4;
+      font-family: "Courier New", monospace;
+    }
+    header { padding: 40px 20px 10px; text-align: center; }
+    h1 { margin: 0 0 8px; font-size: 34px; color: #ffd23f; letter-spacing: 2px; }
+    header p { margin: 0; color: #8a94a8; }
+    .grid {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      display: block;
+      padding: 20px;
+      background: #151922;
+      border: 2px solid #2a2f3b;
+      border-radius: 8px;
+      color: inherit;
+      text-decoration: none;
+      transition: transform .12s, border-color .12s;
+    }
+    .card:hover { transform: translateY(-3px); border-color: #ff8a1f; }
+    .card h2 { margin: 0 0 8px; font-size: 20px; color: #ff8a1f; }
+    .card p { margin: 0; font-size: 14px; line-height: 1.5; color: #aab3c5; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CLAUDE PROJECTS</h1>
+    <p>A growing collection of games that run right in your browser.</p>
+  </header>
+
+  <!-- Add a new <a class="card"> for each new game folder -->
+  <main class="grid">
+    <a class="card" href="criminal-runaway/">
+      <h2>Criminal Runaway</h2>
+      <p>You just robbed the bank. Grab the cash, dodge the cops, and reach the getaway car.</p>
+    </a>
+  </main>
+</body>
+</html>
