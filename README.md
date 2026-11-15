@@ -26,7 +26,7 @@ After your first heist, stepping onto the green circle at the HQ opens a list of
 |----------|-------|--------------|
 | Power Plant | operator | Power Cells ($4,000 each), Fusion Cores ($12,000 each) |
 | The Factory | foreman | Parts Crates ($3,000 each), Prototypes ($10,000 each) |
-| Golden Casino | dealer | Locked in the jackpot machine at the back right: crack its 3-symbol code (E at the machine). The code is hidden: find 3 clue notes (one per reel) at random spots around the room, different every visit, then take Chip Stacks ($6,000 each) and Black Chips ($15,000 each). Three wrong tries trip the alarm. |
+| Golden Casino | dealer | A black neon-lit room packed with ~15 gamblers (slot machines, roulette tables) that you can shoot. Kill one and the police (3 cars) arrive within 10 seconds; wipe them out and the FBI comes (tougher every wave, up to 6 cars), wave after wave until you die. You can still win by escaping with loot. Loot is locked in the jackpot machine at the back right: crack its 3-symbol code (E at the machine). The code is hidden: find 3 clue notes (one per reel) at random spots around the room, different every visit, then take Chip Stacks ($6,000 each) and Black Chips ($15,000 each). Three wrong tries trip the alarm. |
 
 | Weapon | Price | Damage | Magazine | Fire |
 |--------|-------|--------|----------|------|

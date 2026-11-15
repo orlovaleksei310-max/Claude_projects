@@ -127,9 +127,9 @@
       loot: [['parts', -8, 1.2, -21], ['parts', -4, 1.2, -21], ['parts', 0, 1.2, -21], ['proto', 7.8, 1.0, -27.5], ['proto', 9.4, 1.0, -27.5]]
     },
     casino: {
-      id: 'casino', name: 'Golden Casino', place: 'casino', staff: 'dealer', tag: 'The richest job, but the money is locked in the jackpot machine. Crack its code.',
+      id: 'casino', name: 'Golden Casino', place: 'casino', staff: 'dealer', tag: 'A black room full of gamblers. Crack the jackpot machine, but if the shooting starts the cops come in 10 seconds, then the FBI, wave after wave.',
       sign: 'GOLDEN CASINO', signBg: '#2a0f3d', signFg: '#ffd84a', signFont: 'Georgia, serif',
-      wall: 0x4a2466, roof: 0x24122f, trim: 0xffd84a, floor: ['#8a1a2e', '#6d1424'], counter: 0x2a1a12,
+      wall: 0x0b0b0f, roof: 0x050507, trim: 0xffd84a, floor: ['#17171d', '#0d0d11'], counter: 0x15110d, crowd: true, waves: true,
       npc: { shirt: 0xf4f4f4, vest: 0x111111, tie: 0xb0122a, pants: 0x111111, hair: 0x2a1c12 },
       vault: true,       // the loot is locked inside the jackpot machine until you crack its code
       loot: [['chips', 6.4, 0.02, -26.8], ['chips', 7.4, 0.02, -26.8], ['chips', 8.4, 0.02, -26.8], ['bigchips', 9.4, 0.02, -26.8], ['bigchips', 10.4, 0.02, -26.8]]
@@ -246,6 +246,15 @@
         cyl(0.55, 0.55, 0.08, mat(0x7a4a22), x, 1.0, -16.5, { aim: false });
         colliders.push({ minX: x - 1.4, maxX: x + 1.4, minZ: -17.9, maxZ: -15.1 });
       }
+      // a black room lit by neon
+      const neonPink = new THREE.MeshBasicMaterial({ color: 0xff3fa4 }), neonCyan = new THREE.MeshBasicMaterial({ color: 0x39e1ff });
+      for (const [y, m] of [[0.3, neonPink], [8.7, neonCyan]]) {
+        addBox(0.08, 0.08, 14.6, m, -11.3, y, -22, { cast: false, aim: false });
+        addBox(0.08, 0.08, 14.6, m, 11.3, y, -22, { cast: false, aim: false });
+        addBox(22.6, 0.08, 0.08, m, 0, y, -29.3, { cast: false, aim: false });
+        addBox(22.6, 0.08, 0.08, m, 0, y, -14.7, { cast: false, aim: false });
+      }
+      light(0xff3fa4, 45, -9, 6, -17); light(0x39e1ff, 45, 9, 6, -17); light(0xb67bff, 40, 0, 6, -26);
       // chandelier
       const ch = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.1, 8, 32), mat(0xffd84a, { metalness: 0.8, roughness: 0.3 }));
       ch.rotation.x = Math.PI / 2; ch.position.set(0, 8.4, -21); add(ch);
@@ -876,6 +885,8 @@
     const cop = hit.object.userData.cop;
     if (cop) {
       damageCop(cop, hit.point, n, w.dmg);
+    } else if (hit.object.userData.gambler) {
+      damageGambler(hit.object.userData.gambler, hit.point, n, w.dmg);
     } else if (hit.object.userData.civilian) {
       if (!state.warned) { state.warned = true; toast('Hold your fire! The ' + LOC.staff + ' is unarmed.'); }
       alertTeller('shot');
@@ -911,6 +922,7 @@
     const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP.clone();
     const cop = hit.object.userData.cop;
     if (cop) damageCop(cop, hit.point, n, w.dmg);
+    else if (hit.object.userData.gambler) damageGambler(hit.object.userData.gambler, hit.point, n, w.dmg);
     else if (hit.object.userData.civilian) { toast('Hold off! The ' + LOC.staff + ' is unarmed.'); alertTeller('shot'); }
     else addSparks(hit.point, n);
   }
@@ -1107,7 +1119,8 @@
 
   let phase = 'play';           // play | escaping | won | lost
   let hp = PLAYER_HP, lastHurt = -99, kills = 0, playTime = 0;
-  const alarm = { on: false, t: 0, dispatched: false, policeHere: false };
+  const RUSH_DELAY = 10;        // casino: after you kill a gambler the police arrive within 10 seconds
+  const alarm = { on: false, t: 0, delay: POLICE_DELAY, dispatched: false, policeHere: false };
 
   function pulse(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
   function renderHp() {
@@ -1147,6 +1160,14 @@
     torso.position.y = 1.22; g.add(torso);
     if (o.vest) { const v = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.5, 0.32), mat(o.vest)); v.position.y = 1.3; g.add(v); }
     if (o.tie) { const t = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.38, 0.02), mat(o.tie)); t.position.set(0, 1.28, -0.17); g.add(t); }
+    if (o.backText) {
+      const tx = canvasTex(128, 64, (c, w, h) => {
+        c.fillStyle = '#101216'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd23f';
+        c.font = 'bold 48px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(o.backText, w / 2, h / 2 + 3);
+      });
+      const bt = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.23), new THREE.MeshBasicMaterial({ map: tx }));
+      bt.position.set(0, 1.3, 0.161); g.add(bt);
+    }
     if (o.badge) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.02), mat(0xd4af37, { metalness: 0.8, roughness: 0.35 }));
       b.position.set(0.15, 1.38, -0.16); g.add(b);
@@ -1160,6 +1181,7 @@
     } else {
       const hair = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.35), mat(o.hair || 0x3a2a1c)); hair.position.y = 0.36; head.add(hair);
     }
+    if (o.shades) { const sh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.07, 0.02), dark); sh.position.set(0, 0.2, -0.17); head.add(sh); }
     for (const ex of [-0.07, 0.07]) {
       const eye = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.01), dark);
       eye.position.set(ex, 0.19, -0.166); head.add(eye);
@@ -1250,13 +1272,104 @@
     m.head.rotation.y = teller.headYaw;
   }
 
-  // ---- police
-  function buildPoliceCar() {
+  // ---- the casino crowd: lots of gamblers you can shoot
+  const gamblers = [];
+  let civKills = 0;
+  function flashGroup(g, on) {
+    g.traverse(m => { if (m.isMesh && m.material.emissive) m.material.emissive.setHex(on ? 0xff2020 : 0x000000); });
+  }
+  function buildCrowd() {
+    const shirts = [0xc0392b, 0x2980b9, 0x27ae60, 0x8e44ad, 0xf39c12, 0x16a085, 0xd35400, 0x7f8c8d, 0xe84393, 0xecf0f1];
+    const pantsC = [0x1f2a44, 0x2d2d33, 0x3b2f2f, 0x1c3b3b, 0x40382a];
+    const hairC = [0x2a1c12, 0x6b4a2b, 0xc9b26b, 0x111111, 0x8a8a8a, 0x5a2a1a];
+    const skins = [0xe0b48f, 0xc99a76, 0x9c6b4a, 0x6f4a35, 0xf0c8a8];
+    const pick = a => a[Math.floor(Math.random() * a.length)];
+    const spots = [];
+    for (let i = 0; i < 5; i++) spots.push({ x: -10 + i * 1.45, z: -27.15, yaw: 0, kind: 'slot' });          // slot machine players
+    for (const cx of [-7, 7]) for (const th of [-1.05, 0, 1.05]) {                                              // roulette players
+      const px = cx + Math.sin(th) * 1.95, pz = -16.5 + Math.cos(th) * 1.95;
+      spots.push({ x: px, z: pz, yaw: Math.atan2(-(cx - px), -(-16.5 - pz)), kind: 'table' });
+    }
+    for (const [x, z, yaw] of [[-8.2, -18.9, 0.6], [4.6, -18.4, -0.5], [-2.4, -17.2, 3.4], [8.8, -20.5, -1.4]]) spots.push({ x, z, yaw, kind: 'watch' });
+    for (const sp of spots) {
+      const npc = buildNPC({ shirt: pick(shirts), pants: pick(pantsC), hair: pick(hairC), skin: pick(skins), vest: Math.random() < 0.3 ? pick(shirts) : 0 });
+      npc.group.position.set(sp.x, 0, sp.z); npc.group.rotation.y = sp.yaw;
+      scene.add(npc.group);
+      const col = { minX: sp.x - 0.4, maxX: sp.x + 0.4, minZ: sp.z - 0.4, maxZ: sp.z + 0.4 };
+      colliders.push(col);
+      const gb = { m: npc, pos: new THREE.Vector3(sp.x, 0, sp.z), yaw: sp.yaw, kind: sp.kind, hp: 10, dead: false, deadT: 0, flash: 0, seed: Math.random() * 10, col, up: 0 };
+      npc.hitbox.userData.gambler = gb;
+      aimables.push(npc.hitbox);
+      gamblers.push(gb);
+    }
+  }
+  if (LOC.crowd) buildCrowd();
+
+  function damageGambler(gb, point, normal, dmg) {
+    if (gb.dead) return;
+    gb.hp -= dmg;
+    gb.flash = 0.12; flashGroup(gb.m.group, true);
+    addSparks(point, normal);
+    pulse(hitEl, 'show');
+    if (gb.hp <= 0) {
+      gb.dead = true; gb.deadT = 0; civKills++;
+      const i = aimables.indexOf(gb.m.hitbox); if (i >= 0) aimables.splice(i, 1);
+      const k = colliders.indexOf(gb.col); if (k >= 0) colliders.splice(k, 1);
+      tone(160, 0.3, 'sawtooth', 0.06);
+      toast('You shot a gambler! The police are coming!', 2.2);
+      rushPolice();
+    } else tone(700, 0.05, 'triangle', 0.05);
+  }
+
+  function updateCrowd(dt) {
+    const panic = alarm.on;
+    for (let i = gamblers.length - 1; i >= 0; i--) {
+      const gb = gamblers[i], m = gb.m;
+      if (gb.flash > 0) { gb.flash -= dt; if (gb.flash <= 0) flashGroup(m.group, false); }
+      if (gb.dead) {
+        gb.deadT += dt;
+        m.group.rotation.x = Math.min(Math.PI / 2, gb.deadT * 4.5);
+        if (gb.deadT > 20) { scene.remove(m.group); gamblers.splice(i, 1); }
+        continue;
+      }
+      gb.up += ((panic ? 1 : 0) - gb.up) * Math.min(1, 8 * dt);
+      const t = time + gb.seed;
+      let r = 0.9, l = 0.9;
+      if (gb.kind === 'slot') { r = 1.0 + Math.max(0, Math.sin(t * 1.3)) * 0.8; l = 0.5; }
+      else if (gb.kind === 'table') { r = 1.1 + Math.sin(t * 1.7) * 0.25; l = 1.0 + Math.sin(t * 1.3) * 0.2; }
+      else { r = 0.5 + Math.sin(t * 0.9) * 0.1; l = 0.2; }
+      const shake = gb.up > 0.6 ? Math.sin(time * 38 + gb.seed) * 0.03 : 0;
+      m.armR.rotation.x = r + (2.85 + shake - r) * gb.up;
+      m.armL.rotation.x = l + (2.85 - shake - l) * gb.up;
+      m.armR.rotation.z = 0.3 * gb.up; m.armL.rotation.z = -0.3 * gb.up;
+      m.torso.position.y = 1.22 + Math.sin(t * 1.4) * 0.008;
+      if (panic) {                                  // look at the robber
+        const dx = player.pos.x - gb.pos.x, dz = player.pos.z - gb.pos.z;
+        m.group.rotation.y = angleLerp(m.group.rotation.y, Math.atan2(-dx, -dz), 1 - Math.exp(-4 * dt));
+      }
+    }
+  }
+
+  // Someone got hurt: the alarm goes off and the police arrive in 10 seconds
+  function rushPolice() {
+    if (phase !== 'play') return;
+    if (!alarm.on) {
+      alarm.on = true; alarm.t = 0;
+      alarmSnd = makeSiren('alarm');
+      teller.state = 'hands';
+    }
+    if (!alarm.policeHere && alarm.delay - alarm.t > RUSH_DELAY) alarm.delay = alarm.t + RUSH_DELAY;
+    updateObjective();
+  }
+
+  // ---- police and FBI
+  function buildPoliceCar(kind) {
+    const fbi = kind === 'fbi';
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.7, 1.9), mat(0xf4f4f6, { metalness: 0.4, roughness: 0.4 }));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.7, 1.9), mat(fbi ? 0x14161b : 0xf4f4f6, { metalness: 0.4, roughness: 0.4 }));
     body.position.y = 0.65; body.castShadow = true; g.add(body);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.42, 0.2, 1.92), mat(0x14284b)); stripe.position.y = 0.6; g.add(stripe);
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.65, 1.7), mat(0x1a2330, { metalness: 0.6, roughness: 0.2 }));
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.42, 0.2, 1.92), mat(fbi ? 0xffd23f : 0x14284b)); stripe.position.y = 0.6; g.add(stripe);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.65, 1.7), mat(fbi ? 0x0b0d11 : 0x1a2330, { metalness: 0.6, roughness: 0.2 }));
     cabin.position.set(-0.2, 1.3, 0); cabin.castShadow = true; g.add(cabin);
     for (const [wx, wz] of [[1.4, 0.95], [1.4, -0.95], [-1.4, 0.95], [-1.4, -0.95]]) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.3, 16), mat(0x111111));
@@ -1266,20 +1379,38 @@
     red.position.set(-0.2, 1.7, -0.42); g.add(red);
     const blue = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.7), new THREE.MeshBasicMaterial({ color: 0x102040 }));
     blue.position.set(-0.2, 1.7, 0.42); g.add(blue);
+    if (fbi) {
+      const tx = canvasTex(256, 96, (c, w, h) => {
+        c.fillStyle = '#14161b'; c.fillRect(0, 0, w, h); c.fillStyle = '#ffd23f';
+        c.font = 'bold 72px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('FBI', w / 2, h / 2 + 4);
+      });
+      for (const side of [1, -1]) {
+        const pl = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.5), new THREE.MeshBasicMaterial({ map: tx }));
+        pl.position.set(0.2, 0.78, side * 0.96); pl.rotation.y = side > 0 ? 0 : Math.PI; g.add(pl);
+      }
+    }
     return { g, body, cabin, red, blue };
   }
 
-  // Pre-built and parked far away so nothing has to compile when they arrive.
-  const policeCars = [-1, 1].map(side => {
-    const pc = buildPoliceCar();
-    pc.side = side;
-    pc.g.position.set(side * 300, 0, 8);
-    pc.light = new THREE.PointLight(0xff2020, 0, 22, 2);
-    pc.light.position.set(0, 2.6, 0);
-    pc.g.add(pc.light);
+  // Pre-built and parked far away so nothing has to compile when they arrive. The casino has more cars: 3 police
+  // cars for the first wave, then FBI cars (up to 6 at a time) for every wave after that.
+  const fleet = { police: [], fbi: [] };
+  function poolCar(kind, i, light) {
+    const pc = buildPoliceCar(kind);
+    pc.kind = kind; pc.active = false;
+    pc.g.position.set((i % 2 ? 1 : -1) * 300, 0, 8);
+    if (light) {
+      pc.light = new THREE.PointLight(0xff2020, 0, 22, 2);
+      pc.light.position.set(0, 2.6, 0);
+      pc.g.add(pc.light);
+    }
     scene.add(pc.g);
-    return pc;
-  });
+    fleet[kind].push(pc);
+  }
+  for (let i = 0; i < (LOC.waves ? 3 : 2); i++) poolCar('police', i, true);
+  if (LOC.waves) for (let i = 0; i < 6; i++) poolCar('fbi', i, false);
+  const allCars = fleet.police.concat(fleet.fbi);
+  const PARK_SLOTS = [[-22, 8], [22, 8], [-22, 15.5], [22, 15.5], [-31, 8], [31, 8], [-31, 15.5], [31, 15.5]];
 
   const cops = [];
   function makeBar() {
@@ -1290,15 +1421,25 @@
     return { g, fg };
   }
 
-  function spawnCop(x, z) {
-    const npc = buildNPC({ shirt: 0x24407a, pants: 0x151c2e, cap: 0x101a33, badge: true, gun: true });
+  // Wave 1 = police (50 HP). Every later wave (casino only) = FBI, tougher each time.
+  function waveStats(n) {
+    if (n === 1) return { kind: 'police', cars: LOC.waves ? 3 : 2, hp: COP_HP, dmg: COP_DMG, acc: 1, speed: 3.8, cd: 1.3, cdVar: 1.1 };
+    const k = n - 2;
+    return { kind: 'fbi', cars: Math.min(6, 3 + k), hp: Math.min(200, 80 + 20 * k), dmg: Math.min(16, 8 + 2 * k), acc: 1.2 + 0.08 * Math.min(k, 5), speed: 4.3, cd: 0.9, cdVar: 0.8 };
+  }
+
+  function spawnCop(x, z, st) {
+    const fbi = st.kind === 'fbi';
+    const npc = buildNPC(fbi
+      ? { shirt: 0x15161b, pants: 0x15161b, tie: 0x8a1c2b, badge: true, gun: true, shades: true, backText: 'FBI', hair: 0x111111 }
+      : { shirt: 0x24407a, pants: 0x151c2e, cap: 0x101a33, badge: true, gun: true });
     npc.group.position.set(x, 0, z);
     scene.add(npc.group);
     const bar = makeBar();
     npc.group.add(bar.g);
     const c = {
-      m: npc, pos: new THREE.Vector3(x, 0, z), hp: COP_HP, dead: false, deadT: 0,
-      cd: 1 + Math.random() * 1.2, losT: 0, los: false, aim: 0, walk: Math.random() * 6,
+      m: npc, pos: new THREE.Vector3(x, 0, z), hp: st.hp, maxHp: st.hp, dmg: st.dmg, acc: st.acc, speed: st.speed, cdBase: st.cd, cdVar: st.cdVar, kind: st.kind,
+      dead: false, deadT: 0, cd: 1 + Math.random() * 1.2, losT: 0, los: false, aim: 0, walk: Math.random() * 6,
       flash: 0, faceYaw: 0, moveYaw: 0, bar
     };
     npc.hitbox.userData.cop = c;
@@ -1306,36 +1447,75 @@
     cops.push(c);
   }
 
-  function parkPoliceCar(pc) {
-    const x = pc.g.position.x, z = pc.g.position.z;
-    colliders.push({ minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.95, maxZ: z + 0.95 });
+  const wave = { n: 0, cars: [], parked: [], driving: false, driveT: 0, arrivedAt: 0, clearT: 0, warned: false, stats: null };
+
+  function parkWaveCar(e) {
+    const pc = e.pc, x = e.slot[0], z = e.slot[1];
+    pc.g.position.set(x, 0, z);
+    const col = { minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.95, maxZ: z + 0.95 };
+    colliders.push(col);
     camSolids.push(pc.body); aimables.push(pc.body, pc.cabin); losBlockers.push(pc.body, pc.cabin);
-    spawnCop(x - 1.2, z - 2.0);
-    spawnCop(x + 1.2, z - 2.0);
+    wave.parked.push({ pc, col });
+    spawnCop(x - 1.2, z - 2.0, wave.stats);
+    spawnCop(x + 1.2, z - 2.0, wave.stats);
   }
 
-  function updatePolice() {
+  // cars of the earlier wave leave so their parking spots are free again
+  function freeFleet() {
+    const drop = (arr, v) => { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); };
+    for (const e of wave.parked) {
+      drop(colliders, e.col); drop(camSolids, e.pc.body); drop(aimables, e.pc.body); drop(aimables, e.pc.cabin);
+      drop(losBlockers, e.pc.body); drop(losBlockers, e.pc.cabin);
+      e.pc.active = false; e.pc.g.position.set((e.pc.g.position.x < 0 ? -1 : 1) * 300, 0, 8);
+    }
+    wave.parked.length = 0;
+  }
+
+  function dispatchWave() {
+    freeFleet();
+    wave.n++;
+    wave.stats = waveStats(wave.n);
+    const pool = fleet[wave.stats.kind];
+    wave.cars = [];
+    for (let i = 0; i < Math.min(wave.stats.cars, pool.length); i++) {
+      const slot = PARK_SLOTS[i], side = slot[0] < 0 ? -1 : 1, pc = pool[i];
+      pc.active = true;
+      pc.g.position.set(side * 70, 0, slot[1]);
+      pc.g.rotation.y = side < 0 ? 0 : Math.PI;
+      wave.cars.push({ pc, slot, side });
+    }
+    wave.driving = true; wave.driveT = 0; wave.warned = false;
+    alarm.dispatched = true;
+    if (!policeSnd) policeSnd = makeSiren('police');
+    toast(wave.n === 1 ? 'Sirens! The police are on their way!' : 'FBI! Wave ' + (wave.n - 1) + ' is on its way!', 2.4);
+    tone(500, 0.15, 'sawtooth', 0.05);
+  }
+
+  function updatePolice(dt) {
     if (!alarm.on) return;
-    const driveFrom = POLICE_DELAY - POLICE_DRIVE;
-    if (!alarm.dispatched && alarm.t >= driveFrom) {
-      alarm.dispatched = true;
-      policeSnd = makeSiren('police');
-      toast('Sirens! The police are on their way!', 2.4);
+    if (wave.n === 0 && alarm.t >= alarm.delay - POLICE_DRIVE) dispatchWave();
+    if (wave.driving) {
+      wave.driveT += dt;
+      const p = clamp(wave.driveT / POLICE_DRIVE, 0, 1), e = 1 - (1 - p) * (1 - p);
+      for (const c of wave.cars) c.pc.g.position.x = c.side * 70 + (c.slot[0] - c.side * 70) * e;
+      if (p >= 1) {
+        wave.driving = false; wave.arrivedAt = time; wave.clearT = 0;
+        for (const c of wave.cars) parkWaveCar(c);
+        alarm.policeHere = true;
+        toast(wave.n === 1 ? 'The police have arrived!' : 'The FBI has arrived!', 2.4);
+        tone(300, 0.2, 'sawtooth', 0.06);
+        updateObjective();
+      }
     }
-    if (!alarm.dispatched) return;
-    const p = clamp((alarm.t - driveFrom) / POLICE_DRIVE, 0, 1);
-    const e = 1 - (1 - p) * (1 - p);
-    for (const pc of policeCars) {
-      const target = pc.side * 22, start = pc.side * 62;
-      pc.g.position.x = start + (target - start) * e;
-      pc.g.rotation.y = pc.side < 0 ? 0 : Math.PI;
-    }
-    if (p >= 1 && !alarm.policeHere) {
-      alarm.policeHere = true;
-      for (const pc of policeCars) parkPoliceCar(pc);
-      toast('The police have arrived!', 2.4);
-      tone(300, 0.2, 'sawtooth', 0.06);
-      updateObjective();
+    // casino: the law keeps coming until you are dead (or gone)
+    if (LOC.waves && wave.n > 0 && !wave.driving) {
+      const alive = cops.filter(c => !c.dead).length;
+      if (alive === 0) {
+        wave.clearT += dt;
+        if (!wave.warned) { wave.warned = true; toast('All units down... but more are coming!', 2.2); }
+        if (wave.clearT >= 6) dispatchWave();
+      } else wave.clearT = 0;
+      if (wave.n > 0 && time - wave.arrivedAt > 50 && !wave.driving) dispatchWave();      // reinforcements if you hold out
     }
   }
 
@@ -1355,7 +1535,7 @@
     if (c.dead) return;
     c.hp = Math.max(0, c.hp - (dmg || PISTOL_DMG));
     c.flash = 0.12; flashCop(c, true);
-    c.bar.fg.scale.x = Math.max(0.001, 0.76 * c.hp / COP_HP);
+    c.bar.fg.scale.x = Math.max(0.001, 0.76 * c.hp / c.maxHp);
     addSparks(point, normal);
     pulse(hitEl, 'show');
     tone(900, 0.05, 'triangle', 0.06);
@@ -1383,21 +1563,22 @@
     c.m.group.updateMatrixWorld(true);
     const from = c.m.muzzle.getWorldPosition(new THREE.Vector3());
     const to = new THREE.Vector3(player.pos.x, player.pos.y + 1.2, player.pos.z);
-    const hitIt = Math.random() < clamp(0.6 - dist * 0.017, 0.18, 0.5);
+    const hitIt = Math.random() < clamp((0.6 - dist * 0.017) * c.acc, 0.18, 0.62);
     if (!hitIt) to.add(new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 3));
     addTracer(from, to);
     if (dist < 45) sndShot(0.35);
-    if (hitIt) hurt(COP_DMG);
+    if (hitIt) hurt(c.dmg);
   }
 
   function updateCops(dt) {
-    for (const c of cops) {
+    for (let ci = cops.length - 1; ci >= 0; ci--) {
+      const c = cops[ci];
       const g = c.m.group;
       if (c.flash > 0) { c.flash -= dt; if (c.flash <= 0) flashCop(c, false); }
       if (c.dead) {
         c.deadT += dt;
         g.rotation.x = Math.min(Math.PI / 2, c.deadT * 4.5);       // falls over backwards
-        if (c.deadT > 8 && g.parent) scene.remove(g);
+        if (c.deadT > 8) { scene.remove(g); cops.splice(ci, 1); }
         continue;
       }
       if (phase !== 'play') continue;
@@ -1415,7 +1596,7 @@
         const t = copTarget(c);
         const tx = t.x - c.pos.x, tz = t.z - c.pos.z, td = Math.hypot(tx, tz);
         if (td > 0.05) {
-          const sp = Math.min(3.8 * dt, td);
+          const sp = Math.min(c.speed * dt, td);
           c.pos.x += (tx / td) * sp; c.pos.z += (tz / td) * sp;
           c.moveYaw = Math.atan2(-tx, -tz);
           moving = true;
@@ -1432,7 +1613,7 @@
       c.faceYaw = angleLerp(c.faceYaw, (c.los && dist < 30) ? aimYaw : (moving ? c.moveYaw : c.faceYaw), 1 - Math.exp(-10 * dt));
 
       c.cd -= dt;
-      if (c.cd <= 0 && c.los && dist < 28) { copShoot(c, dist); c.cd = 1.3 + Math.random() * 1.1; }
+      if (c.cd <= 0 && c.los && dist < 28) { copShoot(c, dist); c.cd = c.cdBase + Math.random() * c.cdVar; }
       if (c.aim > 0) c.aim -= dt;
 
       c.walk += dt * (moving ? 7 : 0);
@@ -1530,10 +1711,11 @@
       lines.push('You escaped with <b>$' + carried.toLocaleString('en-US') + '</b>');
       lines.push(alarm.policeHere ? 'The police showed up, but you made it out anyway.' : 'Clean getaway: you left before the police arrived.');
     } else {
-      lines.push('The police took you down.');
+      lines.push(wave.stats && wave.stats.kind === 'fbi' ? 'The FBI took you down.' : 'The police took you down.');
       lines.push('You lost <b>$' + carried.toLocaleString('en-US') + '</b> of loot.');
     }
     lines.push('Officers taken down: ' + kills);
+    if (LOC.crowd) lines.push('Waves survived: ' + Math.max(0, wave.n - (alarm.policeHere ? 1 : 0)) + ' &nbsp;·&nbsp; Gamblers shot: ' + civKills);
     lines.push('Time: ' + Math.round(playTime) + 's');
     endLines.innerHTML = lines.join('<br>');
     endEl.classList.remove('hidden');
@@ -1549,10 +1731,11 @@
       playTime += dt;
       checkTellerFear();
       if (alarm.on) alarm.t += dt;
-      updatePolice();
+      updatePolice(dt);
       if (hp < PLAYER_HP && time - lastHurt > 6) { hp = Math.min(PLAYER_HP, hp + 2.5 * dt); renderHp(); }
     }
     updateTeller(dt);
+    updateCrowd(dt);
     updateMachine(dt);
     updateCops(dt);
 
@@ -1561,11 +1744,10 @@
     for (const bm of bulbMats) bm.color.setHex(alarm.on ? (strobe ? 0xff3030 : 0x601010) : 0x3a0d0d);
     alarmLight.intensity = alarm.on && strobe ? 450 : 0;
     const flip = Math.floor(time * 6) % 2 === 0;
-    for (const pc of policeCars) {
-      pc.red.material.color.setHex(alarm.dispatched ? (flip ? 0xff2a2a : 0x401010) : 0x401010);
-      pc.blue.material.color.setHex(alarm.dispatched ? (flip ? 0x102040 : 0x3a7bff) : 0x102040);
-      pc.light.color.setHex(flip ? 0xff2020 : 0x2a50ff);
-      pc.light.intensity = alarm.dispatched ? 260 : 0;
+    for (const pc of allCars) {
+      pc.red.material.color.setHex(pc.active ? (flip ? 0xff2a2a : 0x401010) : 0x401010);
+      pc.blue.material.color.setHex(pc.active ? (flip ? 0x102040 : 0x3a7bff) : 0x102040);
+      if (pc.light) { pc.light.color.setHex(flip ? 0xff2020 : 0x2a50ff); pc.light.intensity = pc.active ? 260 : 0; }
     }
     tickSiren(alarmSnd); tickSiren(policeSnd);
     cone.position.y = 3.2 + Math.sin(time * 3) * 0.2;
@@ -1576,8 +1758,11 @@
     glowEl.classList.toggle('on', alarm.on);
     if (alarm.on) {
       const alive = cops.filter(c => !c.dead).length;
-      if (!alarm.policeHere) alarmSub.textContent = 'Police arrive in ' + Math.max(0, Math.ceil(POLICE_DELAY - alarm.t)) + 's';
-      else alarmSub.textContent = alive === 0 ? 'ALL OFFICERS DOWN - get out!' : 'POLICE ON SITE: ' + alive + ' officer' + (alive === 1 ? '' : 's') + ' left';
+      const fbiNow = wave.stats && wave.stats.kind === 'fbi';
+      if (!alarm.policeHere) alarmSub.textContent = 'Police arrive in ' + Math.max(0, Math.ceil(alarm.delay - alarm.t)) + 's';
+      else if (wave.driving && fbiNow) alarmSub.textContent = 'FBI INCOMING!';
+      else if (alive === 0) alarmSub.textContent = LOC.waves ? 'ALL DOWN - more are coming! Get out!' : 'ALL OFFICERS DOWN - get out!';
+      else alarmSub.textContent = (fbiNow ? 'FBI ON SITE: ' + alive + ' agent' : 'POLICE ON SITE: ' + alive + ' officer') + (alive === 1 ? '' : 's') + ' left';
     }
   }
 
@@ -2181,7 +2366,8 @@
       arriveHQ, hqInteract, openChoose, pickJob, get loc() { return LOC.id; }, hqSpot, save, give(t) { save.cash += t; renderCash(); },
       shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
       alert() { alertTeller('gun'); },
-      skipAlarm(s) { alarm.t += s; },
+      skipAlarm(s) { alarm.t += s; }, stepPolice(s) { for (let i = 0; i < s * 20; i++) { time += 0.05; alarm.t += 0.05; updatePolice(0.05); } },
+      rush() { rushPolice(); }, killCops() { for (const c of cops) if (!c.dead) damageCop(c, c.pos.clone().setY(1), UP, 9999); }, get gamblers() { return gamblers.map(g => ({ hp: g.hp, dead: g.dead, pos: [g.pos.x, g.pos.z] })); }, get wave() { return { n: wave.n, driving: wave.driving, kind: wave.stats && wave.stats.kind, cars: wave.cars.length, delay: alarm.delay, t: alarm.t }; },
       copsInfo() { return cops.map(c => ({ hp: c.hp, dead: c.dead, pos: [+c.pos.x.toFixed(1), +c.pos.z.toFixed(1)], los: c.los })); },
       get info() {
         return { pos: player.pos.toArray(), slots: slots.map(s => s && s.type), selected, activeW, cash: save.cash, owned: save.owned.slice(), mag: gun.mag, reserve: gun.reserve, hits, items: worldItems.length, decals: decals.length, loot: lootValue(), camera: camera.position.toArray(), phase, hp: Math.round(hp), alarm: { on: alarm.on, t: +alarm.t.toFixed(1), here: alarm.policeHere }, teller: teller.state, cops: cops.filter(c => !c.dead).length, kills };
