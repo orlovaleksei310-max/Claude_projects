@@ -566,7 +566,7 @@
   const WEAPONS = {
     pistol:  { name: 'Pistol',        price: 0,      dmg: 5,  pellets: 1, spread: 0,     size: 12, reserve: 60,  cd: 0.2,  auto: false, reload: 1.3, fov: 52, dist: 2.5, snd: 1.0, mz: -0.36, kick: 0.012 },
     shotgun: { name: 'Shotgun',       price: 25000,  dmg: 6,  pellets: 8, spread: 0.055, size: 6,  reserve: 30,  cd: 0.85, auto: false, reload: 2.0, fov: 50, dist: 2.5, snd: 1.6, mz: -0.84, kick: 0.05 },
-    sniper:  { name: 'Sniper',        price: 100000, dmg: 50, pellets: 1, spread: 0,     size: 5,  reserve: 20,  cd: 1.3,  auto: false, reload: 2.4, fov: 18, dist: 2.0, snd: 1.8, mz: -1.08, kick: 0.07 },
+    sniper:  { name: 'Sniper',        price: 100000, dmg: 25, headDmg: 100, pellets: 1, spread: 0,     size: 5,  reserve: 20,  cd: 1.3,  auto: false, reload: 2.4, fov: 18, dist: 2.0, snd: 1.8, mz: -1.08, kick: 0.07 },
     knife:   { name: 'Knife',         price: 125000,  dmg: 25, pellets: 1, spread: 0,     size: 0,  reserve: 0,   cd: 0.5,  auto: false, reload: 0,   fov: 58, dist: 2.8, snd: 0.5, mz: -0.3,  kick: 0.0,  melee: true, range: 2.6 },
     rifle:   { name: 'Assault Rifle', price: 175000, dmg: 12, pellets: 1, spread: 0.009, size: 30, reserve: 150, cd: 0.1,  auto: true,  reload: 1.9, fov: 50, dist: 2.5, snd: 0.8, mz: -0.8,  kick: 0.016 }
   };
@@ -963,7 +963,9 @@
     const tgt = hit.object.userData.target;
     const cop = hit.object.userData.cop;
     if (cop) {
-      damageCop(cop, hit.point, n, w.dmg);
+      const headshot = w.headDmg && hit.point.y - cop.pos.y > 1.45;      // the sniper does far more to the head
+      if (headshot) toast('HEADSHOT!', 0.8);
+      damageCop(cop, hit.point, n, headshot ? w.headDmg : w.dmg);
     } else if (hit.object.userData.gambler) {
       damageGambler(hit.object.userData.gambler, hit.point, n, w.dmg);
     } else if (hit.object.userData.civilian) {
@@ -1511,7 +1513,7 @@
   function waveStats(n) {
     if (n === 1) return { kind: 'police', cars: LOC.waves ? 3 : 2, hp: COP_HP, dmg: COP_DMG, acc: 1, speed: 3.8, cd: 1.3, cdVar: 1.1 };
     const k = n - 2;
-    return { kind: 'fbi', cars: Math.min(6, 3 + k), hp: Math.min(200, 80 + 20 * k), dmg: Math.min(16, 8 + 2 * k), acc: 1.2 + 0.08 * Math.min(k, 5), speed: 4.3, cd: 0.9, cdVar: 0.8 };
+    return { kind: 'fbi', cars: Math.min(6, 3 + k), hp: 150, dmg: Math.min(16, 8 + 2 * k), acc: 1.2 + 0.08 * Math.min(k, 5), speed: 4.3, cd: 0.9, cdVar: 0.8 };
   }
 
   function spawnCop(x, z, st) {
@@ -1541,7 +1543,7 @@
     const bar = makeBar();
     npc.group.add(bar.g);
     const c = {
-      m: npc, pos: new THREE.Vector3(x, y, z), hp: 40, maxHp: 40, dmg: 5, acc: 1, speed: 3.6, cdBase: 1.1, cdVar: 1.0, kind: 'guard',
+      m: npc, pos: new THREE.Vector3(x, y, z), hp: 100, maxHp: 100, dmg: 5, acc: 1, speed: 3.6, cdBase: 1.1, cdVar: 1.0, kind: 'guard',
       dead: false, deadT: 0, cd: 1 + Math.random() * 1.2, losT: 0, los: false, aim: 0, walk: Math.random() * 6,
       flash: 0, faceYaw: yaw || 0, moveYaw: yaw || 0, bar, guard: true, active: false, route: route || null, ri: 0, wait: 0
     };
