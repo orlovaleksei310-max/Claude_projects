@@ -16,7 +16,7 @@ A growing collection of small games that run right in the browser. No build step
 - The teller is unarmed and can't be hurt.
 - Pick up loot, then walk to the getaway car (parked outside the bank) and press E to escape. You need at least some loot to leave.
 - Escaping teleports you to the **HQ**. Your loot is sold for cash, and cash and the guns you own are saved in your browser between heists.
-- At the HQ, walk up to a pedestal and press E to buy a gun. Guns you carry take up inventory slots, so carrying more guns leaves less room for loot. The gun storage unit on the right wall of the HQ has 10 slots: press E there and click a gun to move it between your inventory and storage. You can store any gun, including the pistol. Everything is saved between heists. Step onto the green circle to choose your next heist. Once you have finished a heist, the game always opens at the HQ (also after you get busted or refresh), and only picking a job there starts the next heist.
+- At the HQ, walk up to a pedestal and press E to buy a gun. Guns you carry take up inventory slots, so carrying more guns leaves less room for loot. The gun storage unit on the right wall of the HQ has 10 slots: press E there and click a gun to move it between your inventory and storage. You can store any gun, including the pistol. Everything is saved between heists. Lockpicks ($5,000 each, one use) are sold at the dealer's counter (E). Step onto the green circle to choose your next heist; the Factory needs at least one lockpick. Once you have finished a heist, the game always opens at the HQ (also after you get busted or refresh), and only picking a job there starts the next heist.
 
 ### Heist locations
 
@@ -25,7 +25,7 @@ After your first heist, stepping onto the green circle at the HQ opens a list of
 | Location | Staff | Loot on site |
 |----------|-------|--------------|
 | Power Plant | operator | Power Cells ($4,000 each), Fusion Cores ($12,000 each) |
-| The Factory | foreman | Parts Crates ($3,000 each), Prototypes ($10,000 each) |
+| The Factory | foreman + 5 guards | Guards patrol the floor (and two wait upstairs): shoot them or sneak past, they raise the alarm when they spot you. Go through the **staff door** at the back right, climb the **stairs**, and **pick the lock** (hold E at the door, uses 1 lockpick) to reach the vault: Parts Crates ($3,000 each), Prototypes ($10,000 each). Escape through the **back door** (EXIT) to the getaway car parked in the back lot. |
 | Golden Casino | dealer | A black neon-lit room packed with ~15 gamblers (slot machines, roulette tables) that you can shoot. Kill one and the police (3 cars) arrive within 10 seconds; wipe them out and the FBI comes (tougher every wave, up to 6 cars), wave after wave until you die. You can still win by escaping with loot. Loot is locked in the jackpot machine at the back right: crack its 3-symbol code (E at the machine). The code is hidden: find 3 clue notes (one per reel) at random spots around the room, different every visit, then take Chip Stacks ($6,000 each) and Black Chips ($15,000 each). Three wrong tries trip the alarm. |
 
 | Weapon | Price | Damage | Magazine | Fire |

@@ -67,6 +67,22 @@
   const colliders = [];   // {minX,maxX,minZ,maxZ} – block the player
   const camSolids = [];   // meshes that stop the camera
   const aimables = [];    // meshes bullets can hit
+  const walkables = [];   // solid blocks you can stand on / climb (stairs, landings): {minX,maxX,minZ,maxZ,top}
+  function groundAt(x, z, y) {          // height of the floor under (x,z) for something whose feet are at y
+    let g = 0;
+    for (const w of walkables) {
+      if (x < w.minX || x > w.maxX || z < w.minZ || z > w.maxZ) continue;
+      if (w.top <= y + 0.55 && w.top > g) g = w.top;
+    }
+    return g;
+  }
+  function blockedBySolid(p, y) {       // a block that is taller than a step blocks you from the side
+    const ey = Math.max(y, groundAt(p.x, p.z, y));      // you step up onto whatever you are walking onto
+    for (const w of walkables) {
+      if (p.x > w.minX - 0.15 && p.x < w.maxX + 0.15 && p.z > w.minZ - 0.15 && p.z < w.maxZ + 0.15 && ey < w.top - 0.55) return true;
+    }
+    return false;
+  }
 
   function addBox(w, h, d, material, x, y, z, o = {}) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
@@ -120,11 +136,12 @@
       loot: [['cell', -8, 1.2, -21], ['cell', -4, 1.2, -21], ['cell', 0, 1.2, -21], ['core', 7.8, 1.0, -27.5], ['core', 9.4, 1.0, -27.5]]
     },
     factory: {
-      id: 'factory', name: 'The Factory', place: 'factory', staff: 'foreman', tag: 'Grab parts crates and prototypes off the assembly line.',
+      id: 'factory', name: 'The Factory', place: 'factory', staff: 'foreman', tag: 'Guards on patrol. Take the staff door at the back, climb the stairs, pick the lock, grab the goods and escape out the back door.',
       sign: 'ACME FACTORY', signBg: '#3a1c14', signFg: '#ffb347', signFont: 'Impact, Arial Black, sans-serif',
       wall: 0x8a4a3a, roof: 0x44302a, trim: 0xf2c94c, floor: ['#5d5a55', '#4d4a46'], counter: 0x4a4540,
       npc: { shirt: 0x3b5d9a, pants: 0x34507f, cap: 0xc0392b },
-      loot: [['parts', -8, 1.2, -21], ['parts', -4, 1.2, -21], ['parts', 0, 1.2, -21], ['proto', 7.8, 1.0, -27.5], ['proto', 9.4, 1.0, -27.5]]
+      guards: true, backDoor: true,
+      loot: [['parts', 4.6, 4.4, -28.5], ['parts', 6.1, 4.4, -28.5], ['parts', 7.6, 4.4, -28.5], ['proto', 5.3, 4.4, -27.3], ['proto', 7.0, 4.4, -27.3]]
     },
     casino: {
       id: 'casino', name: 'Golden Casino', place: 'casino', staff: 'dealer', tag: 'A black room full of gamblers. Crack the jackpot machine, but if the shooting starts the cops come in 10 seconds, then the FBI, wave after wave.',
@@ -155,6 +172,7 @@
       return c;
     };
     const light = (col, i, x, y, z) => { const l = new THREE.PointLight(col, i, 0, 2); l.position.set(x, y, z); scene.add(l); };
+    const trimStrip = () => mat(0xf2c94c, { metalness: 0.3, roughness: 0.5 });
 
     if (id === 'power') {
       // reactor tower with glowing rings
@@ -179,10 +197,10 @@
       }
     } else if (id === 'factory') {
       // conveyor belt along the back wall with boxes on it
-      addBox(13, 0.7, 1.2, mat(0x2a2a2e), -3.5, 0.35, -28.4, { block: true, cam: true });
-      addBox(12.6, 0.06, 0.9, mat(0x111114), -3.5, 0.72, -28.4, { aim: false });
-      for (let x = -9; x <= 2; x += 1.1) addBox(0.08, 0.08, 1.0, mat(0xf2c94c), x, 0.77, -28.4, { aim: false, cast: false });
-      for (const [x, c] of [[-8, 0x9a6b3a], [-5, 0xb38049], [-1.5, 0x9a6b3a]]) addBox(0.8, 0.7, 0.8, mat(c), x, 1.1, -28.4);
+      addBox(7, 0.7, 1.2, mat(0x2a2a2e), -6.5, 0.35, -28.4, { block: true, cam: true });
+      addBox(6.6, 0.06, 0.9, mat(0x111114), -6.5, 0.72, -28.4, { aim: false });
+      for (let x = -9.5; x <= -3.5; x += 1.1) addBox(0.08, 0.08, 1.0, mat(0xf2c94c), x, 0.77, -28.4, { aim: false, cast: false });
+      for (const [x, c] of [[-8, 0x9a6b3a], [-5, 0xb38049]]) addBox(0.8, 0.7, 0.8, mat(c), x, 1.1, -28.4);
       // a big press
       for (const x of [-9, -5]) addBox(0.7, 6, 0.7, mat(0xc0392b), x, 3, -25.5, { block: true, cam: true });
       addBox(5.6, 0.9, 1.1, mat(0xc0392b), -7, 6.3, -25.5, { cam: true });
@@ -195,6 +213,62 @@
         addBox(1.2, 0.9, 1.1, mat(0xb38049), x + 0.1, 1.45, -16.5);
       }
       for (const x of [-4, 4]) cyl(0.12, 0.12, 22, mat(0xd4af37, { metalness: 0.5, roughness: 0.4 }), 0, 8.9, -22 + x * 0.3, { aim: false }).rotation.z = Math.PI / 2;
+
+      // ---- the back stairwell: staff door -> stairs -> locked vault door -> the goods, then out the back door
+      const wallF = mat(0x8a4a3a, { roughness: 0.9 }), concF = mat(0x8c8c88, { roughness: 0.9 }), stepF = mat(0xb9b5ad, { roughness: 0.8 });
+      const solid = (w, h, d, m, x, y, z, top) => { const b = addBox(w, h, d, m, x, y, z, { cam: true }); walkables.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top }); return b; };
+      addBox(0.3, 10, 4.8, wallF, 3.0, 5, -27.0, { block: true, cam: true });            // west wall of the stairwell
+      addBox(6.4, 10, 0.3, wallF, 8.2, 5, -24.6, { block: true, cam: true });            // partition (the doorway is at x 3.15 - 5.0)
+      addBox(1.85, 6.0, 0.3, wallF, 4.1, 7.0, -24.6, { cam: true });                     // lintel over the staff door
+      addBox(6.55, 10, 0.3, wallF, 6.425, 5, -26.6, { block: true, cam: true });         // wall between stairs and vault
+      addBox(0.3, 10, 0.8, wallF, 9.7, 5, -29.0, { block: true, cam: true });            // vault east wall, either side of the door
+      addBox(0.3, 10, 0.6, wallF, 9.7, 5, -26.9, { block: true, cam: true });
+      addBox(0.3, 3.0, 1.4, wallF, 9.7, 8.5, -27.9, { cam: true });
+      for (let i = 0; i < 10; i++) {                                                      // ten steps, 0.44 high each
+        const top = (i + 1) * 0.44;
+        solid(0.45, top, 1.7, stepF, 5.2 + 0.45 * i + 0.225, top / 2, -25.6, top);
+      }
+      solid(1.7, 4.4, 4.8, concF, 10.55, 2.2, -27.0, 4.4);                                // landing at the top
+      solid(6.55, 4.4, 2.8, concF, 6.425, 2.2, -28.0, 4.4);                              // the vault floor
+      addBox(6.3, 0.02, 2.6, mat(0x45494f, { metalness: 0.5, roughness: 0.5 }), 6.425, 4.41, -28.0, { aim: false, cast: false });
+      for (const x of [3.5, 9.4]) addBox(0.1, 2.2, 0.5, steel, x, 5.5, -29.1, { aim: false });   // shelving along the vault wall
+      addBox(6.0, 0.1, 0.5, steel, 6.4, 5.2, -29.1, { aim: false });
+      addBox(6.0, 0.1, 0.5, steel, 6.4, 6.4, -29.1, { aim: false });
+      // the (open) staff door and its sign
+      addBox(0.08, 2.8, 0.95, mat(0x6b4423), 5.04, 1.4, -24.12, { aim: false });
+      const staffTex = canvasTex(256, 96, (c, w, h) => {
+        c.fillStyle = '#1a1a1d'; c.fillRect(0, 0, w, h); c.strokeStyle = '#ffd23f'; c.lineWidth = 6; c.strokeRect(5, 5, w - 10, h - 10);
+        c.fillStyle = '#ffd23f'; c.font = 'bold 42px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('STAFF ONLY', w / 2, h / 2 + 3);
+      });
+      const staffSign = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.64), new THREE.MeshBasicMaterial({ map: staffTex }));
+      staffSign.position.set(4.1, 3.3, -24.42); add(staffSign);
+      // the locked door at the top of the stairs
+      const lockPivot = new THREE.Group(); lockPivot.position.set(9.7, 4.4, -28.6); add(lockPivot);
+      const lockDoor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.6, 1.4), mat(0x6b7480, { metalness: 0.7, roughness: 0.35 }));
+      lockDoor.position.set(0, 1.3, 0.7); lockDoor.castShadow = true; lockPivot.add(lockDoor);
+      const lockLamp = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.22), glow(0xff2a2a));
+      lockLamp.position.set(0.1, 1.3, 1.15); lockPivot.add(lockLamp);
+      const lockCol = { minX: 9.55, maxX: 9.85, minZ: -28.6, maxZ: -27.2 };
+      colliders.push(lockCol);
+      LOC.lock = { pivot: lockPivot, lamp: lockLamp, col: lockCol, open: false, t: 0, swing: 0 };
+      light(0xffd9a0, 16, 7.5, 3.2, -25.2); light(0xffb36b, 14, 10.5, 6.8, -26.4); light(0xfff2cc, 22, 6.4, 8.2, -28.0);
+      // the back door out
+      const exitTex = canvasTex(256, 96, (c, w, h) => {
+        c.fillStyle = '#0c2a18'; c.fillRect(0, 0, w, h); c.fillStyle = '#5dff9a';
+        c.font = 'bold 56px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EXIT', w / 2, h / 2 + 3);
+      });
+      for (const [z, ry] of [[-29.35, 0], [-30.03, Math.PI]]) {
+        const ex = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.68), new THREE.MeshBasicMaterial({ map: exitTex }));
+        ex.position.set(0, 4.3, z); ex.rotation.y = ry; add(ex);
+      }
+      addBox(0.2, 3.6, 0.7, trimStrip(), -1.3, 1.8, -29.7, { aim: false });
+      addBox(0.2, 3.6, 0.7, trimStrip(), 1.3, 1.8, -29.7, { aim: false });
+      // the back lot
+      addBox(44, 0.1, 17, mat(0x7a776f, { roughness: 0.95 }), 0, -0.04, -38.5, { cast: false });
+      addBox(3.2, 1.5, 1.5, mat(0x2f6b3d), -10, 0.75, -33, { block: true, cam: true });         // dumpster
+      addBox(3.4, 0.2, 0.2, mat(0x1c3f25), -10, 1.55, -33, { aim: false });
+      for (const [x, z] of [[9, -33], [11, -34.5]]) addBox(1.4, 0.9, 1.4, mat(0x9a6b3a), x, 0.45, z, { block: true });
+      light(0xfff2cc, 40, 0, 6, -35);
     } else if (id === 'casino') {
       // slot machines along the back wall
       const cols = [0xff3b6b, 0x39e1ff, 0xffd23f, 0x5dff9a, 0xb67bff];
@@ -272,7 +346,11 @@
   const wallM = LOC.wall ? mat(LOC.wall, { roughness: 0.9 }) : stone;
   const trimM = LOC.trim ? mat(LOC.trim, { metalness: 0.3, roughness: 0.5 }) : gold;
   const roofM2 = LOC.roof ? mat(LOC.roof) : darkStone;
-  addBox(24, 10, T, wallM, 0, 5, -29.7, { block: true, cam: true });          // back wall
+  if (LOC.backDoor) {                                                         // back wall with an exit door in the middle
+    addBox(10.8, 10, T, wallM, -6.6, 5, -29.7, { block: true, cam: true });
+    addBox(10.8, 10, T, wallM, 6.6, 5, -29.7, { block: true, cam: true });
+    addBox(2.4, 6.4, T, wallM, 0, 6.8, -29.7, { cam: true });
+  } else addBox(24, 10, T, wallM, 0, 5, -29.7, { block: true, cam: true });   // back wall
   addBox(T, 10, 16, wallM, -11.7, 5, -22, { block: true, cam: true });        // left wall
   addBox(T, 10, 16, wallM, 11.7, 5, -22, { block: true, cam: true });         // right wall
   addBox(10, 10, T, wallM, -7, 5, -14.3, { block: true, cam: true });         // front, left of door
@@ -346,7 +424,7 @@
       scene.add(spoke);
     }
   } else buildProps(LOC.id);
-  if (LOC.id !== 'casino') addBox(3, 1.0, 1.2, steel, 8.6, 0.5, -27.5, { block: true });               // table holding the gold
+  if (LOC.id !== 'casino' && LOC.id !== 'factory') addBox(3, 1.0, 1.2, steel, 8.6, 0.5, -27.5, { block: true });               // table holding the gold
 
   // Neighbouring buildings and skyline
   function windowTex(wallColor, rx, ry) {
@@ -437,7 +515,7 @@
     colliders.push({ minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.95, maxZ: z + 0.95 });
     return g;
   }
-  const getawayCar = addCar(-12, -2.5, 0x111114);   // the getaway car, parked outside the bank
+  const getawayCar = LOC.backDoor ? addCar(-1, -33.4, 0x111114) : addCar(-12, -2.5, 0x111114);   // the getaway car (behind the building at the factory)
   addCar(16, 19, 0xb3202a);
 
   // Shooting-range targets
@@ -497,7 +575,7 @@
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
   const STASH_SIZE = 10;
-  let save = { cash: 0, owned: ['pistol'], carry: ['pistol'], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false, v: 2 };
+  let save = { cash: 0, owned: ['pistol'], carry: ['pistol'], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false, picks: 0, v: 2 };
   try {
     const s0 = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s0 && typeof s0.cash === 'number') {
@@ -510,11 +588,12 @@
       let st = (Array.isArray(s0.stash) ? s0.stash : []).filter(t => WEAPONS[t] && owned.includes(t) && !carry.includes(t));
       owned.forEach(t => { if (!carry.includes(t) && !st.includes(t)) st.push(t); });          // anything owned but not carried is stored
       st = st.slice(0, STASH_SIZE);
-      save = { cash: s0.cash, owned, carry, stash: st.concat(new Array(STASH_SIZE - st.length).fill(null)), heists: s0.heists || 0, next: LOCS[s0.next] ? s0.next : 'bank', go: !!s0.go, v: 2 };
+      save = { cash: s0.cash, owned, carry, stash: st.concat(new Array(STASH_SIZE - st.length).fill(null)), heists: s0.heists || 0, next: LOCS[s0.next] ? s0.next : 'bank', go: !!s0.go, picks: Math.max(0, s0.picks | 0), v: 2 };
     }
   } catch (err) { /* storage can be blocked */ }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (err) { /* ignore */ } }
   const money$ = n => '$' + n.toLocaleString('en-US');
+  const PICK_PRICE = 5000;
 
   const dollarTex = canvasTex(64, 64, (c, w, h) => {
     c.fillStyle = '#1f6b3a'; c.beginPath(); c.arc(w / 2, h / 2, 28, 0, Math.PI * 2); c.fill();
@@ -968,6 +1047,13 @@
     const full = slots.every(Boolean);
     let t;
     const locked = LOC.vault && !machine.open;
+    if (LOC.lock) {
+      const left = cops.some(c => c.guard && !c.dead);
+      if (!LOC.lock.open) t = alarm.on && !alarm.policeHere ? 'Alarm! Go through the staff door at the back right, up the stairs and pick the lock before the police arrive!' : 'Take the staff door at the back right, climb the stairs and pick the lock at the top. Guards patrol the floor' + (left ? ': take them out.' : '.');
+      else if (alarm.policeHere) t = carrying ? 'The police are here! Run out the back door to the getaway car!' : 'The police are here! Grab the goods in the vault, then out the back door.';
+      else t = carrying ? 'Grab more if you dare, then escape through the back door (marked EXIT) to the getaway car.' : 'The vault is open. Grab the goods, then escape through the back door.';
+      objEl.textContent = t; return;
+    }
     if (locked && !alarm.policeHere) t = alarm.on ? 'Find the 3 clue notes, then crack the jackpot machine at the back right (E) before the police arrive!' : 'Search the casino for 3 hidden clue notes (one per reel), then crack the jackpot machine at the back right (E). Watch the dealer.';
     else if (!alarm.on) t = 'Go into the ' + LOC.place + ' and point your gun at the ' + LOC.staff + ' (hold right click).';
     else if (alarm.policeHere) t = carrying ? 'The police are here! Get to the getaway car!' : 'The police are here! Grab money and reach the getaway car, or fight them off.';
@@ -998,7 +1084,7 @@
     if (WEAPONS[s.type]) { toast(phase === 'hq' ? 'Use E at the gun pedestal to stash a weapon' : "You can't drop your weapons"); return; }
     const p = new THREE.Vector3(player.pos.x - Math.sin(player.faceYaw) * 1.0, 0, player.pos.z - Math.cos(player.faceYaw) * 1.0);
     resolveCollisions(p, 0.3);
-    spawnItem(s.type, p.x, insideBank(p.x, p.z) ? 0.02 : 0, p.z);
+    spawnItem(s.type, p.x, player.pos.y + (insideBank(p.x, p.z) ? 0.02 : 0), p.z);
     slots[selected] = null;
     toast('Dropped ' + ITEM_TYPES[s.type].name);
     renderInventory();
@@ -1231,7 +1317,7 @@
     teller.state = 'hands';
     alarm.on = true; alarm.t = 0;
     alarmSnd = makeSiren('alarm');
-    toast(reason === 'machine' ? 'The jackpot machine trips the alarm!' : reason === 'theft' ? 'The ' + LOC.staff + ' hits the silent alarm!' : 'Hands up! The ' + LOC.staff + ' hits the alarm!', 2.4);
+    toast(reason === 'guard' ? 'A guard spotted you! The alarm is on!' : reason === 'machine' ? 'The jackpot machine trips the alarm!' : reason === 'theft' ? 'The ' + LOC.staff + ' hits the silent alarm!' : 'Hands up! The ' + LOC.staff + ' hits the alarm!', 2.4);
     tone(880, 0.12, 'square', 0.06);
     updateObjective();
   }
@@ -1447,6 +1533,30 @@
     cops.push(c);
   }
 
+  // ---- factory guards: they patrol until they spot you (or hear the alarm), then they hunt you down
+  function spawnGuard(x, y, z, route, yaw) {
+    const npc = buildNPC({ shirt: 0x2e4a3a, pants: 0x1d2a22, cap: 0x16211b, vest: 0x1a1a1a, badge: true, gun: true, hair: 0x2a1c12 });
+    npc.group.position.set(x, y, z); npc.group.rotation.y = yaw || 0;
+    scene.add(npc.group);
+    const bar = makeBar();
+    npc.group.add(bar.g);
+    const c = {
+      m: npc, pos: new THREE.Vector3(x, y, z), hp: 40, maxHp: 40, dmg: 5, acc: 1, speed: 3.6, cdBase: 1.1, cdVar: 1.0, kind: 'guard',
+      dead: false, deadT: 0, cd: 1 + Math.random() * 1.2, losT: 0, los: false, aim: 0, walk: Math.random() * 6,
+      flash: 0, faceYaw: yaw || 0, moveYaw: yaw || 0, bar, guard: true, active: false, route: route || null, ri: 0, wait: 0
+    };
+    npc.hitbox.userData.cop = c;
+    aimables.push(npc.hitbox);
+    cops.push(c);
+  }
+  if (LOC.guards) {
+    spawnGuard(-9, 0, -18.3, [[-9, -18.3], [-1, -18.3]], -Math.PI / 2);
+    spawnGuard(9, 0, -18.3, [[9, -18.3], [2, -18.3]], Math.PI / 2);
+    spawnGuard(-2.4, 0, -23.5, [[-2.4, -23.5], [1.9, -23.5], [1.9, -27.3], [-2.4, -27.3]], 0);
+    spawnGuard(10.6, 4.4, -25.9, null, Math.PI / 2);       // waiting at the top of the stairs
+    spawnGuard(7.2, 4.4, -28.0, null, Math.PI / 2);        // and one inside the vault
+  }
+
   const wave = { n: 0, cars: [], parked: [], driving: false, driveT: 0, arrivedAt: 0, clearT: 0, warned: false, stats: null };
 
   function parkWaveCar(e) {
@@ -1520,7 +1630,14 @@
   }
 
   const WP_OUT = { x: 0, z: -10.2 }, WP_IN = { x: 0, z: -17 }, WP_DOOR = { x: 0, z: -12.8 };
+  const inStairs = (x, z) => x > 3.0 && x < 11.4 && z < -24.6 && z > -29.4;
   function copTarget(c) {                 // route through the bank door when the player is inside
+    if (LOC.backDoor) {
+      if (inStairs(player.pos.x, player.pos.z) && !inStairs(c.pos.x, c.pos.z) && insideBank(c.pos.x, c.pos.z))   // through the staff door
+        return (c.pos.z > -23.9 || Math.abs(c.pos.x - 4.1) > 0.8) && c.pos.z > -24.4 ? { x: 4.1, z: -23.3 } : { x: 4.1, z: -25.4 };
+      if (!c.guard && player.pos.z < -30.8 && c.pos.z > -30.5 && !insideBank(c.pos.x, c.pos.z))                // around the building to the back lot
+        return Math.abs(c.pos.x) < 14.5 && c.pos.z > -31 ? { x: (c.pos.x < 0 ? -1 : 1) * 15.5, z: c.pos.z } : { x: player.pos.x, z: player.pos.z };
+    }
     const pIn = insideBank(player.pos.x, player.pos.z), cIn = insideBank(c.pos.x, c.pos.z);
     if (pIn && !cIn) return (c.pos.z > -11.5 && Math.abs(c.pos.x) > 1.3) ? WP_OUT : WP_IN;
     if (!pIn && cIn) return c.pos.z < -13.8 ? WP_DOOR : WP_OUT;
@@ -1533,6 +1650,7 @@
 
   function damageCop(c, point, normal, dmg) {
     if (c.dead) return;
+    if (c.guard && !c.active) { c.active = true; alertTeller('guard'); }
     c.hp = Math.max(0, c.hp - (dmg || PISTOL_DMG));
     c.flash = 0.12; flashCop(c, true);
     c.bar.fg.scale.x = Math.max(0.001, 0.76 * c.hp / c.maxHp);
@@ -1546,7 +1664,7 @@
       if (i >= 0) aimables.splice(i, 1);
       tone(200, 0.25, 'sawtooth', 0.05);
       const alive = cops.filter(k => !k.dead).length;
-      toast(alive === 0 ? 'All officers down! Get to the getaway car.' : 'Officer down!', 1.8);
+      toast(c.guard ? 'Guard down!' : alive === 0 ? 'All officers down! Get to the getaway car.' : 'Officer down!', 1.8);
     }
   }
 
@@ -1588,7 +1706,30 @@
       c.losT -= dt;
       if (c.losT <= 0) {
         c.losT = 0.2;
-        c.los = dist < 40 && hasLOS(new THREE.Vector3(c.pos.x, 1.5, c.pos.z), new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z));
+        c.los = dist < 40 && hasLOS(new THREE.Vector3(c.pos.x, c.pos.y + 1.5, c.pos.z), new THREE.Vector3(player.pos.x, player.pos.y + 1.3, player.pos.z));
+      }
+      if (walkables.length) c.pos.y = groundAt(c.pos.x, c.pos.z, c.pos.y);
+      if (c.guard && !c.active) {
+        const seen = c.los && (dist < 4.5 || (dist < 14 && Math.abs(((Math.atan2(-dx, -dz) - c.faceYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 1.15));
+        if (seen || alarm.on) { c.active = true; if (!alarm.on) alertTeller('guard'); }
+        else {                                                         // patrol
+          let moving = false;
+          if (c.route) {
+            if (c.wait > 0) c.wait -= dt;
+            else {
+              const w = c.route[c.ri], tx = w[0] - c.pos.x, tz = w[1] - c.pos.z, td = Math.hypot(tx, tz);
+              if (td < 0.15) { c.ri = (c.ri + 1) % c.route.length; c.wait = 1.0 + Math.random(); }
+              else { const sp = Math.min(1.6 * dt, td); c.pos.x += tx / td * sp; c.pos.z += tz / td * sp; c.faceYaw = angleLerp(c.faceYaw, Math.atan2(-tx, -tz), 1 - Math.exp(-6 * dt)); moving = true; }
+            }
+          }
+          c.walk += dt * (moving ? 4 : 0);
+          const swing = moving ? Math.sin(c.walk) * 0.5 : 0;
+          c.m.legs[0].rotation.x = swing; c.m.legs[1].rotation.x = -swing;
+          c.m.armR.rotation.x += (0.2 - c.m.armR.rotation.x) * Math.min(1, 8 * dt);
+          c.m.armL.rotation.x += (-swing - c.m.armL.rotation.x) * Math.min(1, 8 * dt);
+          g.position.copy(c.pos); g.rotation.y = c.faceYaw;
+          continue;
+        }
       }
 
       let moving = false;
@@ -1662,6 +1803,37 @@
   alarmLight.position.set(0, 7.5, -11);
   scene.add(alarmLight);
 
+  // ---- the lock on the vault door (factory): pick it with a lockpick from the HQ shop
+  const LOCK_TIME = 3.2;
+  function nearLock() { const k = LOC.lock; return !!k && !k.open && player.pos.y > 3.6 && Math.hypot(player.pos.x - 10.4, player.pos.z + 27.9) < 1.9; }
+  function startPick() {
+    const k = LOC.lock;
+    if (save.picks < 1) { toast('Locked! You need a lockpick (buy them at the HQ).'); tone(150, 0.1, 'square', 0.05); return; }
+    if (k.t > 0) return;
+    k.t = LOCK_TIME;
+    tone(500, 0.05, 'square', 0.04);
+  }
+  function updateLock(dt) {
+    const k = LOC.lock;
+    if (!k) return;
+    if (k.t > 0) {
+      if (phase !== 'play' || !nearLock()) { k.t = 0; }
+      else {
+        k.t -= dt;
+        if (Math.floor(k.t * 6) !== Math.floor((k.t + dt) * 6)) tone(900 + Math.random() * 300, 0.03, 'square', 0.03);
+        if (k.t <= 0) {
+          k.t = 0; k.open = true; save.picks = Math.max(0, save.picks - 1); persist(); renderCash();
+          const i = colliders.indexOf(k.col); if (i >= 0) colliders.splice(i, 1);
+          k.lamp.material.color.setHex(0x39ff7a);
+          toast('Click! The lock is picked.', 2);
+          tone(660, 0.1, 'square', 0.05); tone(990, 0.15, 'square', 0.05, 0.1);
+          updateObjective();
+        }
+      }
+    }
+    if (k.open && k.swing < 1) { k.swing = Math.min(1, k.swing + dt / 0.6); k.pivot.rotation.y = -Math.PI / 2 * k.swing; }
+  }
+
   // ---- the getaway car
   const marker = new THREE.Group();
   const cone = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8, 4), new THREE.MeshBasicMaterial({ color: 0x5dff9a }));
@@ -1695,6 +1867,7 @@
     if (phase === 'hq') { hqInteract(); return; }
     if (phase !== 'play') return;
     if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { openPuzzle(); return; }
+    if (LOC.lock && !LOC.lock.open && nearLock()) { startPick(); return; }
     if (!nearestItem() && nearCar()) { enterCar(); return; }
     tryPickup();
   }
@@ -1732,6 +1905,7 @@
       checkTellerFear();
       if (alarm.on) alarm.t += dt;
       updatePolice(dt);
+      updateLock(dt);
       if (hp < PLAYER_HP && time - lastHurt > 6) { hp = Math.min(PLAYER_HP, hp + 2.5 * dt); renderHp(); }
     }
     updateTeller(dt);
@@ -1897,6 +2071,15 @@
       const m = makeItemMesh(dx === 0 ? 'gold' : 'money'); m.position.set(HX + 6.5 + dx, 1.12 + (dx === 0 ? 0.12 : 0.3), -6.0); scene.add(m);
     }
 
+    const pickTex = canvasTex(512, 160, (c, w, h) => {
+      c.fillStyle = '#14120f'; c.fillRect(0, 0, w, h); c.strokeStyle = '#d4af37'; c.lineWidth = 6; c.strokeRect(6, 6, w - 12, h - 12);
+      c.fillStyle = '#ffd23f'; c.font = 'bold 54px "Segoe UI", Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('\u{1F511} LOCKPICKS', w / 2, 58);
+      c.fillStyle = '#fff'; c.font = '40px "Segoe UI", Arial'; c.fillText('$5,000 each (E)', w / 2, 112);
+    });
+    const pickSign = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 0.88), new THREE.MeshBasicMaterial({ map: pickTex }));
+    pickSign.position.set(HX + 6.5, 2.85, -7.93); scene.add(pickSign);
+
     // crates and barrels for the hideout look
     [[-10.6, 6.8, 1.3], [-9.2, 6.9, 1.0], [-10.8, 5.4, 0.9]].forEach(([x, z, sz]) => {
       addBox(sz, sz, sz, crateM, HX + x, sz / 2, z, o);
@@ -1952,7 +2135,7 @@
   const cashEl = document.getElementById('cash');
   const scopeEl = document.getElementById('scope');
   function renderCash() {
-    cashEl.textContent = 'CASH ' + money$(save.cash);
+    cashEl.textContent = 'CASH ' + money$(save.cash) + (save.picks > 0 ? '   \u{1F511} x' + save.picks : '');
     lootEl.style.display = phase === 'hq' ? 'none' : '';
   }
   renderCash();
@@ -2003,6 +2186,7 @@
       const d = Math.hypot(player.pos.x - PED_X[i], player.pos.z - SHOP_Z);
       if (d < bd) { bd = d; best = { kind: 'weapon', type: t }; }
     });
+    if (!best && Math.hypot(player.pos.x - (HX + 6.5), player.pos.z + 6.0) < 2.8) best = { kind: 'pick' };
     if (!best && player.pos.x > HX + 8 && player.pos.z > -4.6 && player.pos.z < 2.6) best = { kind: 'storage' };
     if (!best && Math.hypot(player.pos.x - EXIT_POS.x, player.pos.z - EXIT_POS.z) < 3.4) best = { kind: 'exit' };
     return best;
@@ -2010,6 +2194,7 @@
 
   function hqPrompt(sp) {
     if (sp.kind === 'exit') return 'Step onto the green circle to choose your next heist';
+    if (sp.kind === 'pick') return '<b>E</b> &nbsp;Buy a lockpick &ndash; ' + money$(PICK_PRICE) + ' (one use, you have ' + save.picks + ')' + (save.cash < PICK_PRICE ? ' <span style="color:#ff6b6b">(need ' + money$(PICK_PRICE - save.cash) + ' more)</span>' : '');
     if (sp.kind === 'storage') return '<b>E</b> &nbsp;Open the gun storage (' + save.stash.filter(Boolean).length + ' / ' + STASH_SIZE + ' stored)';
     const w = WEAPONS[sp.type];
     if (!save.owned.includes(sp.type)) {
@@ -2024,6 +2209,14 @@
     if (!sp) return;
     if (sp.kind === 'exit') { openChoose(); return; }
     if (sp.kind === 'storage') { openStorage(); return; }
+    if (sp.kind === 'pick') {
+      if (save.cash < PICK_PRICE) { toast('Not enough cash! A lockpick costs ' + money$(PICK_PRICE) + '.'); tone(150, 0.15, 'square', 0.05); return; }
+      save.cash -= PICK_PRICE; save.picks++;
+      tone(880, 0.08, 'square', 0.05); tone(1320, 0.12, 'square', 0.05, 0.08);
+      toast('Bought a lockpick! You have ' + save.picks + '.');
+      saveCarry(); renderCash();
+      return;
+    }
     const t = sp.type, w = WEAPONS[t];
     if (save.owned.includes(t)) { toast('You already own the ' + w.name + '. Move it at the gun storage.'); return; }
     if (save.cash < w.price) { toast('Not enough cash! You need ' + money$(w.price - save.cash) + ' more.'); tone(150, 0.15, 'square', 0.05); return; }
@@ -2119,7 +2312,7 @@
       const total = L.loot.reduce((sum, l) => sum + ITEM_TYPES[l[0]].value, 0);
       const b = document.createElement('button');
       b.className = 'job'; b.dataset.id = id;
-      b.innerHTML = '<span class="k">' + (i + 1) + '</span><span class="n">' + L.name + '</span><span class="t">' + L.tag + '</span><span class="v">Loot on site: ' + money$(total) + '</span>';
+      b.innerHTML = '<span class="k">' + (i + 1) + '</span><span class="n">' + L.name + '</span><span class="t">' + L.tag + '</span><span class="v">Loot on site: ' + money$(total) + (id === 'factory' ? ' &nbsp;&middot;&nbsp; <b style="color:' + (save.picks > 0 ? '#5dff9a' : '#ff6b6b') + '">needs a lockpick (you have ' + save.picks + ')</b>' : '') + '</span>';
       b.addEventListener('click', () => pickJob(id));
       chooseList.appendChild(b);
     });
@@ -2136,6 +2329,7 @@
   }
   function pickJob(id) {
     if (phase !== 'choosing' || !LOCS[id]) return;
+    if (id === 'factory' && save.picks < 1) { toast('The Factory needs a lockpick! Buy one at the dealer (' + money$(PICK_PRICE) + ').'); tone(150, 0.15, 'square', 0.05); return; }
     phase = 'leaving';
     save.next = id; save.go = true;      // the next page load starts this heist
     saveCarry();
@@ -2191,12 +2385,18 @@
     player.vel.z += (wz * speed - player.vel.z) * k;
 
     if (ctl && keys.Space && player.onGround) { player.vy = 6.8; player.onGround = false; }
+
+    const ox = player.pos.x, oz = player.pos.z, prevY = player.pos.y;
+    player.pos.x += player.vel.x * dt; resolveCollisions(player.pos, player.radius);
+    if (walkables.length && blockedBySolid(player.pos, prevY)) player.pos.x = ox;
+    player.pos.z += player.vel.z * dt; resolveCollisions(player.pos, player.radius);
+    if (walkables.length && blockedBySolid(player.pos, prevY)) player.pos.z = oz;
+
+    const gy = walkables.length ? groundAt(player.pos.x, player.pos.z, prevY) : 0;
+    if (player.onGround && player.vy <= 0 && prevY - gy <= 0.5) player.pos.y = gy;      // walk down stairs without falling
     player.vy -= 20 * dt;
     player.pos.y += player.vy * dt;
-    if (player.pos.y <= 0) { player.pos.y = 0; player.vy = 0; player.onGround = true; }
-
-    player.pos.x += player.vel.x * dt; resolveCollisions(player.pos, player.radius);
-    player.pos.z += player.vel.z * dt; resolveCollisions(player.pos, player.radius);
+    if (player.pos.y <= gy) { player.pos.y = gy; player.vy = 0; player.onGround = true; } else player.onGround = false;
 
     const sp = Math.hypot(player.vel.x, player.vel.z);
     const moving = sp > 0.4;
@@ -2336,6 +2536,7 @@
     if (it) p = '<b>E</b> &nbsp;Pick up ' + ITEM_TYPES[it.type].name + ' ($' + ITEM_TYPES[it.type].value.toLocaleString('en-US') + ')';
     if (phase === 'hq') { const sp = hqSpot(); if (sp) p = hqPrompt(sp); }
     if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;Crack the jackpot machine';
+    if (phase === 'play' && LOC.lock && !LOC.lock.open && nearLock()) p = LOC.lock.t > 0 ? 'Picking the lock... ' + Math.round((1 - LOC.lock.t / LOCK_TIME) * 100) + '%' : (save.picks > 0 ? '<b>E</b> &nbsp;Pick the lock (uses 1 lockpick, you have ' + save.picks + ')' : 'Locked! You need a lockpick (buy them at the HQ)');
     if (!it && phase === 'play' && nearCar()) p = '<b>E</b> &nbsp;' + (lootValue() > 0 ? 'Get in the getaway car and escape!' : 'Getaway car (grab some money first)');
     if (p !== lastPrompt) {
       lastPrompt = p;
@@ -2350,6 +2551,9 @@
   if (LOC.id !== 'bank') {
     document.querySelector('#overlay .tag').textContent = 'Today\'s job: ' + LOC.name + '. Hold up the ' + LOC.staff + ', grab the loot and escape in the getaway car. The police show up 30 seconds after the alarm goes off.';
   }
+  if (LOC.id === 'factory') {
+    document.querySelector('#overlay .tag').textContent = 'Today\'s job: The Factory. Take the staff door at the back, climb the stairs, pick the lock (1 lockpick), grab the goods and escape out the back door. Guards patrol the factory.';
+  }
   gun.mag = gun.size;
   setHeld('pistol');
 
@@ -2359,7 +2563,8 @@
       activate(v) { forced = v; overlay.classList.toggle('hidden', v); },
       key(code, v) { keys[code] = v; },
       look(y, p) { yaw = y; pitch = p; },
-      teleport(x, z) { player.pos.set(x, 0, z); },
+      teleport(x, z, y) { player.pos.set(x, y || 0, z); player.vy = 0; },
+      get cols() { return colliders.filter(c => c.minZ < -24 && c.maxZ > -30 && c.maxX > 2 && c.minX < 12).map(c => [c.minX, c.maxX, c.minZ, c.maxZ].map(v => +v.toFixed(2))); }, stepLock(s) { for (let i = 0; i < s * 20; i++) updateLock(0.05); }, get lock() { return LOC.lock && { open: LOC.lock.open, t: LOC.lock.t }; }, get picks() { return save.picks; }, givePicks(n) { save.picks += n; renderCash(); }, get guards() { return cops.filter(c => c.guard).map(c => ({ hp: c.hp, dead: c.dead, active: c.active, pos: [c.pos.x, c.pos.y, c.pos.z] })); }, py() { return player.pos.y; },
       aim(v) { aiming = v; },
       openStorage, storageClick, closeStorage, get stash() { return save.stash.slice(); },
       openPuzzle, puzzleKey, machine, puzzle, get clues() { return LOC.clues; }, get code() { return LOC.code; },
