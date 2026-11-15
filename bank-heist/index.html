@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bank Heist</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game"></div>
+
+  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+
+  <div id="hud-top">
+    <div id="loot">LOOT $0</div>
+    <div id="objective">Walk into the bank and grab the loot.</div>
+    <div id="range">Targets hit: 0</div>
+  </div>
+
+  <div id="prompt"></div>
+  <div id="toast"></div>
+
+  <div id="ammo">
+    <div><span id="ammo-mag">12</span><span id="ammo-res"> / 60</span></div>
+    <div id="reload">RELOADING...</div>
+  </div>
+
+  <div id="inventory">
+    <div class="slot"><span class="key">1</span><span class="icon"></span><span class="name"></span></div>
+    <div class="slot"><span class="key">2</span><span class="icon"></span><span class="name"></span></div>
+    <div class="slot"><span class="key">3</span><span class="icon"></span><span class="name"></span></div>
+    <div class="slot"><span class="key">4</span><span class="icon"></span><span class="name"></span></div>
+  </div>
+
+  <div id="overlay">
+    <div class="panel">
+      <h1>BANK HEIST</h1>
+      <p class="tag">You're outside the National Bank with a pistol and an empty bag. Make it count.</p>
+      <table>
+        <tr><td>W A S D</td><td>Move</td></tr>
+        <tr><td>Mouse</td><td>Look around</td></tr>
+        <tr><td>Left click</td><td>Shoot (pistol must be selected)</td></tr>
+        <tr><td>Right click (hold)</td><td>Aim: closer camera, slower walk</td></tr>
+        <tr><td>Shift / Space</td><td>Sprint / Jump</td></tr>
+        <tr><td>R</td><td>Reload</td></tr>
+        <tr><td>1 2 3 4 / Wheel</td><td>Pick an inventory slot</td></tr>
+        <tr><td>E / Q</td><td>Pick up / drop the selected item</td></tr>
+        <tr><td>M</td><td>Mute sound</td></tr>
+        <tr><td>Esc</td><td>Pause</td></tr>
+      </table>
+      <p id="overlay-msg" class="start">Click to play</p>
+      <p class="note">Desktop only (keyboard and mouse). <a href="../">&larr; All games</a></p>
+    </div>
+  </div>
+
+  <script src="lib/three.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

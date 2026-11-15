@@ -1,12 +1,27 @@
 # Claude_projects
 
-A growing collection of small games that run right in the browser. No build step, no dependencies: each game is plain HTML, CSS and JavaScript in its own folder.
+A growing collection of small games that run right in the browser. No build step and no install: each game lives in its own folder as plain HTML, CSS and JavaScript. 3D games keep their own copy of Three.js in a `lib/` folder, so they work offline too.
 
 ## Games
 
 | Game | Folder | Description |
 |------|--------|-------------|
 | Criminal Runaway | [`criminal-runaway/`](criminal-runaway/) | Top-down escape game. Grab all the cash, dodge the police, reach the getaway car. |
+| Bank Heist 3D | [`bank-heist/`](bank-heist/) | Third-person 3D game. You spawn outside the bank with a pistol and a 4-slot inventory. Shoot targets, walk in, and take the loot. Desktop only (keyboard and mouse). |
+
+### Bank Heist controls
+
+| Key | Action |
+|-----|--------|
+| W A S D | Move |
+| Mouse | Look around (click the game to capture the mouse, Esc to pause) |
+| Left click | Shoot (pistol must be selected) |
+| Right click (hold) | Aim: closer camera, slower walk |
+| Shift / Space | Sprint / jump |
+| R | Reload |
+| 1 2 3 4 / mouse wheel | Select inventory slot |
+| E / Q | Pick up / drop the selected item |
+| M | Mute |
 
 ## How to play locally
 
@@ -35,8 +50,13 @@ Turn on GitHub Pages (Settings → Pages → Deploy from branch → `main` / roo
 Claude_projects/
 ├── index.html            # game launcher
 ├── README.md
-└── criminal-runaway/     # one folder per game
+├── criminal-runaway/     # one folder per game
+│   ├── index.html
+│   ├── style.css
+│   └── game.js
+└── bank-heist/
     ├── index.html
     ├── style.css
-    └── game.js
+    ├── game.js
+    └── lib/              # bundled Three.js (r159) and its license
 ```
