@@ -103,18 +103,140 @@
     addBox(3, 0.02, 0.25, mat(0xe8c31c), x, -0.06, 24, { cast: false, aim: false });
   }
 
-  // ---- The bank
+  // ------------------------------------------------------------ heist locations
+  // Every job uses the same plot and door; only the building, its props, staff and loot change.
+  const LOCS = {
+    bank: {
+      id: 'bank', name: 'National Bank', place: 'bank', staff: 'teller', tag: 'Classic job. Marble, a vault and one nervous teller.',
+      sign: 'NATIONAL BANK', signBg: '#0f3d2a', signFg: '#f2d36b', signFont: 'Georgia, serif',
+      floor: ['#e9e4d8', '#b9b2a4'], npc: { shirt: 0xf1f1f1, vest: 0x8a1c2b, tie: 0x2a2a2a, pants: 0x2b2b33, hair: 0x4a3322 },
+      loot: [['money', -8, 1.2, -21], ['money', -4, 1.2, -21], ['money', 0, 1.2, -21], ['gold', 7.8, 1.0, -27.5], ['gold', 9.4, 1.0, -27.5]]
+    },
+    power: {
+      id: 'power', name: 'Power Plant', place: 'power plant', staff: 'operator', tag: 'Steal power cells and a fusion core from the control room.',
+      sign: 'CITY POWER PLANT', signBg: '#12202e', signFg: '#ffd23f', signFont: 'Impact, Arial Black, sans-serif',
+      wall: 0x6d7279, roof: 0x3a3f46, trim: 0xffd23f, floor: ['#4b5057', '#3e4349'], counter: 0x2f353d,
+      npc: { shirt: 0xdcdcdc, vest: 0xe8742a, pants: 0x2f3640, cap: 0xffd23f },
+      loot: [['cell', -8, 1.2, -21], ['cell', -4, 1.2, -21], ['cell', 0, 1.2, -21], ['core', 7.8, 1.0, -27.5], ['core', 9.4, 1.0, -27.5]]
+    },
+    factory: {
+      id: 'factory', name: 'The Factory', place: 'factory', staff: 'foreman', tag: 'Grab parts crates and prototypes off the assembly line.',
+      sign: 'ACME FACTORY', signBg: '#3a1c14', signFg: '#ffb347', signFont: 'Impact, Arial Black, sans-serif',
+      wall: 0x8a4a3a, roof: 0x44302a, trim: 0xf2c94c, floor: ['#5d5a55', '#4d4a46'], counter: 0x4a4540,
+      npc: { shirt: 0x3b5d9a, pants: 0x34507f, cap: 0xc0392b },
+      loot: [['parts', -8, 1.2, -21], ['parts', -4, 1.2, -21], ['parts', 0, 1.2, -21], ['proto', 7.8, 1.0, -27.5], ['proto', 9.4, 1.0, -27.5]]
+    },
+    casino: {
+      id: 'casino', name: 'Golden Casino', place: 'casino', staff: 'dealer', tag: 'The richest job: chip stacks at the cashier cage.',
+      sign: 'GOLDEN CASINO', signBg: '#2a0f3d', signFg: '#ffd84a', signFont: 'Georgia, serif',
+      wall: 0x4a2466, roof: 0x24122f, trim: 0xffd84a, floor: ['#8a1a2e', '#6d1424'], counter: 0x2a1a12,
+      npc: { shirt: 0xf4f4f4, vest: 0x111111, tie: 0xb0122a, pants: 0x111111, hair: 0x2a1c12 },
+      loot: [['chips', -8, 1.2, -21], ['chips', -4, 1.2, -21], ['chips', 0, 1.2, -21], ['bigchips', 7.8, 1.0, -27.5], ['bigchips', 9.4, 1.0, -27.5]]
+    }
+  };
+  let LOC = LOCS.bank;
+  try {
+    const sv = JSON.parse(localStorage.getItem('bankheist-save-v1'));
+    if (sv && LOCS[sv.next]) LOC = LOCS[sv.next];
+  } catch (err) { /* storage can be blocked */ }
+
+
+  // Props that make each job site look different (all inside the same footprint, behind or beside the counter)
+  function buildProps(id) {
+    const add = m => { scene.add(m); return m; };
+    const glow = c => new THREE.MeshBasicMaterial({ color: c });
+    const cyl = (rt, rb, h, m, x, y, z, o = {}) => {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, o.seg || 24), m);
+      c.position.set(x, y, z); c.castShadow = c.receiveShadow = true; add(c);
+      if (o.aim !== false) aimables.push(c);
+      if (o.cam) camSolids.push(c);
+      return c;
+    };
+    const light = (col, i, x, y, z) => { const l = new THREE.PointLight(col, i, 0, 2); l.position.set(x, y, z); scene.add(l); };
+
+    if (id === 'power') {
+      // reactor tower with glowing rings
+      cyl(2.0, 2.2, 6.5, mat(0x3a444f, { metalness: 0.6, roughness: 0.4 }), -6.5, 3.25, -27, { cam: true });
+      colliders.push({ minX: -8.7, maxX: -4.3, minZ: -29.2, maxZ: -24.8 });
+      for (const y of [1.6, 3.2, 4.8]) {
+        const r = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.09, 8, 36), glow(0x39e1ff));
+        r.rotation.x = Math.PI / 2; r.position.set(-6.5, y, -27); add(r);
+      }
+      light(0x39e1ff, 45, -6.5, 3.5, -24.2);
+      // transformers and control cabinets
+      addBox(1.3, 2.6, 2.4, mat(0x56606b), -10.7, 1.3, -26.5, { block: true, cam: true });
+      addBox(1.3, 2.6, 2.4, mat(0x56606b), 10.7, 1.3, -18.5, { block: true, cam: true });
+      for (const x of [-7, 7]) {
+        addBox(2.4, 1.9, 0.8, mat(0x3a4048), x, 0.95, -16.5, { block: true });
+        addBox(2.0, 0.7, 0.05, glow(0x5dff9a), x, 1.35, -16.08, { aim: false });
+      }
+      addBox(20, 0.03, 0.4, mat(0xffd23f), 0, 0.045, -15.6, { cast: false, aim: false });   // hazard stripe
+      for (const z of [-24, -19]) {                                                           // ceiling pipes
+        const p = cyl(0.3, 0.3, 22, mat(0x8a929c, { metalness: 0.6, roughness: 0.4 }), 0, 8.8, z, { aim: false });
+        p.rotation.z = Math.PI / 2;
+      }
+    } else if (id === 'factory') {
+      // conveyor belt along the back wall with boxes on it
+      addBox(13, 0.7, 1.2, mat(0x2a2a2e), -3.5, 0.35, -28.4, { block: true, cam: true });
+      addBox(12.6, 0.06, 0.9, mat(0x111114), -3.5, 0.72, -28.4, { aim: false });
+      for (let x = -9; x <= 2; x += 1.1) addBox(0.08, 0.08, 1.0, mat(0xf2c94c), x, 0.77, -28.4, { aim: false, cast: false });
+      for (const [x, c] of [[-8, 0x9a6b3a], [-5, 0xb38049], [-1.5, 0x9a6b3a]]) addBox(0.8, 0.7, 0.8, mat(c), x, 1.1, -28.4);
+      // a big press
+      for (const x of [-9, -5]) addBox(0.7, 6, 0.7, mat(0xc0392b), x, 3, -25.5, { block: true, cam: true });
+      addBox(5.6, 0.9, 1.1, mat(0xc0392b), -7, 6.3, -25.5, { cam: true });
+      cyl(0.45, 0.45, 2.6, mat(0x8a929c, { metalness: 0.7, roughness: 0.35 }), -7, 4.6, -25.5);
+      addBox(3.2, 0.9, 1.4, mat(0x44474d), -7, 0.45, -25.5, { block: true });
+      // barrels and stacked crates
+      for (const [x, z] of [[10.6, -17.5], [10.6, -19.2], [-10.6, -17]]) cyl(0.42, 0.42, 1.0, mat(0xe8742a), x, 0.5, z, { cam: true }) && colliders.push({ minX: x - 0.45, maxX: x + 0.45, minZ: z - 0.45, maxZ: z + 0.45 });
+      for (const x of [-7, 7]) {
+        addBox(1.6, 1.0, 1.4, mat(0x9a6b3a), x, 0.5, -16.5, { block: true });
+        addBox(1.2, 0.9, 1.1, mat(0xb38049), x + 0.1, 1.45, -16.5);
+      }
+      for (const x of [-4, 4]) cyl(0.12, 0.12, 22, mat(0xd4af37, { metalness: 0.5, roughness: 0.4 }), 0, 8.9, -22 + x * 0.3, { aim: false }).rotation.z = Math.PI / 2;
+    } else if (id === 'casino') {
+      // slot machines along the back wall
+      const cols = [0xff3b6b, 0x39e1ff, 0xffd23f, 0x5dff9a, 0xb67bff];
+      cols.forEach((c, i) => {
+        const x = -10 + i * 1.45;
+        addBox(1.25, 2.3, 0.95, mat(0x2a1538), x, 1.15, -28.8, { block: true, cam: true });
+        addBox(0.9, 0.7, 0.04, glow(c), x, 1.6, -28.3, { aim: false });
+        addBox(1.25, 0.25, 0.97, mat(0xffd84a, { metalness: 0.6, roughness: 0.4 }), x, 2.4, -28.8, { aim: false });
+        light(c, 6, x, 1.8, -27.6);
+      });
+      // roulette tables where the lobby benches would be
+      for (const x of [-7, 7]) {
+        cyl(1.35, 1.35, 0.9, mat(0x1c1a22), x, 0.45, -16.5, { cam: true });
+        cyl(1.3, 1.3, 0.06, mat(0x0f6b3a), x, 0.93, -16.5);
+        cyl(0.55, 0.55, 0.08, mat(0x7a4a22), x, 1.0, -16.5, { aim: false });
+        colliders.push({ minX: x - 1.4, maxX: x + 1.4, minZ: -17.9, maxZ: -15.1 });
+      }
+      // chandelier
+      const ch = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.1, 8, 32), mat(0xffd84a, { metalness: 0.8, roughness: 0.3 }));
+      ch.rotation.x = Math.PI / 2; ch.position.set(0, 8.4, -21); add(ch);
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * Math.PI * 2, b = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), glow(0xfff2cc));
+        b.position.set(Math.cos(a) * 1.6, 8.4, -21 + Math.sin(a) * 1.6); add(b);
+      }
+      light(0xffd9a0, 40, 0, 8, -21);
+      addBox(4, 0.02, 3, mat(0xffd84a), 0, 0.045, -14.9, { cast: false, aim: false });
+    }
+  }
+
+  // ---- The job site
   const T = 0.6;
-  addBox(24, 10, T, stone, 0, 5, -29.7, { block: true, cam: true });          // back wall
-  addBox(T, 10, 16, stone, -11.7, 5, -22, { block: true, cam: true });        // left wall
-  addBox(T, 10, 16, stone, 11.7, 5, -22, { block: true, cam: true });         // right wall
-  addBox(10, 10, T, stone, -7, 5, -14.3, { block: true, cam: true });         // front, left of door
-  addBox(10, 10, T, stone, 7, 5, -14.3, { block: true, cam: true });          // front, right of door
-  addBox(4, 5.5, T, stone, 0, 7.25, -14.3, { cam: true });                    // lintel over the door
-  addBox(26, 0.8, 19, darkStone, 0, 10.4, -21.25, { cam: true });             // roof
-  addBox(24, 0.4, 0.2, gold, 0, 9.4, -13.88, { aim: false });                 // gold trim
+  const wallM = LOC.wall ? mat(LOC.wall, { roughness: 0.9 }) : stone;
+  const trimM = LOC.trim ? mat(LOC.trim, { metalness: 0.3, roughness: 0.5 }) : gold;
+  const roofM2 = LOC.roof ? mat(LOC.roof) : darkStone;
+  addBox(24, 10, T, wallM, 0, 5, -29.7, { block: true, cam: true });          // back wall
+  addBox(T, 10, 16, wallM, -11.7, 5, -22, { block: true, cam: true });        // left wall
+  addBox(T, 10, 16, wallM, 11.7, 5, -22, { block: true, cam: true });         // right wall
+  addBox(10, 10, T, wallM, -7, 5, -14.3, { block: true, cam: true });         // front, left of door
+  addBox(10, 10, T, wallM, 7, 5, -14.3, { block: true, cam: true });          // front, right of door
+  addBox(4, 5.5, T, wallM, 0, 7.25, -14.3, { cam: true });                    // lintel over the door
+  addBox(26, 0.8, 19, roofM2, 0, 10.4, -21.25, { cam: true });             // roof
+  addBox(24, 0.4, 0.2, trimM, 0, 9.4, -13.88, { aim: false });                 // gold trim
   for (const x of [-10.5, -7, -3.6, 3.6, 7, 10.5]) {                          // columns
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 10, 20), stone);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 10, 20), wallM);
     col.position.set(x, 5, -12.6);
     col.castShadow = col.receiveShadow = true;
     scene.add(col);
@@ -125,14 +247,14 @@
     addBox(2.4, 3.4, 0.1, mat(0xf2efe8), x, 3.4, -13.95, { aim: false });
     addBox(2.1, 3.1, 0.12, mat(0x1d3b5c, { metalness: 0.5, roughness: 0.2 }), x, 3.4, -13.9, { aim: false });
   }
-  for (const x of [-2, 2]) addBox(0.2, 4.5, 0.7, gold, x, 2.25, -14.3, { aim: false });   // door frame
+  for (const x of [-2, 2]) addBox(0.2, 4.5, 0.7, trimM, x, 2.25, -14.3, { aim: false });   // door frame
 
   const signTex = canvasTex(1024, 200, (c, w, h) => {
-    c.fillStyle = '#0f3d2a'; c.fillRect(0, 0, w, h);
-    c.strokeStyle = '#d4af37'; c.lineWidth = 10; c.strokeRect(8, 8, w - 16, h - 16);
-    c.fillStyle = '#f2d36b'; c.font = 'bold 108px Georgia, serif';
+    c.fillStyle = LOC.signBg; c.fillRect(0, 0, w, h);
+    c.strokeStyle = LOC.id === 'bank' ? '#d4af37' : LOC.signFg; c.lineWidth = 10; c.strokeRect(8, 8, w - 16, h - 16);
+    c.fillStyle = LOC.signFg; c.font = 'bold ' + (LOC.sign.length > 14 ? 92 : 108) + 'px ' + LOC.signFont;
     c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('NATIONAL BANK', w / 2, h / 2 + 6);
+    c.fillText(LOC.sign, w / 2, h / 2 + 6);
   });
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.76), new THREE.MeshBasicMaterial({ map: signTex }));
   sign.position.set(0, 7.3, -13.97);
@@ -140,8 +262,8 @@
 
   // Interior
   const floorTex = canvasTex(128, 128, (c, w, h) => {
-    c.fillStyle = '#e9e4d8'; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#b9b2a4'; c.fillRect(0, 0, w / 2, h / 2); c.fillRect(w / 2, h / 2, w / 2, h / 2);
+    c.fillStyle = LOC.floor[0]; c.fillRect(0, 0, w, h);
+    c.fillStyle = LOC.floor[1]; c.fillRect(0, 0, w / 2, h / 2); c.fillRect(w / 2, h / 2, w / 2, h / 2);
   });
   floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
   floorTex.repeat.set(12, 8);
@@ -156,25 +278,29 @@
     addBox(2.4, 0.1, 1.2, new THREE.MeshBasicMaterial({ color: 0xfff2cc }), x, 9.95, z, { cast: false, aim: false });
   }
 
-  addBox(14, 1.1, 1.2, wood, -3, 0.55, -21, { block: true, cam: true });       // teller counter
+  addBox(14, 1.1, 1.2, LOC.counter ? mat(LOC.counter) : wood, -3, 0.55, -21, { block: true, cam: true });       // teller counter
   addBox(14.4, 0.1, 1.5, mat(0x2b2b2b, { roughness: 0.3 }), -3, 1.15, -21, { aim: true });
-  addBox(3.2, 0.5, 0.8, mat(0x5a3b22), -7, 0.25, -16.5, { block: true });     // lobby benches
-  addBox(3.2, 0.5, 0.8, mat(0x5a3b22), 7, 0.25, -16.5, { block: true });
-
-  const vault = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.6, 32), mat(0x8a9099, { metalness: 0.8, roughness: 0.35 }));
-  vault.rotation.x = Math.PI / 2;
-  vault.position.set(7, 3, -29.1);
-  vault.castShadow = true;
-  scene.add(vault);
-  const wheel = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.12, 10, 28), gold);
-  wheel.position.set(7, 3, -28.7);
-  scene.add(wheel);
-  for (let i = 0; i < 3; i++) {
-    const spoke = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 0.12), gold);
-    spoke.position.set(7, 3, -28.7);
-    spoke.rotation.z = (i * Math.PI) / 3;
-    scene.add(spoke);
+  if (LOC.id === 'bank') {
+    addBox(3.2, 0.5, 0.8, mat(0x5a3b22), -7, 0.25, -16.5, { block: true });     // lobby benches
+    addBox(3.2, 0.5, 0.8, mat(0x5a3b22), 7, 0.25, -16.5, { block: true });
   }
+
+  if (LOC.id === 'bank') {
+    const vault = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.6, 32), mat(0x8a9099, { metalness: 0.8, roughness: 0.35 }));
+    vault.rotation.x = Math.PI / 2;
+    vault.position.set(7, 3, -29.1);
+    vault.castShadow = true;
+    scene.add(vault);
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.12, 10, 28), gold);
+    wheel.position.set(7, 3, -28.7);
+    scene.add(wheel);
+    for (let i = 0; i < 3; i++) {
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 0.12), gold);
+      spoke.position.set(7, 3, -28.7);
+      spoke.rotation.z = (i * Math.PI) / 3;
+      scene.add(spoke);
+    }
+  } else buildProps(LOC.id);
   addBox(3, 1.0, 1.2, steel, 8.6, 0.5, -27.5, { block: true });               // table holding the gold
 
   // Neighbouring buildings and skyline
@@ -301,6 +427,12 @@
     pistol: { name: 'Pistol',    icon: '🔫', value: 0,     half: 0 },
     money:  { name: 'Money Bag', icon: '💰', value: 2500,  half: 0.28 },
     gold:   { name: 'Gold Bar',  icon: '🥇', value: 10000, half: 0.1 },
+    cell:    { name: 'Power Cell',    icon: '🔋', value: 4000,  half: 0.22 },
+    core:    { name: 'Fusion Core',   icon: '⚛️', value: 12000, half: 0.22 },
+    parts:   { name: 'Parts Crate',   icon: '📦', value: 3000,  half: 0.22 },
+    proto:   { name: 'Prototype',     icon: '⚙️', value: 10000, half: 0.2 },
+    chips:   { name: 'Chip Stack',    icon: '🎰', value: 6000,  half: 0.2 },
+    bigchips: { name: 'Black Chips',  icon: '♠️', value: 15000, half: 0.22 },
     shotgun: { name: 'Shotgun',  icon: '💥', value: 0, half: 0 },
     sniper:  { name: 'Sniper',   icon: '🎯', value: 0, half: 0 },
     rifle:   { name: 'Assault Rifle', icon: '🔥', value: 0, half: 0 }
@@ -317,10 +449,10 @@
 
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
-  let save = { cash: 0, owned: [], carry: [] };
+  let save = { cash: 0, owned: [], carry: [], heists: 0, next: 'bank' };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [] };
+    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [], heists: s.heists || 0, next: LOCS[s.next] ? s.next : 'bank' };
   } catch (err) { /* storage can be blocked */ }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (err) { /* ignore */ } }
   const money$ = n => '$' + n.toLocaleString('en-US');
@@ -351,6 +483,42 @@
       const top = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.16), gm);
       top.position.y = 0.09; g.add(top);
     }
+    else if (type === 'cell') {
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.44, 16), mat(0x2b3138, { metalness: 0.6, roughness: 0.4 }));
+      g.add(body);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.178, 0.178, 0.16, 16), new THREE.MeshBasicMaterial({ color: 0x39e1ff }));
+      g.add(band);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.07, 12), mat(0xcfd6e4, { metalness: 0.8, roughness: 0.3 }));
+      cap.position.y = 0.25; g.add(cap);
+    } else if (type === 'core') {
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), new THREE.MeshBasicMaterial({ color: 0x7dffb0 }));
+      g.add(orb);
+      const frame = mat(0x8a929c, { metalness: 0.8, roughness: 0.3 });
+      for (let i = 0; i < 3; i++) {
+        const r = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.025, 6, 20), frame);
+        r.rotation.set(i * Math.PI / 3, i * Math.PI / 2.5, 0); g.add(r);
+      }
+    } else if (type === 'parts') {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.34), mat(0xa87a46, { roughness: 0.9 }));
+      g.add(box);
+      for (const x of [-0.12, 0.12]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.36, 0.36), mat(0x8a929c, { metalness: 0.6 })); b.position.x = x; g.add(b); }
+      const gear = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 10), mat(0xf2c94c, { metalness: 0.6 }));
+      gear.rotation.x = Math.PI / 2; gear.position.set(0, 0.04, 0.19); g.add(gear);
+    } else if (type === 'proto') {
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.26), mat(0x2b3138, { metalness: 0.6, roughness: 0.4 }));
+      g.add(base);
+      const core = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshBasicMaterial({ color: 0xff8a2a }));
+      core.position.y = 0.17; g.add(core);
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 6), mat(0xcfd6e4));
+      ant.position.set(0.1, 0.3, 0); g.add(ant);
+    } else if (type === 'chips' || type === 'bigchips') {
+      const big = type === 'bigchips';
+      const cols = big ? [0x111114, 0xffd84a, 0x111114, 0xffd84a, 0x111114] : [0xc0152b, 0xf4f4f4, 0xc0152b, 0xf4f4f4];
+      cols.forEach((c, i) => {
+        const d = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.07, 20), mat(c, { roughness: 0.5 }));
+        d.position.y = (i - (cols.length - 1) / 2) * 0.075; g.add(d);
+      });
+    }
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     return g;
   }
@@ -370,8 +538,7 @@
   }
 
   // Money bags on the teller counter, gold bars on the vault table
-  for (const x of [-8, -4, 0]) spawnItem('money', x, 1.2, -21);
-  for (const x of [7.8, 9.4]) spawnItem('gold', x, 1.0, -27.5);
+  for (const [type, x, y, z] of LOC.loot) spawnItem(type, x, y, z);
 
   // Inventory
   const slots = [{ type: 'pistol' }, null, null, null];
@@ -656,7 +823,7 @@
     if (cop) {
       damageCop(cop, hit.point, n, w.dmg);
     } else if (hit.object.userData.civilian) {
-      if (!state.warned) { state.warned = true; toast('Hold your fire! The teller is unarmed.'); }
+      if (!state.warned) { state.warned = true; toast('Hold your fire! The ' + LOC.staff + ' is unarmed.'); }
       alertTeller('shot');
     } else if (tgt) {
       if (!tgt.down) {
@@ -711,9 +878,9 @@
     const carrying = lootValue() > 0;
     const full = slots.every(Boolean);
     let t;
-    if (!alarm.on) t = 'Go into the bank and point your gun at the teller (hold right click).';
+    if (!alarm.on) t = 'Go into the ' + LOC.place + ' and point your gun at the ' + LOC.staff + ' (hold right click).';
     else if (alarm.policeHere) t = carrying ? 'The police are here! Get to the getaway car!' : 'The police are here! Grab money and reach the getaway car, or fight them off.';
-    else if (worldItems.length === 0) t = 'The bank is empty. Get to the getaway car outside!';
+    else if (worldItems.length === 0) t = 'The ' + LOC.place + ' is empty. Get to the getaway car outside!';
     else if (full) t = 'Inventory full! Get to the getaway car (or drop something with Q).';
     else t = carrying ? 'Grab more if you dare, then get to the getaway car outside.' : 'Grab the money, then get to the getaway car outside.';
     objEl.textContent = t;
@@ -827,7 +994,7 @@
   });
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === renderer.domElement;
-    overlay.classList.toggle('hidden', locked || phase === 'won' || phase === 'lost');
+    overlay.classList.toggle('hidden', locked || phase === 'won' || phase === 'lost' || phase === 'choosing' || phase === 'leaving');
     if (!locked) { aiming = false; mouseDown = false; overlayMsg.textContent = started ? 'Paused. Click to resume' : 'Click to play'; }
     else started = true;
   });
@@ -943,7 +1110,7 @@
   }
 
   // ---- the teller, working behind the counter
-  const tellerNPC = buildNPC({ shirt: 0xf1f1f1, vest: 0x8a1c2b, tie: 0x2a2a2a, pants: 0x2b2b33, hair: 0x4a3322 });
+  const tellerNPC = buildNPC(LOC.npc);
   tellerNPC.group.position.set(-4, 0, -22.3);
   tellerNPC.group.rotation.y = Math.PI;                         // faces the lobby
   scene.add(tellerNPC.group);
@@ -961,7 +1128,7 @@
     teller.state = 'hands';
     alarm.on = true; alarm.t = 0;
     alarmSnd = makeSiren('alarm');
-    toast(reason === 'theft' ? 'The teller hits the silent alarm!' : 'Hands up! The teller hits the alarm!', 2.4);
+    toast(reason === 'theft' ? 'The ' + LOC.staff + ' hits the silent alarm!' : 'Hands up! The ' + LOC.staff + ' hits the alarm!', 2.4);
     tone(880, 0.12, 'square', 0.06);
     updateObjective();
   }
@@ -1471,6 +1638,7 @@
     for (let i = 0; i < slots.length; i++) if (slots[i] && ITEM_TYPES[slots[i].type].value > 0) slots[i] = null;
     selected = 0;
     save.cash += hq.sold;
+    save.heists++;
     saveCarry();
     phase = 'hq';
     stopSirens();
@@ -1500,7 +1668,7 @@
   }
 
   function hqPrompt(sp) {
-    if (sp.kind === 'exit') return '<b>E</b> &nbsp;Head out for the next heist';
+    if (sp.kind === 'exit') return '<b>E</b> &nbsp;Choose your next heist';
     const w = WEAPONS[sp.type];
     if (!save.owned.includes(sp.type)) {
       const need = w.price - save.cash;
@@ -1512,14 +1680,7 @@
   function hqInteract() {
     const sp = hqSpot();
     if (!sp) return;
-    if (sp.kind === 'exit') {
-      phase = 'leaving';
-      saveCarry();
-      pulse(fadeEl, 'fadeout');
-      toast('Off to the next job...');
-      setTimeout(() => location.reload(), 750);
-      return;
-    }
+    if (sp.kind === 'exit') { openChoose(); return; }
     const t = sp.type, w = WEAPONS[t];
     const carriedAt = slots.findIndex(s => s && s.type === t);
     const free = slots.findIndex(s => !s);
@@ -1540,6 +1701,58 @@
     saveCarry();
     renderInventory(); renderCash(); drawSigns();
   }
+
+
+  // ---- choose the next job
+  const chooseEl = document.getElementById('choose');
+  const chooseList = document.getElementById('choose-list');
+  const chooseBack = document.getElementById('choose-back');
+  function jobOptions() {
+    const ids = ['power', 'factory', 'casino'];
+    if (save.heists >= 2) ids.push('bank');          // once you are a veteran the bank is back on the list
+    return ids;
+  }
+  function openChoose() {
+    if (phase !== 'hq') return;
+    phase = 'choosing';
+    chooseList.innerHTML = '';
+    jobOptions().forEach((id, i) => {
+      const L = LOCS[id];
+      const total = L.loot.reduce((sum, l) => sum + ITEM_TYPES[l[0]].value, 0);
+      const b = document.createElement('button');
+      b.className = 'job'; b.dataset.id = id;
+      b.innerHTML = '<span class="k">' + (i + 1) + '</span><span class="n">' + L.name + '</span><span class="t">' + L.tag + '</span><span class="v">Loot on site: ' + money$(total) + '</span>';
+      b.addEventListener('click', () => pickJob(id));
+      chooseList.appendChild(b);
+    });
+    chooseEl.classList.remove('hidden');
+    aiming = false; mouseDown = false;
+    try { document.exitPointerLock(); } catch (err) { /* ignore */ }
+  }
+  function closeChoose() {
+    if (phase !== 'choosing') return;
+    phase = 'hq';
+    chooseEl.classList.add('hidden');
+    try { renderer.domElement.requestPointerLock(); } catch (err) { /* ignore */ }
+  }
+  function pickJob(id) {
+    if (phase !== 'choosing' || !LOCS[id]) return;
+    phase = 'leaving';
+    save.next = id;
+    saveCarry();
+    chooseEl.classList.add('hidden');
+    pulse(fadeEl, 'fadeout');
+    toast('Off to the ' + LOCS[id].name + '...');
+    setTimeout(() => location.reload(), 750);
+  }
+  chooseBack.addEventListener('click', closeChoose);
+  document.addEventListener('keydown', e => {
+    if (phase !== 'choosing' || e.repeat) return;
+    const ids = jobOptions();
+    const m = /^Digit([1-9])$/.exec(e.code);
+    if (m && ids[+m[1] - 1]) pickJob(ids[+m[1] - 1]);
+    else if (e.code === 'Escape' || e.code === 'KeyE') closeChoose();
+  });
 
   function updateHQ(dt) {
     alarmEl.classList.remove('on'); glowEl.classList.remove('on');
@@ -1729,6 +1942,9 @@
   // ------------------------------------------------------------------- loop
   renderInventory();
   updateObjective();
+  if (LOC.id !== 'bank') {
+    document.querySelector('#overlay .tag').textContent = 'Today\'s job: ' + LOC.name + '. Hold up the ' + LOC.staff + ', grab the loot and escape in the getaway car. The police show up 30 seconds after the alarm goes off.';
+  }
   gun.mag = gun.size;
   setHeld('pistol');
 
@@ -1740,7 +1956,7 @@
       look(y, p) { yaw = y; pitch = p; },
       teleport(x, z) { player.pos.set(x, 0, z); },
       aim(v) { aiming = v; },
-      arriveHQ, hqInteract, hqSpot, save, give(t) { save.cash += t; renderCash(); },
+      arriveHQ, hqInteract, openChoose, pickJob, get loc() { return LOC.id; }, hqSpot, save, give(t) { save.cash += t; renderCash(); },
       shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
       alert() { alertTeller('gun'); },
       skipAlarm(s) { alarm.t += s; },

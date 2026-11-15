@@ -16,7 +16,17 @@ A growing collection of small games that run right in the browser. No build step
 - The teller is unarmed and can't be hurt.
 - Pick up loot, then walk to the getaway car (parked outside the bank) and press E to escape. You need at least some loot to leave.
 - Escaping teleports you to the **HQ**. Your loot is sold for cash, and cash and the guns you own are saved in your browser between heists.
-- At the HQ, walk up to a pedestal and press E to buy a gun. Press E again to stash it in the locker or take it back out. Guns take up inventory slots, so carrying more guns leaves less room for loot. Take the green door for the next heist.
+- At the HQ, walk up to a pedestal and press E to buy a gun. Press E again to stash it in the locker or take it back out. Guns take up inventory slots, so carrying more guns leaves less room for loot. Take the green door to choose your next heist.
+
+### Heist locations
+
+After your first heist, the green door at the HQ opens a menu with three new targets (press 1, 2 or 3, or click a card). Each has its own building, props, staff member and loot; the alarm, police and getaway car work the same way. From your third heist on, the National Bank is also on the list.
+
+| Location | Staff | Loot on site |
+|----------|-------|--------------|
+| Power Plant | operator | Power Cells ($4,000 each), Fusion Cores ($12,000 each) |
+| The Factory | foreman | Parts Crates ($3,000 each), Prototypes ($10,000 each) |
+| Golden Casino | dealer | Chip Stacks ($6,000 each), Black Chips ($15,000 each) |
 
 | Weapon | Price | Damage | Magazine | Fire |
 |--------|-------|--------|----------|------|
