@@ -460,10 +460,10 @@
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
   const STASH_SIZE = 10;
-  let save = { cash: 0, owned: [], carry: [], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank' };
+  let save = { cash: 0, owned: [], carry: [], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [], stash: null, heists: s.heists || 0, next: LOCS[s.next] ? s.next : 'bank' };
+    if (s && typeof s.cash === 'number') save = { cash: s.cash, owned: s.owned || [], carry: s.carry || [], stash: null, heists: s.heists || 0, next: LOCS[s.next] ? s.next : 'bank', go: !!s.go };
       const carried = save.carry.filter(t => save.owned.includes(t));
       let st = Array.isArray(s.stash) ? s.stash.filter(t => WEAPONS[t]) : save.owned.filter(t => WEAPONS[t] && !carried.includes(t));   // older saves: everything not carried is stored
       st = st.filter(t => !carried.slice(0, 3).includes(t));
@@ -1727,13 +1727,13 @@
   }
 
   // the getaway worked: sell the loot and teleport to the HQ
-  function arriveHQ() {
+  function arriveHQ(fresh) {          // fresh = the game was just opened (no heist was played)
     if (phase === 'hq') return;
-    hq.sold = lootValue();
+    hq.sold = fresh ? 0 : lootValue();
     for (let i = 0; i < slots.length; i++) if (slots[i] && ITEM_TYPES[slots[i].type].value > 0) slots[i] = null;
     selected = 0;
     save.cash += hq.sold;
-    save.heists++;
+    if (!fresh) save.heists++;
     saveCarry();
     phase = 'hq';
     stopSirens();
@@ -1747,7 +1747,7 @@
     renderInventory(); renderCash(); drawSigns(); updateObjective();
     fadeEl.classList.remove('fadeout');
     pulse(fadeEl, 'fadein');
-    toast('Welcome to the HQ. Loot sold for ' + money$(hq.sold) + '!');
+    toast(fresh ? 'Welcome back to the HQ.' : 'Welcome to the HQ. Loot sold for ' + money$(hq.sold) + '!');
     tone(660, 0.1, 'square', 0.05); tone(880, 0.1, 'square', 0.05, 0.1); tone(1320, 0.2, 'square', 0.05, 0.2);
   }
 
@@ -1892,7 +1892,7 @@
   function pickJob(id) {
     if (phase !== 'choosing' || !LOCS[id]) return;
     phase = 'leaving';
-    save.next = id;
+    save.next = id; save.go = true;      // the next page load starts this heist
     saveCarry();
     chooseEl.classList.add('hidden');
     pulse(fadeEl, 'fadeout');
@@ -2126,6 +2126,13 @@
         return { pos: player.pos.toArray(), slots: slots.map(s => s && s.type), selected, activeW, cash: save.cash, owned: save.owned.slice(), mag: gun.mag, reserve: gun.reserve, hits, items: worldItems.length, decals: decals.length, loot: lootValue(), camera: camera.position.toArray(), phase, hp: Math.round(hp), alarm: { on: alarm.on, t: +alarm.t.toFixed(1), here: alarm.policeHere }, teller: teller.state, cops: cops.filter(c => !c.dead).length, kills };
       }
     };
+  }
+
+  // After your first finished heist the game always opens at the HQ; only picking a job there starts the next heist.
+  if (save.go) { save.go = false; persist(); }
+  else if (save.heists >= 1) {
+    arriveHQ(true);
+    document.querySelector('#overlay .tag').textContent = 'Welcome back to the HQ. Buy guns, manage your storage, then step onto the green circle to pick your next heist.';
   }
 
   const clock = new THREE.Clock();
