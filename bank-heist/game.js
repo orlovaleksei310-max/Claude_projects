@@ -810,6 +810,7 @@
     shotgun: { name: 'Shotgun',  icon: '💥', value: 0, half: 0 },
     sniper:  { name: 'Sniper',   icon: '🎯', value: 0, half: 0 },
     rifle:   { name: 'Assault Rifle', icon: '🔥', value: 0, half: 0 },
+    flame:   { name: 'Flamethrower',  icon: '☄️', value: 0, half: 0 },
     crown:   { name: 'Crown Jewel',   icon: '👑', value: 40000,  half: 0.3 },
     mona:    { name: 'Mona Lisa',     icon: '\u{1F5BC}\uFE0F', value: 250000, half: 0.45 },
     gem:     { name: 'Diamond',       icon: '💎', value: 10000,  half: 0.2 }
@@ -819,11 +820,12 @@
   const WEAPONS = {
     pistol:  { name: 'Pistol',        price: 0,      dmg: 5,  pellets: 1, spread: 0,     size: 12, reserve: 60,  cd: 0.2,  auto: false, reload: 1.3, fov: 52, dist: 2.5, snd: 1.0, mz: -0.36, kick: 0.012 },
     shotgun: { name: 'Shotgun',       price: 25000,  dmg: 6,  pellets: 8, spread: 0.055, size: 6,  reserve: 30,  cd: 0.85, auto: false, reload: 2.0, fov: 50, dist: 2.5, snd: 1.6, mz: -0.84, kick: 0.05 },
-    sniper:  { name: 'Sniper',        price: 100000, dmg: 25, headDmg: 100, pellets: 1, spread: 0,     size: 5,  reserve: 20,  cd: 1.3,  auto: false, reload: 2.4, fov: 18, dist: 2.0, snd: 1.8, mz: -1.08, kick: 0.07 },
+    sniper:  { name: 'Sniper',        price: 200000, dmg: 25, headDmg: 100, pellets: 1, spread: 0,     size: 5,  reserve: 20,  cd: 1.3,  auto: false, reload: 2.4, fov: 18, dist: 2.0, snd: 1.8, mz: -1.08, kick: 0.07 },
     knife:   { name: 'Knife',         price: 125000,  dmg: 100, pellets: 1, spread: 0,     size: 0,  reserve: 0,   cd: 0.5,  auto: false, reload: 0,   fov: 58, dist: 2.8, snd: 0.5, mz: -0.3,  kick: 0.0,  melee: true, range: 2.6 },
+    flame:   { name: 'Flamethrower',  price: 225000, dmg: 4,  pellets: 0, spread: 0,     size: 100, reserve: 0,   cd: 0.1,  auto: true,  reload: 0,   fov: 52, dist: 2.6, snd: 0.5, mz: -0.9,  kick: 0.0, flame: true, range: 7.5, fuelEvery: 0.5 },
     rifle:   { name: 'Assault Rifle', price: 175000, dmg: 12, pellets: 1, spread: 0.009, size: 30, reserve: 150, cd: 0.1,  auto: true,  reload: 1.9, fov: 50, dist: 2.5, snd: 0.8, mz: -0.8,  kick: 0.016 }
   };
-  const SHOP_WEAPONS = ['knife', 'shotgun', 'sniper', 'rifle'];
+  const SHOP_WEAPONS = ['knife', 'shotgun', 'sniper', 'rifle', 'flame'];
 
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
@@ -1133,6 +1135,15 @@
       part(0.07, 0.04, 0.07, dark, 0, -0.07, -0.09);
       part(0.07, 0.04, 0.07, dark, 0, -0.29, -0.09);
       part(0.025, 0.2, 0.025, metal, 0, -0.42, 0.04);         // bipod
+    } else if (type === 'flame') {
+      part(0.05, 0.62, 0.05, metal, 0, -0.5, -0.02);          // long nozzle pipe
+      part(0.09, 0.1, 0.09, mat(0x8a3a1a, { metalness: 0.5, roughness: 0.5 }), 0, -0.84, -0.02);   // nozzle tip
+      part(0.07, 0.3, 0.08, dark, 0, -0.14, 0.0);             // body
+      part(0.05, 0.1, 0.07, dark, 0, -0.05, 0.08);            // grip
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.42, 12), mat(0xc0392b, { metalness: 0.4, roughness: 0.5 }));
+      tank.position.set(0, 0.17, 0.07); g.add(tank);          // fuel tank behind the grip
+      const pilot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffa21f }));
+      pilot.position.set(0, -0.9, -0.02); g.add(pilot);       // pilot light
     } else {
       part(0.07, 0.5, 0.09, dark, 0, -0.2, 0.0);              // receiver
       part(0.035, 0.34, 0.035, metal, 0, -0.62, -0.01);       // barrel
@@ -1300,11 +1311,51 @@
     else addSparks(hit.point, n);
   }
 
+  // flamethrower: a burst of fire in a cone in front of the crosshair
+  const flames = [];
+  const flameGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+  function flameBurst(w) {
+    camera.updateMatrixWorld();
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const dir = raycaster.ray.direction.clone().normalize();
+    const origin = new THREE.Vector3(player.pos.x, player.pos.y + 1.2, player.pos.z);
+    const from = model.muzzle.getWorldPosition(new THREE.Vector3());
+    for (let i = 0; i < 5; i++) {                                      // the visible flames
+      const m = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff7a1a : 0xffc233, transparent: true, opacity: 0.85 }));
+      m.position.copy(from);
+      const v = dir.clone().multiplyScalar(9 + Math.random() * 3).add(new THREE.Vector3((Math.random() - 0.5) * 2.2, (Math.random() - 0.3) * 2.2, (Math.random() - 0.5) * 2.2));
+      scene.add(m); flames.push({ m, v, life: 0.5, max: 0.5 });
+    }
+    const hitList = [];
+    const consider = (pos, fn, h) => {
+      const target = new THREE.Vector3(pos.x, pos.y + h, pos.z);
+      const to = target.clone().sub(origin), d = to.length();
+      if (d > w.range || d < 0.01) return;
+      if (to.normalize().dot(dir) < 0.9) return;                       // inside the cone (about 25 degrees)
+      if (!hasLOS(origin, target)) return;
+      hitList.push([fn, target]);
+    };
+    for (const c of cops) if (!c.dead) consider(c.pos, p => damageCop(c, p, UP, w.dmg), 1.0);
+    if (typeof gamblers !== 'undefined') for (const g of gamblers) if (!g.dead) consider(g.pos, p => damageGambler(g, p, UP, w.dmg), 1.0);
+    if (teller.state === 'working') consider(teller.pos, () => { toast('Hold your fire! The ' + LOC.staff + ' is unarmed.'); alertTeller('shot'); }, 1.0);
+    for (const [fn, p] of hitList) fn(p);
+  }
+
   function shoot() {
     if (phase !== 'play' && phase !== 'hq') return;
     if (!holdingGun() || gun.reload > 0 || gun.cooldown > 0) return;
     const w = WEAPONS[activeW];
     if (w.melee) { stab(w); return; }
+    if (w.flame) {
+      if (gun.mag <= 0) { gun.cooldown = 0.4; tone(150, 0.05, 'square', 0.04); toast('Out of fuel!', 0.8); return; }
+      gun.cooldown = w.cd; gun.kick = 0.3; gun.flash = 0.12; gun.fired = 0.8;
+      gun.fuelT = (gun.fuelT || 0) + w.cd;                              // 1 fuel is used up every 0.5 seconds of burning
+      if (gun.fuelT >= w.fuelEvery - 1e-6) { gun.fuelT -= w.fuelEvery; gun.mag--; }
+      tone(90 + Math.random() * 40, 0.1, 'sawtooth', 0.035);
+      if (phase === 'play' && insideBank(player.pos.x, player.pos.z)) alertTeller('shot');
+      flameBurst(w);
+      return;
+    }
     if (gun.mag <= 0) {
       if (gun.reserve > 0) startReload(); else { tone(150, 0.05, 'square', 0.04); toast('Out of ammo!'); }
       return;
@@ -2623,7 +2674,7 @@
   // After a getaway you teleport to the headquarters: a hideout with an illegal gun shop.
   const HX = 1000;                       // the room sits far away from the heist area
   const SHOP_Z = -6.8;                   // pedestals along the back wall
-  const PED_X = [HX - 9.5, HX - 6, HX - 2.5, HX + 1];
+  const PED_X = [HX - 9.5, HX - 6.5, HX - 3.5, HX - 0.5, HX + 2.5];
   const EXIT_POS = { x: HX + 9, z: 7 };
   const STORAGE_POS = { x: HX + 10.4, z: -1.0 };
   const hqSpin = [];
@@ -2690,7 +2741,7 @@
       addBox(2.2, 0.9, 1.3, mat(0x24222b, { roughness: 0.5 }), px, 0.45, SHOP_Z, o);
       addBox(2.3, 0.06, 1.4, mat(0xd4af37, { metalness: 0.8, roughness: 0.35 }), px, 0.93, SHOP_Z, { aim: false });
       const spin = new THREE.Group(); spin.position.set(px, 1.45, SHOP_Z);
-      const gm = makeWeaponModel(t); gm.rotation.z = Math.PI / 2; gm.scale.setScalar(t === 'sniper' ? 1.3 : t === 'knife' ? 1.9 : 1.9);
+      const gm = makeWeaponModel(t); gm.rotation.z = Math.PI / 2; gm.scale.setScalar(t === 'sniper' ? 1.3 : t === 'flame' ? 1.4 : 1.9);
       if (t === 'knife') { gm.rotation.z = Math.PI; gm.position.y = 0.0; }
       gm.position.x = t === 'sniper' ? -0.15 : 0;
       spin.add(gm); scene.add(spin); hqSpin.push(spin);
@@ -2765,8 +2816,8 @@
       c.fillStyle = owned ? '#5dff9a' : '#ffd23f'; c.font = 'bold 66px "Segoe UI", Arial';
       c.fillText(owned ? (carried ? 'CARRYING' : 'IN STORAGE') : money$(w.price), 256, 138);
       c.fillStyle = '#aab3c5'; c.font = '30px "Segoe UI", Arial';
-      const dmg = w.pellets > 1 ? w.pellets + ' x ' + w.dmg : String(w.dmg);
-      c.fillText('DMG ' + dmg + '  ·  ' + (w.melee ? 'MELEE' : w.size + ' RND') + (w.auto ? '  ·  AUTO' : ''), 256, 205);
+      const dmg = w.pellets > 1 ? w.pellets + ' x ' + w.dmg : w.flame ? w.dmg + '/tick' : String(w.dmg);
+      c.fillText('DMG ' + dmg + '  ·  ' + (w.melee ? 'MELEE' : w.flame ? w.size + ' FUEL' : w.size + ' RND') + (w.auto ? '  ·  AUTO' : ''), 256, 205);
       sgn.tex.needsUpdate = true;
     }
   }
@@ -3192,6 +3243,12 @@
       s.life -= dt; s.vel.y -= 9 * dt; s.m.position.addScaledVector(s.vel, dt);
       if (s.life <= 0) { scene.remove(s.m); sparks.splice(i, 1); }
     }
+    for (let i = flames.length - 1; i >= 0; i--) {
+      const f = flames[i];
+      f.life -= dt; f.v.y += 2.5 * dt; f.m.position.addScaledVector(f.v, dt);
+      const k = 1 - f.life / f.max; f.m.scale.setScalar(1 + k * 2.2); f.m.material.opacity = Math.max(0, 0.85 * (1 - k)); f.m.rotation.x += dt * 5; f.m.rotation.y += dt * 4;
+      if (f.life <= 0) { scene.remove(f.m); f.m.material.dispose(); flames.splice(i, 1); }
+    }
     for (let i = tracers.length - 1; i >= 0; i--) {
       const t = tracers[i];
       t.life -= dt; t.m.material.opacity = Math.max(0, t.life / 0.07) * 0.9;
@@ -3227,7 +3284,7 @@
     ammoEl.classList.toggle('dim', !showAmmo);
     crossEl.classList.toggle('hidden', !holdingGun() && !aiming);
     ammoMagEl.textContent = gun.mag;
-    ammoResEl.textContent = ' / ' + gun.reserve;
+    ammoResEl.textContent = WEAPONS[activeW].flame ? ' FUEL' : ' / ' + gun.reserve;
     reloadEl.classList.toggle('show', gun.reload > 0);
     scopeEl.classList.toggle('on', aiming && showAmmo && activeW === 'sniper' && camera.fov < 40);
 

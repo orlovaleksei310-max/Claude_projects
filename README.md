@@ -37,8 +37,9 @@ After your first heist, stepping onto the green circle at the HQ opens a list of
 | Pistol | free | 5 | 12 | semi-auto |
 | Knife | $125,000 | 100 (melee, short range) | none | click to stab |
 | Shotgun | $25,000 | 8 pellets x 6 | 6 | pump |
-| Sniper | $100,000 | 100 to the head, 25 to the body | 5 | bolt, right click zooms |
+| Sniper | $200,000 | 100 to the head, 25 to the body | 5 | bolt, right click zooms |
 | Assault Rifle | $175,000 | 12 | 30 | full auto (hold left click) |
+| Flamethrower | $225,000 | 4 per 0.1 s to everything in a short cone (about 7.5 m) | 100 fuel (no reload, 1 fuel per 0.5 s of burning, so 50 s of fire) | hold left click |
 
 ### Bank Heist controls
 
