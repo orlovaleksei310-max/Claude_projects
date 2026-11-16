@@ -2290,8 +2290,9 @@
     if (!nearMonaGate()) return false;
     if (!save.keycard) { toast('The reader wants a keycard. Get one in prison!', 2.4); tone(150, 0.1, 'square', 0.05); return true; }
     g.open = true; g.lamp.material.color.setHex(0x39ff7a);
+    save.keycard = false; persist(); renderCash();                       // the keycard is used up
     const i = colliders.indexOf(g.col); if (i >= 0) colliders.splice(i, 1);
-    toast('BEEP! The keycard works. The gate opens.', 2.4); tone(660, 0.1, 'square', 0.05); tone(990, 0.15, 'square', 0.05, 0.1);
+    toast('BEEP! The keycard works and is used up. The gate opens.', 2.6); tone(660, 0.1, 'square', 0.05); tone(990, 0.15, 'square', 0.05, 0.1);
     updateObjective();
     return true;
   }
@@ -3294,7 +3295,7 @@
     if (phase === 'hq') { const sp = hqSpot(); if (sp) p = hqPrompt(sp); }
     if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;' + (LOC.wires ? 'Reconnect the wires' : LOC.hack ? 'Spin the vault dial' : 'Crack the jackpot machine');
     if (phase === 'play' && LOC.lock && !LOC.lock.open && nearLock()) p = LOC.lock.t > 0 ? 'Picking the lock... ' + Math.round((1 - LOC.lock.t / LOCK_TIME) * 100) + '%' : (LOC.lock.free ? '<b>E</b> &nbsp;Pick the cell lock (with the pin hidden in your sock)' : save.picks > 0 ? '<b>E</b> &nbsp;Pick the lock (uses 1 lockpick, you have ' + save.picks + ')' : 'Locked! You need a lockpick (buy them at the HQ)');
-    if (phase === 'play' && nearMonaGate()) p = save.keycard ? '<b>E</b> &nbsp;Use the keycard on the reader' : 'Keycard reader: you need a keycard (get one in prison).';
+    if (phase === 'play' && nearMonaGate()) p = save.keycard ? '<b>E</b> &nbsp;Use the keycard on the reader (one use)' : 'Keycard reader: you need a keycard (get one in prison).';
     if (phase === 'play' && LOC.prison && !(LOC.lock && !LOC.lock.open && nearLock())) {
       const g = ppTarget();
       if (pp.c) p = 'Picking his pocket... ' + Math.round((1 - pp.t / PP_TIME) * 100) + '%';
