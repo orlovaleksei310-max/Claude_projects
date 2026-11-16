@@ -146,11 +146,11 @@
       loot: [['parts', 4.6, 4.4, -28.5], ['parts', 6.1, 4.4, -28.5], ['parts', 7.6, 4.4, -28.5], ['proto', 5.3, 4.4, -27.3], ['proto', 7.0, 4.4, -27.3]]
     },
     jewel: {
-      id: 'jewel', name: 'The Crown Jewel', place: 'museum', staff: 'curator', tag: 'Hack the terminal, run the laser hallway, crack the vault, take the Crown Jewel, climb to the roof and fly out.',
+      id: 'jewel', name: 'The Crown Jewel', place: 'museum', staff: 'curator', tag: 'Hack the terminal (the FBI arrives right after), run the laser hallway, spin the vault open, take the Crown Jewel, climb to the roof and fly out.',
       sign: 'ROYAL MUSEUM', signBg: '#1a1230', signFg: '#ffd84a', signFont: 'Georgia, serif',
       wall: 0xe9e4d8, roof: 0x6b6f7a, trim: 0xd4af37, floor: ['#ece8de', '#bdb7aa'], counter: 0x4a3520,
       npc: { shirt: 0xf4f1ea, vest: 0x5b1a2e, pants: 0x23202b, tie: 0x5b1a2e },
-      vault: true, hack: true, hallway: true, heli: true, machinePos: { x: 7.6, z: -26.2 },
+      vault: true, hack: true, hallway: true, heli: true, waves: true, fbiFirst: true, machinePos: { x: 7.6, z: -26.2 },
       loot: [['crown', 7.6, 1.25, -27.6], ['gem', 6.8, 1.25, -27.6], ['gem', 8.4, 1.25, -27.6]]
     },
     casino: {
@@ -1232,7 +1232,7 @@
     }
     if (LOC.hack) {
       if (!hack.done) t = alarm.on && !alarm.policeHere ? 'Alarm! Hack the security terminal on the west wall (E) before the police arrive!' : 'Hack the security terminal on the west wall (E) to open the hall shutter.';
-      else if (!machine.open) t = 'Run the laser hall (jump the low beams, slip through when the flashing ones are off), then crack the vault lock (E).';
+      else if (!machine.open) t = (alarm.policeHere ? 'The FBI is here! ' : 'The FBI is on its way! ') + 'Run the laser hall (jump the low beams, slip through when the flashing ones are off), then spin the vault dial (E).';
       else if (!carrying) t = 'The case is open. Grab the Crown Jewel!';
       else t = player.pos.y > 9 ? 'Get in the helicopter (E)!' : (alarm.policeHere ? 'The police are here! ' : '') + 'Climb the ladder on the east wall (E, then W) to the roof and board the helicopter.';
       objEl.textContent = t; return;
@@ -1323,7 +1323,7 @@
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     keys[e.code] = true;
-    if (puzzle.open && isActive()) { if (!e.repeat) (puzzle.kind === 'wires' ? wireKey : puzzle.kind === 'hack' ? hackKey : puzzleKey)(e); return; }
+    if (puzzle.open && isActive()) { if (!e.repeat) (puzzle.kind === 'wires' ? wireKey : puzzle.kind === 'hack' ? hackKey : puzzle.kind === 'vault' ? vaultKey : puzzleKey)(e); return; }
     if (e.repeat || !isActive()) return;
     if (e.code === 'Digit1') selectSlot(0);
     else if (e.code === 'Digit2') selectSlot(1);
@@ -1626,14 +1626,15 @@
   }
 
   // Someone got hurt: the alarm goes off and the police arrive in 10 seconds
-  function rushPolice() {
+  function rushPolice(delay) {
     if (phase !== 'play') return;
+    const RD = delay === undefined ? RUSH_DELAY : delay;
     if (!alarm.on) {
       alarm.on = true; alarm.t = 0;
       alarmSnd = makeSiren('alarm');
       teller.state = 'hands';
     }
-    if (!alarm.policeHere && alarm.delay - alarm.t > RUSH_DELAY) alarm.delay = alarm.t + RUSH_DELAY;
+    if (!alarm.policeHere && alarm.delay - alarm.t > RD) alarm.delay = alarm.t + RD;
     updateObjective();
   }
 
@@ -1697,7 +1698,8 @@
   }
 
   // Wave 1 = police (50 HP). Every later wave (casino only) = FBI, tougher each time.
-  function waveStats(n) {
+  function waveStats(n0) {
+    const n = LOC.fbiFirst ? n0 + 1 : n0;                  // the museum job brings the FBI from the very first wave
     if (n === 1) return { kind: 'police', cars: LOC.waves ? 3 : 2, hp: COP_HP, dmg: COP_DMG, acc: 1, speed: 3.8, cd: 1.3, cdVar: 1.1 };
     const k = n - 2;
     return { kind: 'fbi', cars: Math.min(6, 3 + k), hp: 150, dmg: Math.min(16, 8 + 2 * k), acc: 1.2 + 0.08 * Math.min(k, 5), speed: 4.3, cd: 0.9, cdVar: 0.8 };
@@ -1786,7 +1788,7 @@
     wave.driving = true; wave.driveT = 0; wave.warned = false;
     alarm.dispatched = true;
     if (!policeSnd) policeSnd = makeSiren('police');
-    toast(wave.n === 1 ? 'Sirens! The police are on their way!' : 'FBI! Wave ' + (wave.n - 1) + ' is on its way!', 2.4);
+    toast(wave.stats.kind === 'police' ? 'Sirens! The police are on their way!' : 'FBI! Wave ' + (LOC.fbiFirst ? wave.n : wave.n - 1) + ' is on its way!', 2.4);
     tone(500, 0.15, 'sawtooth', 0.05);
   }
 
@@ -1801,7 +1803,7 @@
         wave.driving = false; wave.arrivedAt = time; wave.clearT = 0;
         for (const c of wave.cars) parkWaveCar(c);
         alarm.policeHere = true;
-        toast(wave.n === 1 ? 'The police have arrived!' : 'The FBI has arrived!', 2.4);
+        toast(wave.stats.kind === 'police' ? 'The police have arrived!' : 'The FBI has arrived!', 2.4);
         tone(300, 0.2, 'sawtooth', 0.06);
         updateObjective();
       }
@@ -2065,7 +2067,7 @@
   function interact() {
     if (phase === 'hq') { hqInteract(); return; }
     if (phase !== 'play') return;
-    if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { if (LOC.wires) openWires(); else openPuzzle(); return; }
+    if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { if (LOC.wires) openWires(); else if (LOC.hack) openVault(); else openPuzzle(); return; }
     if (LOC.lock && !LOC.lock.open && nearLock()) { startPick(); return; }
     if (LOC.hack && !hack.done && nearTerminal()) { openHack(); return; }
     if (nearLadder() && !nearestItem()) { if (player.pos.y < 2) { player.climb = true; player.pos.set(LADDER.x, 0.05, LADDER.z); } else if (player.pos.y > 9) { player.climb = true; player.pos.set(LADDER.x, 10.6, LADDER.z); } return; }
@@ -2164,6 +2166,65 @@
     puzzleEl.classList.remove('hidden');
     renderPuzzle();
   }
+  // ---- the museum vault: spin the dial, switch direction the moment the light flashes (4 right switches)
+  const vault = { angle: 0, dir: 1, targets: [], step: 0, litUntil: 0, wrong: 0, last: 0, timer: 0, msg: '' };
+  const vaultEl = document.getElementById('vault');
+  const vaultDial = document.getElementById('vault-dial');
+  const vaultLamp = document.getElementById('vault-lamp');
+  const vaultSteps = document.getElementById('vault-steps');
+  const vaultInfo = document.getElementById('vault-info');
+  const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+  const vaultReq = i => (i % 2 === 0 ? 1 : -1);             // the direction you must be spinning when the light flashes
+  function renderVault() {
+    vaultDial.style.transform = 'rotate(' + vault.angle + 'deg)';
+    const lit = performance.now() < vault.litUntil;
+    vaultLamp.classList.toggle('on', lit);
+    vaultSteps.innerHTML = [0, 1, 2, 3].map(i => '<i class="' + (i < vault.step ? 'ok' : '') + '"></i>').join('');
+    vaultInfo.textContent = vault.msg || ('Spinning ' + (vault.dir > 0 ? 'right' : 'left') + '. Switch direction when the light flashes!  Misses: ' + vault.wrong);
+  }
+  function vaultTick() {
+    const now = performance.now(), dt = Math.min(0.1, (now - vault.last) / 1000); vault.last = now;
+    vault.angle = (vault.angle + vault.dir * 115 * dt + 360) % 360;
+    if (vault.dir === vaultReq(vault.step) && angDiff(vault.angle, vault.targets[vault.step]) < 12) vault.litUntil = now + 450;
+    renderVault();
+  }
+  function openVault() {
+    if (puzzle.open || machine.open || phase !== 'play') return;
+    if (!vault.targets.length) {
+      let t = [];
+      while (t.length < 4) { const a = Math.floor(Math.random() * 360); if (t.every(x => angDiff(x, a) > 50)) t.push(a); }
+      vault.targets = t; vault.angle = (t[0] + 180) % 360;
+    }
+    puzzle.open = true; puzzle.kind = 'vault'; aiming = false; mouseDown = false;
+    vaultEl.classList.remove('hidden');
+    vault.last = performance.now(); vault.msg = '';
+    clearInterval(vault.timer); vault.timer = setInterval(() => { if (puzzle.open && puzzle.kind === 'vault') vaultTick(); else clearInterval(vault.timer); }, 30);
+    renderVault();
+  }
+  function vaultKey(e) {
+    if (e.code === 'Escape' || e.code === 'KeyE') { closePuzzle(); return; }
+    const nd = (e.code === 'ArrowRight' || e.code === 'KeyD') ? 1 : (e.code === 'ArrowLeft' || e.code === 'KeyA') ? -1 : 0;
+    if (!nd || nd === vault.dir) return;
+    const lit = performance.now() < vault.litUntil;
+    vault.dir = nd;
+    if (lit && nd === -vaultReq(vault.step)) {                    // switched exactly on the flash
+      vault.step++; vault.litUntil = 0; vault.msg = '';
+      tone(700 + vault.step * 120, 0.08, 'square', 0.05);
+      if (vault.step >= 4) {
+        closePuzzle(); machine.open = true;
+        for (const [type, x, y, z] of LOC.loot) spawnItem(type, x, y, z);
+        tone(660, 0.1, 'square', 0.06); tone(880, 0.1, 'square', 0.06, 0.1); tone(1320, 0.25, 'square', 0.06, 0.2);
+        toast('CLICK-CLUNK! The vault case opens. Grab the Crown Jewel!', 2.8);
+        updateObjective();
+        return;
+      }
+    } else {                                                        // switched at the wrong moment
+      vault.wrong++; vault.step = 0; vault.msg = 'Wrong moment! The lock resets.';
+      tone(160, 0.2, 'sawtooth', 0.06);
+      setTimeout(() => { vault.msg = ''; }, 1500);
+    }
+    renderVault();
+  }
   // ---- the museum terminal: memorise the intercepted key, then type it
   const hack = { done: false, code: [], input: [], until: 0, wrong: 0, timer: 0 };
   const hackEl = document.getElementById('hack');
@@ -2198,7 +2259,8 @@
           hack.done = true; closePuzzle();
           LOC.hallDoor.open = true; const i = colliders.indexOf(LOC.hallDoor.col); if (i >= 0) colliders.splice(i, 1);
           tone(660, 0.1, 'square', 0.06); tone(880, 0.1, 'square', 0.06, 0.1); tone(1320, 0.25, 'square', 0.06, 0.2);
-          toast('ACCESS GRANTED. The hall shutter is opening!', 2.6);
+          toast('ACCESS GRANTED... but the hack tripped a silent alarm! The FBI is coming!', 3);
+          rushPolice(0);
           updateObjective();
           return;
         }
@@ -2280,7 +2342,7 @@
       }
     }
   }
-  function closePuzzle() { puzzle.open = false; puzzleEl.classList.add('hidden'); wiresEl.classList.add('hidden'); hackEl.classList.add('hidden'); }
+  function closePuzzle() { puzzle.open = false; puzzleEl.classList.add('hidden'); wiresEl.classList.add('hidden'); hackEl.classList.add('hidden'); vaultEl.classList.add('hidden'); }
   function puzzleKey(e) {
     if (e.code === 'Escape' || e.code === 'KeyE') { closePuzzle(); return; }
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') puzzle.cursor = (puzzle.cursor + 2) % 3;
@@ -2930,7 +2992,7 @@
     let p = '';
     if (it) p = '<b>E</b> &nbsp;Pick up ' + ITEM_TYPES[it.type].name + ' ($' + ITEM_TYPES[it.type].value.toLocaleString('en-US') + ')';
     if (phase === 'hq') { const sp = hqSpot(); if (sp) p = hqPrompt(sp); }
-    if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;' + (LOC.wires ? 'Reconnect the wires' : LOC.hack ? 'Crack the vault lock' : 'Crack the jackpot machine');
+    if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;' + (LOC.wires ? 'Reconnect the wires' : LOC.hack ? 'Spin the vault dial' : 'Crack the jackpot machine');
     if (phase === 'play' && LOC.lock && !LOC.lock.open && nearLock()) p = LOC.lock.t > 0 ? 'Picking the lock... ' + Math.round((1 - LOC.lock.t / LOCK_TIME) * 100) + '%' : (save.picks > 0 ? '<b>E</b> &nbsp;Pick the lock (uses 1 lockpick, you have ' + save.picks + ')' : 'Locked! You need a lockpick (buy them at the HQ)');
     if (!it && phase === 'play' && LOC.hack && !hack.done && !puzzle.open && nearTerminal()) p = '<b>E</b> &nbsp;Hack the security terminal';
     if (!it && phase === 'play' && nearLadder()) p = '<b>E</b> &nbsp;' + (player.pos.y > 9 ? 'Climb down the ladder' : 'Climb the ladder to the roof (then W / S)');
@@ -2949,7 +3011,7 @@
     document.querySelector('#overlay .tag').textContent = 'Today\'s job: ' + LOC.name + '. Hold up the ' + LOC.staff + ', grab the loot and escape in the getaway car. The police show up 30 seconds after the alarm goes off.';
   }
   if (LOC.id === 'jewel') {
-    document.querySelector('#overlay .tag').textContent = 'Today\'s job: The Crown Jewel. Hack the terminal, run the laser hall, crack the vault, take the crown, climb the ladder to the roof and fly out.';
+    document.querySelector('#overlay .tag').textContent = 'Today\'s job: The Crown Jewel. Hack the terminal (the FBI comes right after!), run the laser hall, spin the vault dial, take the crown, climb the ladder to the roof and fly out.';
   }
   if (LOC.id === 'factory') {
     document.querySelector('#overlay .tag').textContent = 'Today\'s job: The Factory. Take the staff door at the back, climb the stairs, pick the lock (1 lockpick), grab the goods and escape out the back door. Guards patrol the factory.';
@@ -2964,7 +3026,7 @@
       key(code, v) { keys[code] = v; },
       look(y, p) { yaw = y; pitch = p; },
       teleport(x, z, y) { player.pos.set(x, y || 0, z); player.vy = 0; },
-      get cols() { return colliders.filter(c => c.minZ < -24 && c.maxZ > -30 && c.maxX > 2 && c.minX < 12).map(c => [c.minX, c.maxX, c.minZ, c.maxZ].map(v => +v.toFixed(2))); }, lootGive(t) { const f = slots.findIndex(x => !x); if (f >= 0) { slots[f] = { type: t }; renderInventory(); } }, openHack, hackKey, hack, get done() { return save.done; }, get climbing() { return player.climb; }, openWires, wireKey, wires, get lasers() { return LOC.lasers && LOC.lasers.map(l => l.z); }, stepLasers(s) { for (let i = 0; i < s * 20; i++) updateLasers(0.05); }, stepLock(s) { for (let i = 0; i < s * 20; i++) updateLock(0.05); }, get lock() { return LOC.lock && { open: LOC.lock.open, t: LOC.lock.t }; }, get picks() { return save.picks; }, givePicks(n) { save.picks += n; renderCash(); }, get guards() { return cops.filter(c => c.guard).map(c => ({ hp: c.hp, dead: c.dead, active: c.active, pos: [c.pos.x, c.pos.y, c.pos.z] })); }, py() { return player.pos.y; },
+      get cols() { return colliders.filter(c => c.minZ < -24 && c.maxZ > -30 && c.maxX > 2 && c.minX < 12).map(c => [c.minX, c.maxX, c.minZ, c.maxZ].map(v => +v.toFixed(2))); }, lootGive(t) { const f = slots.findIndex(x => !x); if (f >= 0) { slots[f] = { type: t }; renderInventory(); } }, openVault, vaultKey, vault, openHack, hackKey, hack, get done() { return save.done; }, get climbing() { return player.climb; }, openWires, wireKey, wires, get lasers() { return LOC.lasers && LOC.lasers.map(l => l.z); }, stepLasers(s) { for (let i = 0; i < s * 20; i++) updateLasers(0.05); }, stepLock(s) { for (let i = 0; i < s * 20; i++) updateLock(0.05); }, get lock() { return LOC.lock && { open: LOC.lock.open, t: LOC.lock.t }; }, get picks() { return save.picks; }, givePicks(n) { save.picks += n; renderCash(); }, get guards() { return cops.filter(c => c.guard).map(c => ({ hp: c.hp, dead: c.dead, active: c.active, pos: [c.pos.x, c.pos.y, c.pos.z] })); }, py() { return player.pos.y; },
       aim(v) { aiming = v; },
       openStorage, openDress, dressPick, get hoodie() { return save.hoodie; }, storageClick, closeStorage, get stash() { return save.stash.slice(); },
       openPuzzle, puzzleKey, machine, puzzle, get clues() { return LOC.clues; }, get code() { return LOC.code; },

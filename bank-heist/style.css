@@ -342,3 +342,19 @@ html, body {
 #hack-bar { height: 8px; background: #0b2a16; border-radius: 4px; margin: 0 20px 8px; overflow: hidden; }
 #hack-bar i { display: block; height: 100%; width: 0; background: #5dff9a; }
 #choose .job.locked { opacity: .55; }
+
+/* ---------- museum vault dial ---------- */
+#vault { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 15; padding: 6px 12px; background: rgba(24, 20, 10, .95); border: 3px solid #ffd84a; border-radius: 12px; box-shadow: 0 0 40px rgba(255, 216, 74, .35); }
+#vault.hidden { display: none; }
+#vault h2 { margin: 0 0 6px; text-align: center; color: #ffd84a; letter-spacing: 3px; }
+#vault-wrap { position: relative; width: 240px; height: 240px; margin: 10px auto; }
+#vault-dial { position: absolute; inset: 0; border-radius: 50%; border: 6px solid #b8b8c0; box-shadow: inset 0 0 20px #000;
+  background: repeating-conic-gradient(#d8d8e0 0deg 1.5deg, #2a2a33 1.5deg 10deg); }
+#vault-dial::after { content: ""; position: absolute; inset: 34px; border-radius: 50%; background: radial-gradient(#4a4a55, #25252d); border: 4px solid #8a8a95; }
+#vault-dial::before { content: ""; position: absolute; left: 50%; top: 40px; width: 6px; height: 70px; margin-left: -3px; background: #ffd84a; border-radius: 3px; z-index: 2; }
+#vault-mark { position: absolute; left: 50%; top: -14px; margin-left: -10px; border: 10px solid transparent; border-top: 18px solid #ff4d4d; }
+#vault-lamp { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: #3a2a10; border: 3px solid #6b5520; z-index: 3; }
+#vault-lamp.on { background: #fff35c; box-shadow: 0 0 30px 10px #ffe94a; }
+#vault-steps { display: flex; gap: 10px; justify-content: center; }
+#vault-steps i { width: 22px; height: 22px; border-radius: 50%; background: #3a3a45; border: 2px solid #777; }
+#vault-steps i.ok { background: #5dff9a; border-color: #fff; box-shadow: 0 0 10px #5dff9a; }
