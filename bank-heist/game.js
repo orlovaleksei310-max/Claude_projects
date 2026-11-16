@@ -1234,7 +1234,7 @@
       if (!hack.done) t = alarm.on && !alarm.policeHere ? 'Alarm! Hack the security terminal on the west wall (E) before the police arrive!' : 'Hack the security terminal on the west wall (E) to open the hall shutter.';
       else if (!machine.open) t = (alarm.policeHere ? 'The FBI is here! ' : 'The FBI is on its way! ') + 'Run the laser hall (jump the low beams, slip through when the flashing ones are off), then spin the vault dial (E).';
       else if (!carrying) t = 'The case is open. Grab the Crown Jewel!';
-      else t = player.pos.y > 9 ? 'Get in the helicopter (E)!' : (alarm.policeHere ? 'The police are here! ' : '') + 'Climb the ladder on the east wall (E, then W) to the roof and board the helicopter.';
+      else t = player.pos.y > 9 ? 'Get in the helicopter (E)!' : (alarm.policeHere ? 'The police are here! ' : '') + 'Climb the ladder on the east wall (press E next to it) to the roof and board the helicopter.';
       objEl.textContent = t; return;
     }
     if (LOC.corridor) {
@@ -2037,7 +2037,7 @@
 
   const escape = { t: 0 };
   const LADDER = { x: 10.9, z: -22.2 };
-  const nearLadder = () => LOC.heli && Math.hypot(player.pos.x - LADDER.x, player.pos.z - LADDER.z) < 1.7 && !player.climb;
+  const nearLadder = () => LOC.heli && Math.hypot(player.pos.x - LADDER.x, player.pos.z - LADDER.z) < 2.4 && !player.climb;
   function nearCar() { return Math.hypot(getawayCar.position.x - player.pos.x, getawayCar.position.z - player.pos.z) < 3.6 && (!LOC.heli || player.pos.y > 9); }
 
   function enterCar() {
@@ -2070,7 +2070,7 @@
     if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { if (LOC.wires) openWires(); else if (LOC.hack) openVault(); else openPuzzle(); return; }
     if (LOC.lock && !LOC.lock.open && nearLock()) { startPick(); return; }
     if (LOC.hack && !hack.done && nearTerminal()) { openHack(); return; }
-    if (nearLadder() && !nearestItem()) { if (player.pos.y < 2) { player.climb = true; player.pos.set(LADDER.x, 0.05, LADDER.z); } else if (player.pos.y > 9) { player.climb = true; player.pos.set(LADDER.x, 10.6, LADDER.z); } return; }
+    if (nearLadder() && !nearestItem()) { if (player.pos.y < 2) { player.climb = true; player.climbDir = 1; player.pos.set(LADDER.x, 0.05, LADDER.z); } else if (player.pos.y > 9) { player.climb = true; player.climbDir = -1; player.pos.set(LADDER.x, 10.6, LADDER.z); } return; }
     if (!nearestItem() && nearCar()) { enterCar(); return; }
     tryPickup();
   }
@@ -2836,7 +2836,9 @@
 
     if (player.climb) {                                               // on the ladder: W up, S down
       player.vel.set(0, 0, 0); player.vy = 0; player.onGround = false;
-      player.pos.y += ((ctl && keys.KeyW ? 1 : 0) - (ctl && keys.KeyS ? 1 : 0)) * 3.2 * dt;
+      const goal = player.climbDir || 1;                              // climbs by itself toward the top (or bottom); the opposite key reverses
+      const kUp = ctl && (keys.KeyW || keys.ArrowUp), kDn = ctl && (keys.KeyS || keys.ArrowDown);
+      player.pos.y += (kUp ? 1 : kDn ? -1 : goal) * 3.2 * dt;
       player.pos.x = LADDER.x; player.pos.z = LADDER.z;
       if (player.pos.y <= 0) { player.pos.y = 0; player.climb = false; player.pos.x = LADDER.x - 1.1; }
       else if (player.pos.y >= 10.8) { player.climb = false; player.pos.set(9.2, 10.8, LADDER.z); player.onGround = true; toast('On the roof! Get to the helicopter.', 2); }
@@ -2995,7 +2997,7 @@
     if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;' + (LOC.wires ? 'Reconnect the wires' : LOC.hack ? 'Spin the vault dial' : 'Crack the jackpot machine');
     if (phase === 'play' && LOC.lock && !LOC.lock.open && nearLock()) p = LOC.lock.t > 0 ? 'Picking the lock... ' + Math.round((1 - LOC.lock.t / LOCK_TIME) * 100) + '%' : (save.picks > 0 ? '<b>E</b> &nbsp;Pick the lock (uses 1 lockpick, you have ' + save.picks + ')' : 'Locked! You need a lockpick (buy them at the HQ)');
     if (!it && phase === 'play' && LOC.hack && !hack.done && !puzzle.open && nearTerminal()) p = '<b>E</b> &nbsp;Hack the security terminal';
-    if (!it && phase === 'play' && nearLadder()) p = '<b>E</b> &nbsp;' + (player.pos.y > 9 ? 'Climb down the ladder' : 'Climb the ladder to the roof (then W / S)');
+    if (!it && phase === 'play' && nearLadder()) p = '<b>E</b> &nbsp;' + (player.pos.y > 9 ? 'Climb down the ladder' : 'Climb the ladder to the roof (W up, S down)');
     if (!it && phase === 'play' && nearCar()) p = '<b>E</b> &nbsp;' + (lootValue() > 0 ? (LOC.heli ? 'Get in the helicopter and escape!' : 'Get in the getaway car and escape!') : (LOC.heli ? 'Helicopter (grab the loot first)' : 'Getaway car (grab some money first)'));
     if (p !== lastPrompt) {
       lastPrompt = p;
