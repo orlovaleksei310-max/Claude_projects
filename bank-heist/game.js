@@ -159,6 +159,13 @@
       wall: 0x73767b, roof: 0x303236, trim: 0xb8b8b8, floor: ['#5a5c60', '#4b4d51'], counter: 0x3a3a3e,
       npc: { shirt: 0x2e4a3a, pants: 0x1d2a22 }, prison: true, loot: []
     },
+    mona: {
+      id: 'mona', name: 'The Mona Lisa', place: 'museum', staff: 'curator', tag: 'Needs the keycard from prison. Kill the guards, cross the brutal laser room (fixed, flashing and sweeping beams), take the Mona Lisa and run back out to the getaway car.',
+      sign: 'LOUVRE ANNEX', signBg: '#2a1a12', signFg: '#f2d9a0', signFont: 'Georgia, serif',
+      wall: 0xd8cdb4, roof: 0x4a3a30, trim: 0xb8893a, floor: ['#d9cfb8', '#a99b7e'], counter: 0x4a3520,
+      npc: { shirt: 0xf4f1ea, vest: 0x2a3a5b, pants: 0x23202b, tie: 0x2a3a5b }, gallery: true, mona: true,
+      loot: [['mona', 0, 1.45, -28.6]]
+    },
     casino: {
       id: 'casino', name: 'Golden Casino', place: 'casino', staff: 'dealer', tag: 'A black room full of gamblers. Crack the jackpot machine, but if the shooting starts the cops come in 10 seconds, then the FBI, wave after wave.',
       sign: 'GOLDEN CASINO', signBg: '#2a0f3d', signFg: '#ffd84a', signFont: 'Georgia, serif',
@@ -253,6 +260,49 @@
       warn.position.set(0, 3.2, -29.33); add(warn);
       addBox(14, 0.1, 6, mat(0x1a1d22), 0, -0.04, -45.5, { cast: false });
       light(0xff4040, 30, 0, 3, -36);
+    } else if (id === 'mona') {
+      const dark = mat(0x1a1620, { metalness: 0.4, roughness: 0.6 }), goldM = mat(0xb8893a, { metalness: 0.7, roughness: 0.35 }), marble = mat(0xf0ebe0, { roughness: 0.3 });
+      // gallery: pillars, benches, wall paintings
+      for (const x of [-5.5, 5.5]) addBox(1.0, 10, 1.0, mat(0xcfc4a8), x, 5, -18.4, { block: true, cam: true });
+      for (const x of [-8.5, 8.5]) addBox(2.6, 0.5, 0.7, mat(0x5a3b22), x, 0.25, -15.6, { block: true });
+      [[-11.33, 3.6, -17], [-11.33, 3.6, -20.5], [11.33, 3.6, -17], [11.33, 3.6, -20.5]].forEach(([x, y, z], i) => {
+        const ry = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+        addBox(0.08, 1.9, 2.6, goldM, x + (x < 0 ? 0.02 : -0.02), y, z, { aim: false });
+        const pic = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 1.6), new THREE.MeshBasicMaterial({ color: [0x3a5a8a, 0x8a4a3a, 0x4a7a5a, 0x7a5a8a][i] }));
+        pic.position.set(x + (x < 0 ? 0.07 : -0.07), y, z); pic.rotation.y = ry; scene.add(pic);
+      });
+      light(0xfff0d0, 40, -6, 8, -19); light(0xfff0d0, 40, 6, 8, -19);
+      // partition between the gallery and the laser room (doorway at x -1.5 .. 1.5)
+      addBox(9.9, 10, 0.3, mat(0x7a6a58), -6.45, 5, -22.6, { block: true, cam: true });
+      addBox(9.9, 10, 0.3, mat(0x7a6a58), 6.45, 5, -22.6, { block: true, cam: true });
+      addBox(3.0, 7.2, 0.3, mat(0x7a6a58), 0, 6.4, -22.6, { cam: true });
+      // the laser room: z -29.4 .. -22.9, dark with red light
+      addBox(22.6, 0.03, 6.5, mat(0x14121a, { metalness: 0.6, roughness: 0.4 }), 0, 0.04, -26.15, { aim: false, cast: false });
+      addBox(22.6, 10, 0.05, dark, 0, 5, -29.35, { aim: false });
+      light(0xff3030, 26, -6, 3, -26); light(0xff3030, 26, 6, 3, -26); light(0xff3030, 20, 0, 3, -28);
+      LOC.lasers = [];
+      const beamBox = (x, y, z, w, h, d) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glow(0xff2a2a)); b.position.set(x, y, z); scene.add(b); return b; };
+      for (const [z, kind, off] of [[-23.6, 'fast', 0], [-24.8, 'low', 0], [-26.0, 'fast', 0.9], [-27.2, 'low', 0]]) {
+        const ys = kind === 'low' ? [0.55] : [0.3, 0.8, 1.3, 1.8];
+        const meshes = ys.map(y => beamBox(0, y, z, 22.6, 0.07, 0.07));
+        for (const x of [-11.2, 11.2]) addBox(0.3, kind === 'low' ? 0.5 : 2.1, 0.3, steel, x, kind === 'low' ? 0.4 : 1.05, z, { aim: false });
+        LOC.lasers.push({ axis: 'room', z, kind, off, meshes, cd: 0 });
+      }
+      LOC.lasers.push({ axis: 'room', z: -28.1, kind: 'sweep', cx: 0, amp: 8.5, spd: 1.7, off: 0, meshes: [beamBox(0, 1.5, -28.1, 0.1, 3.0, 0.1)], cd: 0 });
+      // the Mona Lisa on a pedestal against the back wall
+      addBox(1.4, 1.0, 1.0, marble, 0, 0.5, -28.9, { block: true, cam: true });
+      addBox(1.2, 0.04, 0.8, goldM, 0, 1.02, -28.9, { aim: false });
+      light(0xfff2cc, 20, 0, 3.4, -27.6);
+      // the front gate: opens with the keycard
+      const barM = mat(0x24262a, { metalness: 0.7, roughness: 0.4 });
+      const gateG = new THREE.Group(); gateG.position.set(0, 0, -15.0); add(gateG);
+      for (let x = -2.1; x <= 2.11; x += 0.3) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.08, 3.4, 0.08), barM); b.position.set(x, 1.7, 0); gateG.add(b); }
+      for (const y of [0.1, 1.7, 3.35]) { const r = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.1, 0.1), barM); r.position.set(0, y, 0); gateG.add(r); }
+      const gateCol = { minX: -2.2, maxX: 2.2, minZ: -15.2, maxZ: -14.8 }; colliders.push(gateCol);
+      addBox(0.35, 0.6, 0.25, mat(0x15161a), 3.0, 1.3, -13.9, { aim: false });
+      const gateLamp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.05), new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
+      gateLamp.position.set(3.0, 1.45, -13.76); add(gateLamp);
+      LOC.monaGate = { g: gateG, col: gateCol, lamp: gateLamp, open: false, t: 0 };
     } else if (id === 'prison') {
       const conc = mat(0x7d7f84, { roughness: 0.95 }), barM = mat(0x24262a, { metalness: 0.7, roughness: 0.4 });
       const bedM = mat(0x8a8f96, { metalness: 0.4, roughness: 0.6 }), blanketM = mat(0x3d5a80), deskM = mat(0x4a4036);
@@ -583,7 +633,7 @@
     addBox(2.4, 0.1, 1.2, new THREE.MeshBasicMaterial({ color: 0xfff2cc }), x, 9.95, z, { cast: false, aim: false });
   }
 
-  if (!LOC.hallway && !LOC.prison) {
+  if (!LOC.hallway && !LOC.prison && !LOC.gallery) {
   addBox(14, 1.1, 1.2, LOC.counter ? mat(LOC.counter) : wood, -3, 0.55, -21, { block: true, cam: true });       // teller counter
   addBox(14.4, 0.1, 1.5, mat(0x2b2b2b, { roughness: 0.3 }), -3, 1.15, -21, { aim: true });
   }
@@ -608,7 +658,7 @@
       scene.add(spoke);
     }
   } else buildProps(LOC.id);
-  if (LOC.id !== 'casino' && LOC.id !== 'factory' && !LOC.prison) addBox(3, 1.0, 1.2, steel, 8.6, 0.5, -27.5, { block: true });               // table holding the gold
+  if (LOC.id !== 'casino' && LOC.id !== 'factory' && !LOC.prison && !LOC.gallery) addBox(3, 1.0, 1.2, steel, 8.6, 0.5, -27.5, { block: true });               // table holding the gold
 
   // Neighbouring buildings and skyline
   function windowTex(wallColor, rx, ry) {
@@ -761,6 +811,7 @@
     sniper:  { name: 'Sniper',   icon: '🎯', value: 0, half: 0 },
     rifle:   { name: 'Assault Rifle', icon: '🔥', value: 0, half: 0 },
     crown:   { name: 'Crown Jewel',   icon: '👑', value: 40000,  half: 0.3 },
+    mona:    { name: 'Mona Lisa',     icon: '\u{1F5BC}\uFE0F', value: 250000, half: 0.45 },
     gem:     { name: 'Diamond',       icon: '💎', value: 10000,  half: 0.2 }
   };
 
@@ -779,7 +830,7 @@
   const STASH_SIZE = 10;
   const HOODIES = { grey: { name: 'Original', hex: 0x2d2f36 }, red: { name: 'Red', hex: 0xd32f2f }, blue: { name: 'Blue', hex: 0x2f6fe0 }, yellow: { name: 'Yellow', hex: 0xf2c211 }, pink: { name: 'Pink', hex: 0xff6fb5 }, purple: { name: 'Purple', hex: 0x8e44d0 }, green: { name: 'Green', hex: 0x2fb84f } };
   const HOODIE_PRICE = 30000;
-  let save = { cash: 0, owned: ['pistol'], carry: ['pistol'], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false, picks: 0, hoodie: 'grey', wardrobe: [], done: {}, jail: false, v: 2 };
+  let save = { cash: 0, owned: ['pistol'], carry: ['pistol'], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false, picks: 0, hoodie: 'grey', wardrobe: [], done: {}, jail: false, keycard: false, v: 2 };
   try {
     const s0 = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s0 && typeof s0.cash === 'number') {
@@ -793,7 +844,7 @@
       owned.forEach(t => { if (!carry.includes(t) && !st.includes(t)) st.push(t); });          // anything owned but not carried is stored
       st = st.slice(0, STASH_SIZE);
       save = { cash: s0.cash, owned, carry, stash: st.concat(new Array(STASH_SIZE - st.length).fill(null)), heists: s0.heists || 0, next: LOCS[s0.next] ? s0.next : 'bank', go: !!s0.go, picks: Math.max(0, s0.picks | 0), hoodie: HOODIES[s0.hoodie] ? s0.hoodie : 'grey', wardrobe: Array.isArray(s0.wardrobe) ? s0.wardrobe.filter(k => HOODIES[k]) : [], done: Object.assign({}, s0.done), v: 2 };
-      save.jail = !!s0.jail;
+      save.jail = !!s0.jail; save.keycard = !!s0.keycard;
     }
   } catch (err) { /* storage can be blocked */ }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (err) { /* ignore */ } }
@@ -839,6 +890,23 @@
       }
       const ruby = new THREE.Mesh(new THREE.OctahedronGeometry(0.07), new THREE.MeshBasicMaterial({ color: 0xff2a55 }));
       ruby.position.set(0, 0.02, 0.26); g.add(ruby);
+    } else if (type === 'mona') {
+      const frameM = mat(0xb8893a, { metalness: 0.7, roughness: 0.35 });
+      const fr = new THREE.Mesh(new THREE.BoxGeometry(0.78, 1.0, 0.07), frameM); g.add(fr);
+      const tex = canvasTex(120, 160, (c, w, h) => {
+        const sky = c.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#8aa27a'); sky.addColorStop(1, '#4a5a3a');
+        c.fillStyle = sky; c.fillRect(0, 0, w, h);
+        c.fillStyle = '#3a4a3a'; c.beginPath(); c.moveTo(0, 70); c.quadraticCurveTo(40, 50, 70, 75); c.quadraticCurveTo(100, 55, w, 70); c.lineTo(w, 100); c.lineTo(0, 100); c.fill();
+        c.fillStyle = '#2a1c10'; c.beginPath(); c.ellipse(w / 2, 62, 26, 34, 0, 0, Math.PI * 2); c.fill();           // hair
+        c.fillStyle = '#e0b98a'; c.beginPath(); c.ellipse(w / 2, 62, 17, 23, 0, 0, Math.PI * 2); c.fill();           // face
+        c.fillStyle = '#1c1c22'; c.beginPath(); c.moveTo(25, h); c.quadraticCurveTo(w / 2, 80, w - 25, h); c.fill();   // dress
+        c.fillStyle = '#e0b98a'; c.fillRect(w / 2 - 6, 82, 12, 12);
+        c.fillStyle = '#3a2a1a'; c.fillRect(w / 2 - 9, 56, 5, 2); c.fillRect(w / 2 + 4, 56, 5, 2);
+        c.strokeStyle = '#8a4a3a'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(w / 2 - 6, 72); c.quadraticCurveTo(w / 2, 75, w / 2 + 6, 72); c.stroke();
+      });
+      const pic = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.84), new THREE.MeshBasicMaterial({ map: tex }));
+      pic.position.z = 0.04; g.add(pic);
+      const back = pic.clone(); back.rotation.y = Math.PI; back.position.z = -0.04; g.add(back);
     } else if (type === 'gem') {
       const d = new THREE.Mesh(new THREE.OctahedronGeometry(0.2), new THREE.MeshStandardMaterial({ color: 0xbff4ff, emissive: 0x2a8aa8, metalness: 0.2, roughness: 0.05 }));
       d.scale.y = 1.3; g.add(d);
@@ -1280,6 +1348,13 @@
         : 'Sneak up behind a guard (outside his view) and pick his pocket (E) for a keycard. Two of them carry one.';
       objEl.textContent = t; return;
     }
+    if (LOC.mona) {
+      const wd = cops.some(c => c.guard && !c.dead);
+      t = !LOC.monaGate.open ? 'Use your keycard on the reader at the front door (E).'
+        : carrying ? 'You have the Mona Lisa! Cross the lasers again and run to the getaway car!'
+        : (alarm.policeHere ? 'The police are here! ' : '') + (wd ? 'Deal with the guards, then cross the laser room: jump the low beams, wait out the flashing ones, time the sweeping beam. ' : 'Cross the laser room: jump the low beams, wait out the flashing ones, time the sweeping beam. ') + 'Take the Mona Lisa.';
+      objEl.textContent = t; return;
+    }
     const locked = LOC.vault && !machine.open;
     if (LOC.lock) {
       const left = cops.some(c => c.guard && !c.dead);
@@ -1583,6 +1658,7 @@
   }
 
   function onLootTaken() {
+    if (LOC.mona && teller.state === 'working') { alertTeller('theft'); return; }
     if (teller.state === 'working' && hasLOS(tellerEye(), playerEye())) alertTeller('theft');
   }
 
@@ -1808,6 +1884,13 @@
     spawnGuard(7.2, 4.4, -28.0, null, Math.PI / 2);        // and one inside the vault
   }
 
+  if (LOC.mona) {
+    spawnGuard(-9, 0, -20.2, [[-9, -20.2], [-3, -20.2]], -Math.PI / 2);
+    spawnGuard(9, 0, -20.2, [[9, -20.2], [3, -20.2]], Math.PI / 2);
+    spawnGuard(-9, 0, -16.6, [[-9, -16.6], [9, -16.6]], -Math.PI / 2);
+    spawnGuard(-2.6, 0, -21.6, null, Math.PI);
+    spawnGuard(2.6, 0, -21.6, null, Math.PI);
+  }
   if (LOC.prison) {
     spawnGuard(-8, 0, -22.5, [[-8, -22.5], [8, -22.5]], -Math.PI / 2);                 // patrols in front of the cells
     spawnGuard(-9.5, 0, -17.2, [[-9.5, -17.2], [-4.6, -17.2]], -Math.PI / 2).card = true;   // patrols the west side
@@ -2146,7 +2229,25 @@
       }
     }
     if (ps.gate.open && ps.gate.t < 1) { ps.gate.t = Math.min(1, ps.gate.t + dt * 0.7); ps.gate.g.position.y = ps.gate.t * 3.6; }
-    if (ps.gate.open && phase === 'play' && player.pos.z > -13.2) { save.jail = false; persist(); endGame(true, 'prison'); }
+    if (ps.gate.open && phase === 'play' && player.pos.z > -13.2) { save.jail = false; save.keycard = true; persist(); renderCash(); endGame(true, 'prison'); }
+  }
+
+  // ---- museum front gate (needs the keycard from prison)
+  const nearMonaGate = () => LOC.mona && !LOC.monaGate.open && Math.hypot(player.pos.x, player.pos.z + 14.6) < 3.0;
+  function monaGateInteract() {
+    const g = LOC.monaGate;
+    if (!nearMonaGate()) return false;
+    if (!save.keycard) { toast('The reader wants a keycard. Get one in prison!', 2.4); tone(150, 0.1, 'square', 0.05); return true; }
+    g.open = true; g.lamp.material.color.setHex(0x39ff7a);
+    const i = colliders.indexOf(g.col); if (i >= 0) colliders.splice(i, 1);
+    toast('BEEP! The keycard works. The gate opens.', 2.4); tone(660, 0.1, 'square', 0.05); tone(990, 0.15, 'square', 0.05, 0.1);
+    updateObjective();
+    return true;
+  }
+  function updateMonaGate(dt) {
+    const g = LOC.monaGate;
+    if (!g) return;
+    if (g.open && g.t < 1) { g.t = Math.min(1, g.t + dt * 0.7); g.g.position.y = g.t * 3.6; }
   }
 
   // ---- the getaway car
@@ -2192,6 +2293,7 @@
     if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { if (LOC.wires) openWires(); else if (LOC.hack) openVault(); else openPuzzle(); return; }
     if (LOC.lock && !LOC.lock.open && nearLock()) { startPick(); return; }
     if (LOC.prison && prisonInteract()) return;
+    if (LOC.mona && monaGateInteract()) return;
     if (LOC.hack && !hack.done && nearTerminal()) { openHack(); return; }
     if (nearLadder() && !nearestItem()) { if (player.pos.y < 2) { player.climb = true; player.climbDir = 1; player.pos.set(LADDER.x, 0.05, LADDER.z); } else if (player.pos.y > 9) { player.climb = true; player.climbDir = -1; player.pos.set(LADDER.x, 10.6, LADDER.z); } return; }
     if (!nearestItem() && nearCar()) { enterCar(); return; }
@@ -2209,7 +2311,7 @@
     const lines = [];
     if (won && why === 'prison') {
       lines.push('You broke out of prison and you are a free man again!');
-      lines.push('Your weapons are waiting for you at the HQ.');
+      lines.push('Your weapons are waiting for you at the HQ. You also kept the <b>keycard</b>!');
     } else if (won) {
       lines.push('You escaped with <b>$' + carried.toLocaleString('en-US') + '</b>');
       lines.push(alarm.policeHere ? 'The police showed up, but you made it out anyway.' : 'Clean getaway: you left before the police arrived.');
@@ -2239,6 +2341,7 @@
       updatePolice(dt);
       updateLock(dt);
       updatePrison(dt);
+      updateMonaGate(dt);
       if (LOC.heli) { const sp = phase === 'escaping' ? 32 : 5; getawayCar.userData.rotor.rotation.y += sp * dt; getawayCar.userData.tail.rotation.z += sp * dt; }
       updateLasers(dt);
       if (hp < PLAYER_HP && time - lastHurt > 6) { hp = Math.min(PLAYER_HP, hp + 2.5 * dt); renderHp(); }
@@ -2458,16 +2561,21 @@
     if (!LOC.lasers) return;
     for (const L of LOC.lasers) {
       L.cd = Math.max(0, L.cd - dt);
-      const blink = L.kind === 'blink';
-      const on = blink ? ((time + (L.off || 0)) % 2.8) < 1.5 : true;
+      const tall = L.kind === 'blink' || L.kind === 'fast';
+      let on = true, bx = 0;
+      if (L.kind === 'blink') on = ((time + (L.off || 0)) % 2.8) < 1.5;
+      else if (L.kind === 'fast') on = ((time + (L.off || 0)) % 1.8) < 0.8;
+      else if (L.kind === 'sweep') { bx = L.cx + L.amp * Math.sin(time * L.spd + (L.off || 0)); L.meshes[0].position.x = bx; }
       for (const m of (L.meshes || [L.mesh])) { m.visible = on; m.material.color.setHex(L.cd > 0 ? 0xffffff : 0xff2a2a); }
       if (phase !== 'play' || L.cd > 0 || !on) continue;
       let hit;
-      if (L.axis === 'x') hit = Math.abs(player.pos.x - L.x) < 0.3 && player.pos.z < -26.0 && player.pos.z > -29.4 && player.pos.y < (blink ? 2.0 : 0.6);
+      if (L.axis === 'x') hit = Math.abs(player.pos.x - L.x) < 0.3 && player.pos.z < -26.0 && player.pos.z > -29.4 && player.pos.y < (tall ? 2.0 : 0.6);
+      else if (L.axis === 'room') hit = L.kind === 'sweep' ? (Math.abs(player.pos.z - L.z) < 0.3 && Math.abs(player.pos.x - bx) < 0.45 && player.pos.y < 2.8)
+        : (Math.abs(player.pos.z - L.z) < 0.3 && player.pos.y < (tall ? 2.0 : 0.6));
       else hit = Math.abs(player.pos.x) < 1.65 && Math.abs(player.pos.z - L.z) < 0.3 && player.pos.y < 0.6;
       if (hit) {
         L.cd = 1.3;
-        hurt(50); toast(blink ? 'LASER! -50 HP. Wait for the flashing beams to switch off.' : 'LASER! -50 HP. Jump over them!', 1.6);
+        hurt(50); toast(L.kind === 'sweep' ? 'LASER! -50 HP. Time it between the sweeping beam!' : tall ? 'LASER! -50 HP. Wait for the flashing beams to switch off.' : 'LASER! -50 HP. Jump over them!', 1.6);
         tone(1100, 0.15, 'sawtooth', 0.07);
       }
     }
@@ -2668,7 +2776,7 @@
   const cashEl = document.getElementById('cash');
   const scopeEl = document.getElementById('scope');
   function renderCash() {
-    cashEl.textContent = 'CASH ' + money$(save.cash) + (save.picks > 0 ? '   \u{1F511} x' + save.picks : '');
+    cashEl.textContent = 'CASH ' + money$(save.cash) + (save.picks > 0 ? '   \u{1F511} x' + save.picks : '') + (save.keycard ? '   \u{1F4B3} KEYCARD' : '');
     lootEl.style.display = phase === 'hq' ? 'none' : '';
   }
   renderCash();
@@ -2878,6 +2986,7 @@
     const ids = ['power', 'factory', 'casino'];
     if (save.heists >= 2) ids.push('bank');          // once you are a veteran the bank is back on the list
     ids.push('jewel');
+    ids.push('mona');
     return ids;
   }
   function openChoose() {
@@ -2888,8 +2997,8 @@
       const L = LOCS[id];
       const total = L.loot.reduce((sum, l) => sum + ITEM_TYPES[l[0]].value, 0);
       const b = document.createElement('button');
-      b.className = 'job' + (id === 'jewel' && jewelLeft().length ? ' locked' : ''); b.dataset.id = id;
-      b.innerHTML = '<span class="k">' + (i + 1) + '</span><span class="n">' + L.name + '</span><span class="t">' + L.tag + '</span><span class="v">Loot on site: ' + money$(total) + (id === 'jewel' && jewelLeft().length ? ' &nbsp;&middot;&nbsp; <b style="color:#ff6b6b">LOCKED: still to do: ' + jewelLeft().map(k => LOCS[k].name).join(', ') + '</b>' : '') + (id === 'factory' ? ' &nbsp;&middot;&nbsp; <b style="color:' + (save.picks > 0 ? '#5dff9a' : '#ff6b6b') + '">needs a lockpick (you have ' + save.picks + ')</b>' : '') + '</span>';
+      b.className = 'job' + ((id === 'jewel' && jewelLeft().length) || (id === 'mona' && !save.keycard) ? ' locked' : ''); b.dataset.id = id;
+      b.innerHTML = '<span class="k">' + (i + 1) + '</span><span class="n">' + L.name + '</span><span class="t">' + L.tag + '</span><span class="v">Loot on site: ' + money$(total) + (id === 'jewel' && jewelLeft().length ? ' &nbsp;&middot;&nbsp; <b style="color:#ff6b6b">LOCKED: still to do: ' + jewelLeft().map(k => LOCS[k].name).join(', ') + '</b>' : '') + (id === 'mona' && !save.keycard ? ' &nbsp;&middot;&nbsp; <b style="color:#ff6b6b">LOCKED: needs the prison keycard (get arrested, pickpocket a guard, break out)</b>' : '') + (id === 'factory' ? ' &nbsp;&middot;&nbsp; <b style="color:' + (save.picks > 0 ? '#5dff9a' : '#ff6b6b') + '">needs a lockpick (you have ' + save.picks + ')</b>' : '') + '</span>';
       b.addEventListener('click', () => pickJob(id));
       chooseList.appendChild(b);
     });
@@ -2908,6 +3017,7 @@
   function pickJob(id) {
     if (phase !== 'choosing' || !LOCS[id]) return;
     if (id === 'jewel' && jewelLeft().length) { toast('Locked! Finish the Bank, Power Plant, Factory and Casino first.'); tone(150, 0.15, 'square', 0.05); return; }
+    if (id === 'mona' && !save.keycard) { toast('Locked! You need the prison keycard: get arrested, pickpocket a guard and break out.'); tone(150, 0.15, 'square', 0.05); return; }
     if (id === 'factory' && save.picks < 1) { toast('The Factory needs a lockpick! Buy one at the dealer (' + money$(PICK_PRICE) + ').'); tone(150, 0.15, 'square', 0.05); return; }
     phase = 'leaving';
     save.next = id; save.go = true;      // the next page load starts this heist
@@ -3127,6 +3237,7 @@
     if (phase === 'hq') { const sp = hqSpot(); if (sp) p = hqPrompt(sp); }
     if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;' + (LOC.wires ? 'Reconnect the wires' : LOC.hack ? 'Spin the vault dial' : 'Crack the jackpot machine');
     if (phase === 'play' && LOC.lock && !LOC.lock.open && nearLock()) p = LOC.lock.t > 0 ? 'Picking the lock... ' + Math.round((1 - LOC.lock.t / LOCK_TIME) * 100) + '%' : (LOC.lock.free ? '<b>E</b> &nbsp;Pick the cell lock (with the pin hidden in your sock)' : save.picks > 0 ? '<b>E</b> &nbsp;Pick the lock (uses 1 lockpick, you have ' + save.picks + ')' : 'Locked! You need a lockpick (buy them at the HQ)');
+    if (phase === 'play' && nearMonaGate()) p = save.keycard ? '<b>E</b> &nbsp;Use the keycard on the reader' : 'Keycard reader: you need a keycard (get one in prison).';
     if (phase === 'play' && LOC.prison && !(LOC.lock && !LOC.lock.open && nearLock())) {
       const g = ppTarget();
       if (pp.c) p = 'Picking his pocket... ' + Math.round((1 - pp.t / PP_TIME) * 100) + '%';
@@ -3149,6 +3260,7 @@
   if (LOC.id !== 'bank') {
     document.querySelector('#overlay .tag').textContent = 'Today\'s job: ' + LOC.name + '. Hold up the ' + LOC.staff + ', grab the loot and escape in the getaway car. The police show up 30 seconds after the alarm goes off.';
   }
+  if (LOC.mona) document.querySelector('#overlay .tag').textContent = 'Today\'s job: The Mona Lisa. Use your keycard at the front gate, kill the guards, cross the brutal laser room, take the painting and run back to the getaway car.';
   if (LOC.prison) document.querySelector('#overlay .tag').textContent = 'You are in PRISON. Pick the lock of your cell (E), sneak up behind a guard and pick his pocket (E) for a keycard, open the main gate at the front and run. The guards shoot on sight and took your weapons!';
   if (LOC.id === 'jewel') {
     document.querySelector('#overlay .tag').textContent = 'Today\'s job: The Crown Jewel. Hack the terminal (the FBI comes right after!), run the laser hall, spin the vault dial, take the crown, climb the ladder to the roof and fly out.';
@@ -3174,7 +3286,7 @@
       shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
       alert() { alertTeller('gun'); },
       skipAlarm(s) { alarm.t += s; }, stepPolice(s) { for (let i = 0; i < s * 20; i++) { time += 0.05; alarm.t += 0.05; updatePolice(0.05); } },
-      get prison() { return LOC.prison ? { card: LOC.prisonState.card, gate: LOC.prisonState.gate.open, lock: LOC.lock.open, pp: !!pp.c, guards: cops.map(c => [+c.pos.x.toFixed(1), +c.pos.z.toFixed(1), !!c.card, !!c.active, !!c.picked]) } : null; }, rush() { rushPolice(); }, killCops() { for (const c of cops) if (!c.dead) damageCop(c, c.pos.clone().setY(1), UP, 9999); }, get gamblers() { return gamblers.map(g => ({ hp: g.hp, dead: g.dead, pos: [g.pos.x, g.pos.z] })); }, get wave() { return { n: wave.n, driving: wave.driving, kind: wave.stats && wave.stats.kind, cars: wave.cars.length, delay: alarm.delay, t: alarm.t }; },
+      get prison() { return LOC.prison ? { card: LOC.prisonState.card, gate: LOC.prisonState.gate.open, lock: LOC.lock.open, pp: !!pp.c, guards: cops.map(c => [+c.pos.x.toFixed(1), +c.pos.z.toFixed(1), !!c.card, !!c.active, !!c.picked]) } : null; }, get monaGate() { return LOC.monaGate && LOC.monaGate.open; }, get keycard() { return save.keycard; }, rush() { rushPolice(); }, killCops() { for (const c of cops) if (!c.dead) damageCop(c, c.pos.clone().setY(1), UP, 9999); }, get gamblers() { return gamblers.map(g => ({ hp: g.hp, dead: g.dead, pos: [g.pos.x, g.pos.z] })); }, get wave() { return { n: wave.n, driving: wave.driving, kind: wave.stats && wave.stats.kind, cars: wave.cars.length, delay: alarm.delay, t: alarm.t }; },
       copsInfo() { return cops.map(c => ({ hp: c.hp, dead: c.dead, pos: [+c.pos.x.toFixed(1), +c.pos.z.toFixed(1)], los: c.los })); },
       get info() {
         return { pos: player.pos.toArray(), slots: slots.map(s => s && s.type), selected, activeW, cash: save.cash, owned: save.owned.slice(), mag: gun.mag, reserve: gun.reserve, hits, items: worldItems.length, decals: decals.length, loot: lootValue(), camera: camera.position.toArray(), phase, hp: Math.round(hp), alarm: { on: alarm.on, t: +alarm.t.toFixed(1), here: alarm.policeHere }, teller: teller.state, cops: cops.filter(c => !c.dead).length, kills };
