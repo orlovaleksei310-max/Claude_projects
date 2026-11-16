@@ -16,7 +16,7 @@ A growing collection of small games that run right in the browser. No build step
 - The teller is unarmed and can't be hurt.
 - Pick up loot, then walk to the getaway car (parked outside the bank) and press E to escape. You need at least some loot to leave.
 - Escaping teleports you to the **HQ**. Your loot is sold for cash, and cash and the guns you own are saved in your browser between heists.
-- At the HQ, walk up to a pedestal and press E to buy a gun. Guns you carry take up inventory slots, so carrying more guns leaves less room for loot. The gun storage unit on the right wall of the HQ has 10 slots: press E there and click a gun to move it between your inventory and storage. You can store any gun, including the pistol. Everything is saved between heists. Lockpicks ($5,000 each, one use) are sold at the dealer's counter (E). Step onto the green circle to choose your next heist; the Factory needs at least one lockpick. Once you have finished a heist, the game always opens at the HQ (also after you get busted or refresh), and only picking a job there starts the next heist.
+- At the HQ, walk up to a pedestal and press E to buy a gun. Guns you carry take up inventory slots, so carrying more guns leaves less room for loot. The gun storage unit on the right wall of the HQ has 10 slots: press E there and click a gun to move it between your inventory and storage. You can store any gun, including the pistol. Everything is saved between heists. Lockpicks ($5,000 each, one use) are sold at the dealer's counter (E). The dressing room on the left wall (E) sells hoodie colours (red, blue, yellow, pink, purple, green) for $30,000 each; once bought you can switch freely and it is saved. Step onto the green circle to choose your next heist; the Factory needs at least one lockpick. Once you have finished a heist, the game always opens at the HQ (also after you get busted or refresh), and only picking a job there starts the next heist.
 
 ### Heist locations
 
@@ -31,7 +31,7 @@ After your first heist, stepping onto the green circle at the HQ opens a list of
 | Weapon | Price | Damage | Magazine | Fire |
 |--------|-------|--------|----------|------|
 | Pistol | free | 5 | 12 | semi-auto |
-| Knife | $125,000 | 25 (melee, short range) | none | click to stab |
+| Knife | $125,000 | 100 (melee, short range) | none | click to stab |
 | Shotgun | $25,000 | 8 pellets x 6 | 6 | pump |
 | Sniper | $100,000 | 100 to the head, 25 to the body | 5 | bolt, right click zooms |
 | Assault Rifle | $175,000 | 12 | 30 | full auto (hold left click) |

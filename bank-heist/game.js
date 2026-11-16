@@ -609,7 +609,7 @@
     pistol:  { name: 'Pistol',        price: 0,      dmg: 5,  pellets: 1, spread: 0,     size: 12, reserve: 60,  cd: 0.2,  auto: false, reload: 1.3, fov: 52, dist: 2.5, snd: 1.0, mz: -0.36, kick: 0.012 },
     shotgun: { name: 'Shotgun',       price: 25000,  dmg: 6,  pellets: 8, spread: 0.055, size: 6,  reserve: 30,  cd: 0.85, auto: false, reload: 2.0, fov: 50, dist: 2.5, snd: 1.6, mz: -0.84, kick: 0.05 },
     sniper:  { name: 'Sniper',        price: 100000, dmg: 25, headDmg: 100, pellets: 1, spread: 0,     size: 5,  reserve: 20,  cd: 1.3,  auto: false, reload: 2.4, fov: 18, dist: 2.0, snd: 1.8, mz: -1.08, kick: 0.07 },
-    knife:   { name: 'Knife',         price: 125000,  dmg: 25, pellets: 1, spread: 0,     size: 0,  reserve: 0,   cd: 0.5,  auto: false, reload: 0,   fov: 58, dist: 2.8, snd: 0.5, mz: -0.3,  kick: 0.0,  melee: true, range: 2.6 },
+    knife:   { name: 'Knife',         price: 125000,  dmg: 100, pellets: 1, spread: 0,     size: 0,  reserve: 0,   cd: 0.5,  auto: false, reload: 0,   fov: 58, dist: 2.8, snd: 0.5, mz: -0.3,  kick: 0.0,  melee: true, range: 2.6 },
     rifle:   { name: 'Assault Rifle', price: 175000, dmg: 12, pellets: 1, spread: 0.009, size: 30, reserve: 150, cd: 0.1,  auto: true,  reload: 1.9, fov: 50, dist: 2.5, snd: 0.8, mz: -0.8,  kick: 0.016 }
   };
   const SHOP_WEAPONS = ['knife', 'shotgun', 'sniper', 'rifle'];
@@ -617,7 +617,9 @@
   // Progress that survives between heists (cash and the guns you own)
   const SAVE_KEY = 'bankheist-save-v1';
   const STASH_SIZE = 10;
-  let save = { cash: 0, owned: ['pistol'], carry: ['pistol'], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false, picks: 0, v: 2 };
+  const HOODIES = { grey: { name: 'Original', hex: 0x2d2f36 }, red: { name: 'Red', hex: 0xd32f2f }, blue: { name: 'Blue', hex: 0x2f6fe0 }, yellow: { name: 'Yellow', hex: 0xf2c211 }, pink: { name: 'Pink', hex: 0xff6fb5 }, purple: { name: 'Purple', hex: 0x8e44d0 }, green: { name: 'Green', hex: 0x2fb84f } };
+  const HOODIE_PRICE = 30000;
+  let save = { cash: 0, owned: ['pistol'], carry: ['pistol'], stash: new Array(STASH_SIZE).fill(null), heists: 0, next: 'bank', go: false, picks: 0, hoodie: 'grey', wardrobe: [], v: 2 };
   try {
     const s0 = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s0 && typeof s0.cash === 'number') {
@@ -630,7 +632,7 @@
       let st = (Array.isArray(s0.stash) ? s0.stash : []).filter(t => WEAPONS[t] && owned.includes(t) && !carry.includes(t));
       owned.forEach(t => { if (!carry.includes(t) && !st.includes(t)) st.push(t); });          // anything owned but not carried is stored
       st = st.slice(0, STASH_SIZE);
-      save = { cash: s0.cash, owned, carry, stash: st.concat(new Array(STASH_SIZE - st.length).fill(null)), heists: s0.heists || 0, next: LOCS[s0.next] ? s0.next : 'bank', go: !!s0.go, picks: Math.max(0, s0.picks | 0), v: 2 };
+      save = { cash: s0.cash, owned, carry, stash: st.concat(new Array(STASH_SIZE - st.length).fill(null)), heists: s0.heists || 0, next: LOCS[s0.next] ? s0.next : 'bank', go: !!s0.go, picks: Math.max(0, s0.picks | 0), hoodie: HOODIES[s0.hoodie] ? s0.hoodie : 'grey', wardrobe: Array.isArray(s0.wardrobe) ? s0.wardrobe.filter(k => HOODIES[k]) : [], v: 2 };
     }
   } catch (err) { /* storage can be blocked */ }
   function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (err) { /* ignore */ } }
@@ -801,7 +803,7 @@
   // ------------------------------------------------------------ the player
   function buildPlayer() {
     const g = new THREE.Group();
-    const skin = mat(0xe0b48f), hoodie = mat(0x2d2f36), jeans = mat(0x1d2a44), black = mat(0x0c0c0e), shoe = mat(0x15151a);
+    const skin = mat(0xe0b48f), hoodie = mat(HOODIES[save.hoodie].hex), jeans = mat(0x1d2a44), black = mat(0x0c0c0e), shoe = mat(0x15151a);
 
     const legs = [-1, 1].map(s => {
       const piv = new THREE.Group(); piv.position.set(s * 0.14, 0.88, 0);
@@ -853,7 +855,7 @@
 
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     scene.add(g);
-    return { group: g, legs, armL, armR, head, torso, gun, guns, muzzle, flash, flashLight, heldMoney, heldGold };
+    return { group: g, hoodie, legs, armL, armR, head, torso, gun, guns, muzzle, flash, flashLight, heldMoney, heldGold };
   }
 
   // A gun model built along the -Y axis (so it points forward when the arm is raised); +Z side is the underside.
@@ -2151,6 +2153,24 @@
       addBox(0.9, 0.08, 0.3, new THREE.MeshBasicMaterial({ color: col }), x, 4.55, z, { cast: false, aim: false });
     });
 
+    // dressing room on the left wall: mirror, clothes rack and a sign
+    addBox(0.12, 2.3, 1.9, mat(0x9fc4d6, { metalness: 0.9, roughness: 0.08 }), HX - 11.92, 1.4, 0.2, { aim: false });
+    addBox(0.16, 2.5, 0.1, woodM, HX - 11.9, 1.4, -0.8, { aim: false }); addBox(0.16, 2.5, 0.1, woodM, HX - 11.9, 1.4, 1.2, { aim: false });
+    addBox(0.16, 0.1, 2.1, woodM, HX - 11.9, 2.65, 0.2, { aim: false }); addBox(0.16, 0.1, 2.1, woodM, HX - 11.9, 0.15, 0.2, { aim: false });
+    addBox(0.08, 0.08, 4.6, mat(0x777b82, { metalness: 0.7, roughness: 0.4 }), HX - 10.4, 2.3, 0.2, { aim: false });
+    [0xd32f2f, 0x2f6fe0, 0xf2c211, 0xff6fb5, 0x8e44d0, 0x2fb84f].forEach((c, i) => {
+      addBox(0.28, 0.75, 0.7, mat(c), HX - 10.4, 1.88, -1.75 + i * 0.75 + 0.2, { aim: false });
+    });
+    const rugD = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 5), mat(0x2b2f4a, { roughness: 0.95 }));
+    rugD.rotation.x = -Math.PI / 2; rugD.position.set(HX - 10, 0.03, 0.2); scene.add(rugD);
+    const dTex = canvasTex(512, 128, (c, w, h) => {
+      c.fillStyle = '#0c0a12'; c.fillRect(0, 0, w, h); c.strokeStyle = '#c77bff'; c.lineWidth = 6; c.strokeRect(6, 6, w - 12, h - 12);
+      c.fillStyle = '#e7c2ff'; c.font = 'bold 50px "Segoe UI", Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('DRESSING ROOM', w / 2, h / 2 + 3);
+    });
+    const dSign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: dTex }));
+    dSign.position.set(HX - 11.96, 3.65, 0.2); dSign.rotation.y = Math.PI / 2; scene.add(dSign);
+    { const l = new THREE.PointLight(0xe0b0ff, 18, 0, 2); l.position.set(HX - 9.5, 3.4, 0.2); scene.add(l); }
+
     // neon title
     const neon = canvasTex(1024, 160, (c, w, h) => {
       c.fillStyle = '#0c0a12'; c.fillRect(0, 0, w, h);
@@ -2305,6 +2325,7 @@
       if (d < bd) { bd = d; best = { kind: 'weapon', type: t }; }
     });
     if (!best && Math.hypot(player.pos.x - (HX + 6.5), player.pos.z + 6.0) < 2.8) best = { kind: 'pick' };
+    if (!best && player.pos.x < HX - 8.2 && player.pos.z > -3.2 && player.pos.z < 3.8) best = { kind: 'dress' };
     if (!best && player.pos.x > HX + 8 && player.pos.z > -4.6 && player.pos.z < 2.6) best = { kind: 'storage' };
     if (!best && Math.hypot(player.pos.x - EXIT_POS.x, player.pos.z - EXIT_POS.z) < 3.4) best = { kind: 'exit' };
     return best;
@@ -2313,6 +2334,7 @@
   function hqPrompt(sp) {
     if (sp.kind === 'exit') return 'Step onto the green circle to choose your next heist';
     if (sp.kind === 'pick') return '<b>E</b> &nbsp;Buy a lockpick &ndash; ' + money$(PICK_PRICE) + ' (one use, you have ' + save.picks + ')' + (save.cash < PICK_PRICE ? ' <span style="color:#ff6b6b">(need ' + money$(PICK_PRICE - save.cash) + ' more)</span>' : '');
+    if (sp.kind === 'dress') return '<b>E</b> &nbsp;Dressing room: change your hoodie colour (' + money$(HOODIE_PRICE) + ' each)';
     if (sp.kind === 'storage') return '<b>E</b> &nbsp;Open the gun storage (' + save.stash.filter(Boolean).length + ' / ' + STASH_SIZE + ' stored)';
     const w = WEAPONS[sp.type];
     if (!save.owned.includes(sp.type)) {
@@ -2327,6 +2349,7 @@
     if (!sp) return;
     if (sp.kind === 'exit') { openChoose(); return; }
     if (sp.kind === 'storage') { openStorage(); return; }
+    if (sp.kind === 'dress') { openDress(); return; }
     if (sp.kind === 'pick') {
       if (save.cash < PICK_PRICE) { toast('Not enough cash! A lockpick costs ' + money$(PICK_PRICE) + '.'); tone(150, 0.15, 'square', 0.05); return; }
       save.cash -= PICK_PRICE; save.picks++;
@@ -2348,6 +2371,45 @@
     saveCarry();
     renderInventory(); renderCash(); drawSigns();
   }
+
+  // ---- the dressing room: buy and wear hoodie colours
+  const dressEl = document.getElementById('dress');
+  const dressGrid = document.getElementById('dress-grid');
+  const dressMsg = document.getElementById('dress-msg');
+  function applyHoodie() { model.hoodie.color.setHex(HOODIES[save.hoodie].hex); }
+  function renderDress(msg) {
+    dressGrid.innerHTML = Object.keys(HOODIES).map(k => {
+      const h = HOODIES[k], own = k === 'grey' || save.wardrobe.includes(k), cur = save.hoodie === k;
+      return '<button type="button" class="sw' + (cur ? ' cur' : '') + '" data-hoodie="' + k + '"><i style="background:#' + h.hex.toString(16).padStart(6, '0') + '"></i><b>' + h.name + '</b><span>' + (cur ? 'wearing' : own ? 'owned - wear' : money$(HOODIE_PRICE)) + '</span></button>';
+    }).join('');
+    dressMsg.textContent = msg || 'Cash: ' + money$(save.cash) + '. A new colour costs ' + money$(HOODIE_PRICE) + ' and is yours for good.';
+  }
+  function openDress() {
+    if (phase !== 'hq') return;
+    phase = 'storage';
+    storageOpenedAt = performance.now();
+    renderDress();
+    dressEl.classList.remove('hidden');
+    aiming = false; mouseDown = false;
+    try { document.exitPointerLock(); } catch (err) { /* ignore */ }
+  }
+  function dressPick(k) {
+    if (phase !== 'storage' || !HOODIES[k]) return;
+    if (k !== 'grey' && !save.wardrobe.includes(k)) {
+      if (save.cash < HOODIE_PRICE) { renderDress('Not enough cash! The ' + HOODIES[k].name.toLowerCase() + ' hoodie costs ' + money$(HOODIE_PRICE) + '.'); tone(150, 0.15, 'square', 0.05); return; }
+      save.cash -= HOODIE_PRICE; save.wardrobe.push(k);
+      tone(880, 0.08, 'square', 0.05); tone(1320, 0.12, 'square', 0.05, 0.08);
+    }
+    save.hoodie = k; applyHoodie(); persist(); renderCash();
+    renderDress('You are now wearing the ' + HOODIES[k].name.toLowerCase() + ' hoodie.');
+  }
+  dressEl.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'dress-close') closeStorage();
+    else if (b.dataset.hoodie) dressPick(b.dataset.hoodie);
+  });
+  applyHoodie();
 
   // ---- the gun storage unit: ten slots for guns you are not carrying
   const storageEl = document.getElementById('storage');
@@ -2375,7 +2437,7 @@
   function closeStorage() {
     if (phase !== 'storage') return;
     phase = 'hq';
-    storageEl.classList.add('hidden');
+    storageEl.classList.add('hidden'); dressEl.classList.add('hidden');
     saveCarry(); renderInventory(); drawSigns();
     try { renderer.domElement.requestPointerLock(); } catch (err) { /* ignore */ }
   }
@@ -2684,7 +2746,7 @@
       teleport(x, z, y) { player.pos.set(x, y || 0, z); player.vy = 0; },
       get cols() { return colliders.filter(c => c.minZ < -24 && c.maxZ > -30 && c.maxX > 2 && c.minX < 12).map(c => [c.minX, c.maxX, c.minZ, c.maxZ].map(v => +v.toFixed(2))); }, openWires, wireKey, wires, get lasers() { return LOC.lasers && LOC.lasers.map(l => l.z); }, stepLasers(s) { for (let i = 0; i < s * 20; i++) updateLasers(0.05); }, stepLock(s) { for (let i = 0; i < s * 20; i++) updateLock(0.05); }, get lock() { return LOC.lock && { open: LOC.lock.open, t: LOC.lock.t }; }, get picks() { return save.picks; }, givePicks(n) { save.picks += n; renderCash(); }, get guards() { return cops.filter(c => c.guard).map(c => ({ hp: c.hp, dead: c.dead, active: c.active, pos: [c.pos.x, c.pos.y, c.pos.z] })); }, py() { return player.pos.y; },
       aim(v) { aiming = v; },
-      openStorage, storageClick, closeStorage, get stash() { return save.stash.slice(); },
+      openStorage, openDress, dressPick, get hoodie() { return save.hoodie; }, storageClick, closeStorage, get stash() { return save.stash.slice(); },
       openPuzzle, puzzleKey, machine, puzzle, get clues() { return LOC.clues; }, get code() { return LOC.code; },
       arriveHQ, hqInteract, openChoose, pickJob, get loc() { return LOC.id; }, hqSpot, save, give(t) { save.cash += t; renderCash(); },
       shoot, tryPickup, dropSelected, selectSlot, startReload, interact, hurt,
