@@ -129,11 +129,12 @@
       loot: [['money', -8, 1.2, -21], ['money', -4, 1.2, -21], ['money', 0, 1.2, -21], ['gold', 7.8, 1.0, -27.5], ['gold', 9.4, 1.0, -27.5]]
     },
     power: {
-      id: 'power', name: 'Power Plant', place: 'power plant', staff: 'operator', tag: 'Steal power cells and a fusion core from the control room.',
+      id: 'power', name: 'Power Plant', place: 'power plant', staff: 'operator', tag: 'Reconnect the wires at the control panel, take the power cells and cores, then run the laser corridor out the back. Jump the lasers!',
       sign: 'CITY POWER PLANT', signBg: '#12202e', signFg: '#ffd23f', signFont: 'Impact, Arial Black, sans-serif',
       wall: 0x6d7279, roof: 0x3a3f46, trim: 0xffd23f, floor: ['#4b5057', '#3e4349'], counter: 0x2f353d,
       npc: { shirt: 0xdcdcdc, vest: 0xe8742a, pants: 0x2f3640, cap: 0xffd23f },
-      loot: [['cell', -8, 1.2, -21], ['cell', -4, 1.2, -21], ['cell', 0, 1.2, -21], ['core', 7.8, 1.0, -27.5], ['core', 9.4, 1.0, -27.5]]
+      vault: true, wires: true, backDoor: true, corridor: true,
+      loot: [['cell', 7.6, 1.0, -27.5], ['cell', 8.6, 1.0, -27.5], ['cell', 9.6, 1.0, -27.5], ['core', 6.4, 0.02, -27.2], ['core', 10.4, 0.02, -27.2]]
     },
     factory: {
       id: 'factory', name: 'The Factory', place: 'factory', staff: 'foreman', tag: 'Guards on patrol. Take the staff door at the back, climb the stairs, pick the lock, grab the goods and escape out the back door.',
@@ -195,6 +196,47 @@
         const p = cyl(0.3, 0.3, 22, mat(0x8a929c, { metalness: 0.6, roughness: 0.4 }), 0, 8.8, z, { aim: false });
         p.rotation.z = Math.PI / 2;
       }
+
+      // ---- the wire panel (back right): reconnect the wires to unlock the goods
+      addBox(2.8, 2.8, 0.7, mat(0x2a2f36, { metalness: 0.5, roughness: 0.5 }), 8.6, 1.4, -29.05, { block: true, cam: true });
+      addBox(2.2, 1.3, 0.04, glow(0x39e1ff), 8.6, 1.9, -28.68, { aim: false });
+      const wireCols = [0xff3b3b, 0x3b8bff, 0xffd23f, 0x4dff7a, 0xc77bff];
+      wireCols.forEach((c, i) => addBox(0.07, 0.5, 0.05, glow(c), 7.8 + i * 0.4, 0.75, -28.66, { aim: false }));
+      const panelLamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.06), glow(0xff2a2a));
+      panelLamp.position.set(8.6, 2.75, -28.68); add(panelLamp);
+      LOC.lamp = panelLamp;
+      light(0x39e1ff, 25, 8.6, 2.6, -26.8);
+      // ---- the laser corridor behind the back door
+      const lWall = mat(0x23272d, { metalness: 0.5, roughness: 0.6 });
+      for (const sx of [-1.7, 1.7]) {
+        addBox(0.3, 4, 14.4, lWall, sx, 2, -37.2, { block: true, cam: true });
+        for (const z of [-31, -34, -37, -40, -43]) addBox(0.12, 0.12, 0.5, glow(0xff2a2a), sx - Math.sign(sx) * 0.16, 3.8, z, { aim: false });
+      }
+      addBox(3.4, 0.1, 14.4, mat(0x1a1d22, { metalness: 0.6, roughness: 0.5 }), 0, -0.02, -37.2, { cast: false });
+      LOC.lasers = [];
+      for (const z of [-32.4, -35.4, -38.4, -41.4]) {
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.07, 0.07), glow(0xff2a2a));
+        beam.position.set(0, 0.55, z); add(beam);
+        for (const sx of [-1.5, 1.5]) addBox(0.2, 0.5, 0.2, steel, sx, 0.4, z, { aim: false });
+        light(0xff2020, 8, 0, 1.2, z);
+        LOC.lasers.push({ z, mesh: beam, cd: 0 });
+      }
+      const exitTexP = canvasTex(256, 96, (c, w, h) => {
+        c.fillStyle = '#0c2a18'; c.fillRect(0, 0, w, h); c.fillStyle = '#5dff9a';
+        c.font = 'bold 56px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EXIT', w / 2, h / 2 + 3);
+      });
+      for (const [z, ry] of [[-29.35, 0], [-30.03, Math.PI]]) {
+        const ex = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.68), new THREE.MeshBasicMaterial({ map: exitTexP }));
+        ex.position.set(0, 4.3, z); ex.rotation.y = ry; add(ex);
+      }
+      const warnTex = canvasTex(256, 96, (c, w, h) => {
+        c.fillStyle = '#2a0808'; c.fillRect(0, 0, w, h); c.fillStyle = '#ff5a5a';
+        c.font = 'bold 34px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('LASERS: JUMP!', w / 2, h / 2 + 3);
+      });
+      const warn = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.9), new THREE.MeshBasicMaterial({ map: warnTex }));
+      warn.position.set(0, 3.2, -29.33); add(warn);
+      addBox(14, 0.1, 6, mat(0x1a1d22), 0, -0.04, -45.5, { cast: false });
+      light(0xff4040, 30, 0, 3, -36);
     } else if (id === 'factory') {
       // conveyor belt along the back wall with boxes on it
       addBox(7, 0.7, 1.2, mat(0x2a2a2e), -6.5, 0.35, -28.4, { block: true, cam: true });
@@ -515,7 +557,7 @@
     colliders.push({ minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.95, maxZ: z + 0.95 });
     return g;
   }
-  const getawayCar = LOC.backDoor ? addCar(-1, -33.4, 0x111114) : addCar(-12, -2.5, 0x111114);   // the getaway car (behind the building at the factory)
+  const getawayCar = LOC.corridor ? addCar(0, -47.4, 0x111114) : LOC.backDoor ? addCar(-1, -33.4, 0x111114) : addCar(-12, -2.5, 0x111114);   // the getaway car (behind the building at the factory)
   addCar(16, 19, 0xb3202a);
 
   // Shooting-range targets
@@ -1056,6 +1098,12 @@
       else t = carrying ? 'Grab more if you dare, then escape through the back door (marked EXIT) to the getaway car.' : 'The vault is open. Grab the goods, then escape through the back door.';
       objEl.textContent = t; return;
     }
+    if (LOC.corridor) {
+      if (!machine.open) t = alarm.on && !alarm.policeHere ? 'Alarm! Reconnect the wires at the control panel (back right, E) before the police arrive!' : 'Reconnect the wires at the control panel at the back right (E) to unlock the power cells and cores.';
+      else if (alarm.policeHere) t = carrying ? 'The police are here! Run the laser corridor out the back door!' : 'The police are here! Grab the goods, then out the back door.';
+      else t = carrying ? 'Take it all, then run the laser corridor out the back door. Jump over the lasers (Space)!' : 'The panel is open. Grab the goods, then run the laser corridor out the back.';
+      objEl.textContent = t; return;
+    }
     if (locked && !alarm.policeHere) t = alarm.on ? 'Find the 3 clue notes, then crack the jackpot machine at the back right (E) before the police arrive!' : 'Search the casino for 3 hidden clue notes (one per reel), then crack the jackpot machine at the back right (E). Watch the dealer.';
     else if (!alarm.on) t = 'Go into the ' + LOC.place + ' and point your gun at the ' + LOC.staff + ' (hold right click).';
     else if (alarm.policeHere) t = carrying ? 'The police are here! Get to the getaway car!' : 'The police are here! Grab money and reach the getaway car, or fight them off.';
@@ -1136,7 +1184,7 @@
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     keys[e.code] = true;
-    if (puzzle.open && isActive()) { if (!e.repeat) puzzleKey(e); return; }
+    if (puzzle.open && isActive()) { if (!e.repeat) (LOC.wires ? wireKey : puzzleKey)(e); return; }
     if (e.repeat || !isActive()) return;
     if (e.code === 'Digit1') selectSlot(0);
     else if (e.code === 'Digit2') selectSlot(1);
@@ -1319,7 +1367,7 @@
     teller.state = 'hands';
     alarm.on = true; alarm.t = 0;
     alarmSnd = makeSiren('alarm');
-    toast(reason === 'guard' ? 'A guard spotted you! The alarm is on!' : reason === 'machine' ? 'The jackpot machine trips the alarm!' : reason === 'theft' ? 'The ' + LOC.staff + ' hits the silent alarm!' : 'Hands up! The ' + LOC.staff + ' hits the alarm!', 2.4);
+    toast(reason === 'guard' ? 'A guard spotted you! The alarm is on!' : reason === 'machine' ? 'The ' + (LOC.wires ? 'control panel' : 'jackpot machine') + ' trips the alarm!' : reason === 'theft' ? 'The ' + LOC.staff + ' hits the silent alarm!' : 'Hands up! The ' + LOC.staff + ' hits the alarm!', 2.4);
     tone(880, 0.12, 'square', 0.06);
     updateObjective();
   }
@@ -1638,7 +1686,9 @@
       if (inStairs(player.pos.x, player.pos.z) && !inStairs(c.pos.x, c.pos.z) && insideBank(c.pos.x, c.pos.z))   // through the staff door
         return (c.pos.z > -23.9 || Math.abs(c.pos.x - 4.1) > 0.8) && c.pos.z > -24.4 ? { x: 4.1, z: -23.3 } : { x: 4.1, z: -25.4 };
       if (!c.guard && player.pos.z < -30.8 && c.pos.z > -30.5 && !insideBank(c.pos.x, c.pos.z))                // around the building to the back lot
-        return Math.abs(c.pos.x) < 14.5 && c.pos.z > -31 ? { x: (c.pos.x < 0 ? -1 : 1) * 15.5, z: c.pos.z } : { x: player.pos.x, z: player.pos.z };
+        { if (Math.abs(c.pos.x) < 14.5 && c.pos.z > -31) return { x: (c.pos.x < 0 ? -1 : 1) * 15.5, z: c.pos.z };
+          if (LOC.corridor) return c.pos.z > -44.3 ? { x: c.pos.x, z: -45.4 } : Math.abs(c.pos.x) > 1 ? { x: 0, z: -45.4 } : { x: player.pos.x, z: player.pos.z };
+          return { x: player.pos.x, z: player.pos.z }; }
     }
     const pIn = insideBank(player.pos.x, player.pos.z), cIn = insideBank(c.pos.x, c.pos.z);
     if (pIn && !cIn) return (c.pos.z > -11.5 && Math.abs(c.pos.x) > 1.3) ? WP_OUT : WP_IN;
@@ -1868,7 +1918,7 @@
   function interact() {
     if (phase === 'hq') { hqInteract(); return; }
     if (phase !== 'play') return;
-    if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { openPuzzle(); return; }
+    if (LOC.vault && !machine.open && !nearestItem() && nearMachine()) { if (LOC.wires) openWires(); else openPuzzle(); return; }
     if (LOC.lock && !LOC.lock.open && nearLock()) { startPick(); return; }
     if (!nearestItem() && nearCar()) { enterCar(); return; }
     tryPickup();
@@ -1908,6 +1958,7 @@
       if (alarm.on) alarm.t += dt;
       updatePolice(dt);
       updateLock(dt);
+      updateLasers(dt);
       if (hp < PLAYER_HP && time - lastHurt > 6) { hp = Math.min(PLAYER_HP, hp + 2.5 * dt); renderHp(); }
     }
     updateTeller(dt);
@@ -1962,7 +2013,72 @@
     puzzleEl.classList.remove('hidden');
     renderPuzzle();
   }
-  function closePuzzle() { puzzle.open = false; puzzleEl.classList.add('hidden'); }
+  // ---- the power plant puzzle: connect each wire to the terminal of the same colour
+  const WIRE_COLS = ['#ff3b3b', '#3b8bff', '#ffd23f', '#4dff7a', '#c77bff'];
+  const wires = { order: [0, 1, 2, 3, 4], done: [false, false, false, false, false], sel: -1, wrong: 0 };
+  const wiresEl = document.getElementById('wires');
+  const wiresBoard = document.getElementById('wires-board');
+  const wiresInfo = document.getElementById('wires-info');
+  function renderWires() {
+    const Y = i => 34 + i * 50;
+    let svg = '', left = '', right = '';
+    for (let i = 0; i < 5; i++) {
+      const ri = wires.order.indexOf(i);
+      if (wires.done[i]) svg += '<line x1="70" y1="' + Y(i) + '" x2="350" y2="' + Y(ri) + '" stroke="' + WIRE_COLS[i] + '" stroke-width="8" stroke-linecap="round"/>';
+      left += '<div class="wt ' + (wires.sel === i ? 'sel' : '') + (wires.done[i] ? ' done' : '') + '" style="top:' + (Y(i) - 18) + 'px;left:20px;background:' + WIRE_COLS[i] + '">' + (i + 1) + '</div>';
+      const col = wires.order[i];
+      right += '<div class="wt ' + (wires.done[col] ? 'done' : '') + '" style="top:' + (Y(i) - 18) + 'px;left:352px;background:' + WIRE_COLS[col] + '">' + (i + 1) + '</div>';
+    }
+    wiresBoard.innerHTML = '<svg width="420" height="270">' + svg + '</svg>' + left + right;
+    wiresInfo.textContent = wires.wrong >= 3 ? 'The alarm is ringing! Hurry!' : (wires.sel >= 0 ? 'Now press the number of the matching terminal on the right.' : 'Press a number on the left to pick up a wire.') + '  Shocks: ' + wires.wrong + ' / 3 (the third trips the alarm)';
+  }
+  function openWires() {
+    if (puzzle.open || machine.open || phase !== 'play') return;
+    if (!wires.shuffled) { wires.shuffled = true; wires.order.sort(() => Math.random() - 0.5); }
+    puzzle.open = true; aiming = false; mouseDown = false;
+    wiresEl.classList.remove('hidden');
+    renderWires();
+  }
+  function wireKey(e) {
+    if (e.code === 'Escape' || e.code === 'KeyE') { closePuzzle(); return; }
+    if (e.code === 'Backspace') wires.sel = -1;
+    const m = /^(Digit|Numpad)([1-5])$/.exec(e.code);
+    if (m) {
+      const n = +m[2] - 1;
+      if (wires.sel < 0) { if (!wires.done[n]) { wires.sel = n; tone(520, 0.04, 'square', 0.04); } }
+      else if (wires.order[n] === wires.sel) {
+        wires.done[wires.sel] = true; wires.sel = -1;
+        tone(760, 0.08, 'square', 0.05);
+        if (wires.done.every(Boolean)) {
+          closePuzzle(); machine.open = true;
+          for (const [type, x, y, z] of LOC.loot) spawnItem(type, x, y, z);
+          tone(660, 0.1, 'square', 0.06); tone(880, 0.1, 'square', 0.06, 0.1); tone(1320, 0.25, 'square', 0.06, 0.2);
+          toast('Power restored! Grab the cells, then run the laser corridor!', 2.8);
+          updateObjective();
+          return;
+        }
+      } else {
+        wires.sel = -1; wires.wrong++;
+        tone(160, 0.2, 'sawtooth', 0.06); hurt(10); toast('ZAP! Wrong terminal (-10 HP)', 1.4);
+        if (wires.wrong === 3) alertTeller('machine');
+      }
+    }
+    renderWires();
+  }
+  // ---- lasers in the corridor: touching one costs 50 HP, jump over them
+  function updateLasers(dt) {
+    if (!LOC.lasers) return;
+    for (const L of LOC.lasers) {
+      L.cd = Math.max(0, L.cd - dt);
+      L.mesh.material.color.setHex(L.cd > 0 ? 0xffffff : 0xff2a2a);
+      if (phase === 'play' && L.cd <= 0 && Math.abs(player.pos.x) < 1.65 && Math.abs(player.pos.z - L.z) < 0.3 && player.pos.y < 0.6) {
+        L.cd = 1.3;
+        hurt(50); toast('LASER! -50 HP. Jump over them!', 1.6);
+        tone(1100, 0.15, 'sawtooth', 0.07);
+      }
+    }
+  }
+  function closePuzzle() { puzzle.open = false; puzzleEl.classList.add('hidden'); wiresEl.classList.add('hidden'); }
   function puzzleKey(e) {
     if (e.code === 'Escape' || e.code === 'KeyE') { closePuzzle(); return; }
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') puzzle.cursor = (puzzle.cursor + 2) % 3;
@@ -1993,7 +2109,7 @@
   }
   function updateMachine(dt) {
     if (!LOC.vault) return;
-    if (machine.open && machine.doorT < 1) { machine.doorT = Math.min(1, machine.doorT + dt * 1.6); LOC.door.position.x = 8.6 + machine.doorT * 1.6; }
+    if (machine.open && machine.doorT < 1 && LOC.door) { machine.doorT = Math.min(1, machine.doorT + dt * 1.6); LOC.door.position.x = 8.6 + machine.doorT * 1.6; }
     if (LOC.lamp) LOC.lamp.material.color.setHex(machine.open ? 0x5dff9a : 0xff2a2a);
     if (puzzle.open && (phase !== 'play' || !nearMachine())) closePuzzle();
   }
@@ -2537,7 +2653,7 @@
     let p = '';
     if (it) p = '<b>E</b> &nbsp;Pick up ' + ITEM_TYPES[it.type].name + ' ($' + ITEM_TYPES[it.type].value.toLocaleString('en-US') + ')';
     if (phase === 'hq') { const sp = hqSpot(); if (sp) p = hqPrompt(sp); }
-    if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;Crack the jackpot machine';
+    if (!it && phase === 'play' && LOC.vault && !machine.open && !puzzle.open && nearMachine()) p = '<b>E</b> &nbsp;' + (LOC.wires ? 'Reconnect the wires' : 'Crack the jackpot machine');
     if (phase === 'play' && LOC.lock && !LOC.lock.open && nearLock()) p = LOC.lock.t > 0 ? 'Picking the lock... ' + Math.round((1 - LOC.lock.t / LOCK_TIME) * 100) + '%' : (save.picks > 0 ? '<b>E</b> &nbsp;Pick the lock (uses 1 lockpick, you have ' + save.picks + ')' : 'Locked! You need a lockpick (buy them at the HQ)');
     if (!it && phase === 'play' && nearCar()) p = '<b>E</b> &nbsp;' + (lootValue() > 0 ? 'Get in the getaway car and escape!' : 'Getaway car (grab some money first)');
     if (p !== lastPrompt) {
@@ -2566,7 +2682,7 @@
       key(code, v) { keys[code] = v; },
       look(y, p) { yaw = y; pitch = p; },
       teleport(x, z, y) { player.pos.set(x, y || 0, z); player.vy = 0; },
-      get cols() { return colliders.filter(c => c.minZ < -24 && c.maxZ > -30 && c.maxX > 2 && c.minX < 12).map(c => [c.minX, c.maxX, c.minZ, c.maxZ].map(v => +v.toFixed(2))); }, stepLock(s) { for (let i = 0; i < s * 20; i++) updateLock(0.05); }, get lock() { return LOC.lock && { open: LOC.lock.open, t: LOC.lock.t }; }, get picks() { return save.picks; }, givePicks(n) { save.picks += n; renderCash(); }, get guards() { return cops.filter(c => c.guard).map(c => ({ hp: c.hp, dead: c.dead, active: c.active, pos: [c.pos.x, c.pos.y, c.pos.z] })); }, py() { return player.pos.y; },
+      get cols() { return colliders.filter(c => c.minZ < -24 && c.maxZ > -30 && c.maxX > 2 && c.minX < 12).map(c => [c.minX, c.maxX, c.minZ, c.maxZ].map(v => +v.toFixed(2))); }, openWires, wireKey, wires, get lasers() { return LOC.lasers && LOC.lasers.map(l => l.z); }, stepLasers(s) { for (let i = 0; i < s * 20; i++) updateLasers(0.05); }, stepLock(s) { for (let i = 0; i < s * 20; i++) updateLock(0.05); }, get lock() { return LOC.lock && { open: LOC.lock.open, t: LOC.lock.t }; }, get picks() { return save.picks; }, givePicks(n) { save.picks += n; renderCash(); }, get guards() { return cops.filter(c => c.guard).map(c => ({ hp: c.hp, dead: c.dead, active: c.active, pos: [c.pos.x, c.pos.y, c.pos.z] })); }, py() { return player.pos.y; },
       aim(v) { aiming = v; },
       openStorage, storageClick, closeStorage, get stash() { return save.stash.slice(); },
       openPuzzle, puzzleKey, machine, puzzle, get clues() { return LOC.clues; }, get code() { return LOC.code; },
