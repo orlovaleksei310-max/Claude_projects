@@ -713,8 +713,8 @@
     shotgun: { name: 'Shotgun',  icon: '💥', value: 0, half: 0 },
     sniper:  { name: 'Sniper',   icon: '🎯', value: 0, half: 0 },
     rifle:   { name: 'Assault Rifle', icon: '🔥', value: 0, half: 0 },
-    crown:   { name: 'Crown Jewel',   icon: '👑', value: 300000, half: 0.3 },
-    gem:     { name: 'Diamond',       icon: '💎', value: 40000,  half: 0.2 }
+    crown:   { name: 'Crown Jewel',   icon: '👑', value: 40000,  half: 0.3 },
+    gem:     { name: 'Diamond',       icon: '💎', value: 10000,  half: 0.2 }
   };
 
   // Weapons. The pistol does 5 damage; the black-market guns are bought at the HQ.
@@ -1881,7 +1881,9 @@
     if (hitIt) hurt(c.dmg);
   }
 
+  let arrestT = 0, arrested = false;
   function updateCops(dt) {
+    if (!arrested) arrestT = Math.max(0, arrestT - dt * 2); arrested = false;
     for (let ci = cops.length - 1; ci >= 0; ci--) {
       const c = cops[ci];
       const g = c.m.group;
@@ -1896,6 +1898,11 @@
 
       const dx = player.pos.x - c.pos.x, dz = player.pos.z - c.pos.z;
       const dist = Math.hypot(dx, dz);
+      if (dist < 1.7 && Math.abs(player.pos.y - (c.pos.y || 0)) < 2 && !player.climb) {   // an officer got too close: arrest
+        arrestT += dt; if (arrestT > 0.9) { endGame(false, 'arrest'); return; }
+        if (arrestT - dt <= 0) toast('Officer: "Freeze! You are under arrest!"', 1.2);
+        arrested = true;
+      }
       c.losT -= dt;
       if (c.losT <= 0) {
         c.losT = 0.2;
@@ -2075,20 +2082,21 @@
     tryPickup();
   }
 
-  function endGame(won) {
+  function endGame(won, why) {
     if (phase === 'won' || phase === 'lost') return;
     const carried = lootValue();
     phase = won ? 'won' : 'lost';
     stopSirens();
-    endTitle.textContent = won ? 'YOU GOT AWAY!' : 'BUSTED!';
+    endTitle.textContent = won ? 'YOU GOT AWAY!' : why === 'arrest' ? 'ARRESTED!' : 'BUSTED!';
     endTitle.className = won ? 'win' : 'lose';
     const lines = [];
     if (won) {
       lines.push('You escaped with <b>$' + carried.toLocaleString('en-US') + '</b>');
       lines.push(alarm.policeHere ? 'The police showed up, but you made it out anyway.' : 'Clean getaway: you left before the police arrived.');
     } else {
-      lines.push(wave.stats && wave.stats.kind === 'fbi' ? 'The FBI took you down.' : 'The police took you down.');
-      lines.push('You lost <b>$' + carried.toLocaleString('en-US') + '</b> of loot.');
+      if (why === 'arrest') lines.push((wave.stats && wave.stats.kind === 'fbi' ? 'The FBI' : 'The police') + ' caught you and threw you in <b>jail</b>.');
+      else lines.push(wave.stats && wave.stats.kind === 'fbi' ? 'The FBI took you down.' : 'The police took you down.');
+      lines.push('You lost <b>$' + carried.toLocaleString('en-US') + '</b> of loot.' + (why === 'arrest' ? ' Do not let them get close!' : ''));
     }
     lines.push('Officers taken down: ' + kills);
     if (LOC.crowd) lines.push('Waves survived: ' + Math.max(0, wave.n - (alarm.policeHere ? 1 : 0)) + ' &nbsp;·&nbsp; Gamblers shot: ' + civKills);
