@@ -2,7 +2,7 @@
 
 A growing collection of small games that run right in the browser. No build step and no install: each game lives in its own folder as plain HTML, CSS and JavaScript. 3D games keep their own copy of Three.js in a `lib/` folder, so they work offline too.
 
-**Arrest:** if a police officer, FBI agent or guard gets within about 1.7 m of you for a second you are arrested and sent to jail (heist over, loot lost), so keep your distance.
+**Arrest and prison:** if a police officer, FBI agent or guard gets within about 1.7 m of you for a second you are arrested: the heist ends, the loot is lost and the next time the game loads you wake up in **prison** (your weapons are confiscated until you are out). Pick the lock of your cell (E, free, takes a few seconds), sneak up behind a guard outside his field of view and pick his pocket (E, hold still about 1.5 s) for a keycard (only two of the four guards carry one), open the main gate at the front (E) and run out the front door. The guards shoot on sight and you are unarmed. If they kill you, you restart in your cell. Once you break out you are back at the HQ with your guns.
 
 ## Games
 
