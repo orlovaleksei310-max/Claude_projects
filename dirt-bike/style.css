@@ -1,0 +1,23 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #87b9e8; font-family: "Segoe UI", system-ui, Arial, sans-serif; color: #fff; user-select: none; }
+#game, #flash { position: fixed; inset: 0; }
+#flash { pointer-events: none; background: #fff; opacity: 0; }
+#hud { position: fixed; left: 22px; top: 18px; text-shadow: 0 2px 6px rgba(0, 0, 0, .65); pointer-events: none; }
+#dist { font-size: 22px; font-weight: 600; } #distv { font-size: 46px; }
+#best { font-size: 15px; color: #ffe27a; margin-top: 2px; }
+#toast { margin-top: 14px; font-size: 30px; font-weight: 800; color: #ffd23f; opacity: 0; transition: opacity .25s; letter-spacing: 2px; }
+#toast.show { opacity: 1; }
+#speedo { position: fixed; right: 26px; bottom: 24px; text-align: right; text-shadow: 0 2px 6px rgba(0, 0, 0, .65); pointer-events: none; }
+#speed { font-size: 72px; font-weight: 800; line-height: 1; }
+#kmh { font-size: 16px; letter-spacing: 3px; opacity: .85; }
+#nitro { width: 200px; height: 12px; margin: 10px 0 4px auto; background: rgba(0, 0, 0, .45); border: 2px solid #fff; border-radius: 8px; overflow: hidden; }
+#nitrobar { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #2bd4ff, #7a5cff); }
+#nitrolabel { font-size: 12px; letter-spacing: 2px; opacity: .85; }
+#start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 14, 24, .55); cursor: pointer; z-index: 10; }
+#start.hidden { display: none; }
+.panel { max-width: 560px; padding: 28px 34px; background: rgba(18, 22, 34, .92); border: 3px solid #ff7a1a; border-radius: 14px; text-align: center; }
+.panel h1 { margin: 0 0 8px; font-size: 44px; letter-spacing: 4px; color: #ff9a3c; }
+.sub { margin: 0 0 16px; color: #d7deea; }
+table { margin: 0 auto 16px; text-align: left; border-collapse: collapse; }
+td { padding: 4px 12px; color: #d7deea; } td:first-child { white-space: nowrap; color: #fff; }
+.go { margin: 0; font-size: 20px; color: #5dff9a; }

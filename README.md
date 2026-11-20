@@ -10,6 +10,7 @@ A growing collection of small games that run right in the browser. No build step
 |------|--------|-------------|
 | Criminal Runaway | [`criminal-runaway/`](criminal-runaway/) | Top-down escape game. Grab all the cash, dodge the police, reach the getaway car. |
 | Bank Heist 3D | [`bank-heist/`](bank-heist/) | Third-person 3D heist. A teller works inside the bank: hold out your gun and they put their hands up and the alarm goes off. Grab the money and get in the getaway car outside. Stay 30 seconds after the alarm and the police arrive (50 HP each; your pistol does 5 damage). Escape and you teleport to the HQ, a hideout with an illegal gun shop. Desktop only (keyboard and mouse). |
+| Dirt Bike Ride | [`dirt-bike/`](dirt-bike/) | Third-person 3D dirt bike on an endless winding road. W/S throttle and brake, A/D steer (the bends push you outwards, so lean into them), Shift for nitro, Space in the air for a flip. Dodge rocks and logs (a crash stops you for a moment), hit the ramps for air time and flips, and beat your best distance (saved in your browser). Going off the road slows you down. Desktop only. |
 
 ### Bank Heist rules
 
