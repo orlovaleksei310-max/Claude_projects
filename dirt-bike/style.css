@@ -21,3 +21,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #87b9e8; fon
 table { margin: 0 auto 16px; text-align: left; border-collapse: collapse; }
 td { padding: 4px 12px; color: #d7deea; } td:first-child { white-space: nowrap; color: #fff; }
 .go { margin: 0; font-size: 20px; color: #5dff9a; }
+#biome { margin-top: 4px; font-size: 14px; letter-spacing: 3px; color: #bfe3ff; }
+#banner { position: fixed; left: 0; right: 0; top: 24%; text-align: center; font-size: 64px; font-weight: 900; letter-spacing: 8px; color: #fff; text-shadow: 0 4px 16px rgba(0, 0, 0, .7); opacity: 0; transform: scale(.9); transition: opacity .4s, transform .4s; pointer-events: none; }
+#banner.show { opacity: 1; transform: scale(1); }

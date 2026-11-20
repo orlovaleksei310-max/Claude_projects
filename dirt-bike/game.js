@@ -81,8 +81,8 @@
   // ground that follows the bike (texture slides so you feel the speed)
   const gtex = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
-    g.fillStyle = '#7d9a52'; g.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 1800; i++) { g.fillStyle = ['#6f8c47', '#8aa85d', '#9a8a5a', '#74904b'][i % 4]; g.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 5, 2 + Math.random() * 5); }
+    g.fillStyle = '#e6e6e6'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 1800; i++) { g.fillStyle = ['#d4d4d4', '#f2f2f2', '#c8c8c8', '#fafafa'][i % 4]; g.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 5, 2 + Math.random() * 5); }
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(40, 40); return t;
   })();
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshLambertMaterial({ map: gtex }));
@@ -105,20 +105,85 @@
     const g = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false }); g.translate(0, 0, -w / 2); return g;
   }
   const rampGeo = ramp(7, 4.6, 1.7);
+  // ---------- biomes: every 1000 m the scenery changes, and no biome repeats ----------
+  const BIOMES = {
+    grass:  { name: 'GRASSLAND',       sky: 0x8cc2ef, ground: 0x86a95a, shoulder: 0xc9aa78, road: 0x6b6f7a, fogN: 90, fogF: 330 },
+    forest: { name: 'FOREST',          sky: 0x86b3a4, ground: 0x4f7c3d, shoulder: 0x8a6e4a, road: 0x585c66, fogN: 55, fogF: 250 },
+    desert: { name: 'DESERT',          sky: 0xf1dba8, ground: 0xdfba78, shoulder: 0xeed3a0, road: 0x7a756d, fogN: 100, fogF: 340 },
+    snow:   { name: 'SNOWY MOUNTAINS', sky: 0xc6dbed, ground: 0xf2f6fb, shoulder: 0xd7e1ec, road: 0x4b5059, fogN: 45, fogF: 220 },
+    city:   { name: 'CITY',            sky: 0xa9bcd2, ground: 0x777c85, shoulder: 0x9ea2aa, road: 0x3c3f46, fogN: 80, fogF: 300 }
+  };
+  const BIOME_IDS = Object.keys(BIOMES);
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const order = ['grass'];                                // the first 1000 m are grassland
+  let bag = shuffle(BIOME_IDS.filter(b => b !== 'grass'));
+  function biomeIdAt(i) {                                 // a shuffled bag: all five biomes before any comes back
+    while (order.length <= i) {
+      if (!bag.length) { bag = shuffle([...BIOME_IDS]); if (bag[bag.length - 1] === order[order.length - 1]) { const t = bag[0]; bag[0] = bag[bag.length - 1]; bag[bag.length - 1] = t; } }
+      order.push(bag.pop());
+    }
+    return order[i];
+  }
+  const BIOME_LEN = 1000, BLEND = 160;
+  const biomeIdxOfS = s => Math.floor(Math.max(0, s) / BIOME_LEN);
+  const mix = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), t);
+  function paletteAt(s) {                                 // colours blend over the last 160 m before a border
+    const i = biomeIdxOfS(s), a = BIOMES[biomeIdAt(i)], b = BIOMES[biomeIdAt(i + 1)];
+    const t = Math.max(0, Math.min(1, (s - ((i + 1) * BIOME_LEN - BLEND)) / BLEND));
+    return { a: biomeIdAt(i), b: biomeIdAt(i + 1), t, sky: mix(a.sky, b.sky, t), ground: mix(a.ground, b.ground, t), shoulder: mix(a.shoulder, b.shoulder, t), road: mix(a.road, b.road, t), fogN: a.fogN + (b.fogN - a.fogN) * t, fogF: a.fogF + (b.fogF - a.fogF) * t };
+  }
+
+  const bGeo = {
+    canopy: new THREE.SphereGeometry(1.9, 8, 7), cone2: new THREE.ConeGeometry(1.2, 3.2, 7), cactus: new THREE.CylinderGeometry(0.32, 0.36, 3.0, 8), arm: new THREE.CylinderGeometry(0.2, 0.2, 1.0, 6),
+    mesa: new THREE.BoxGeometry(1, 1, 1), mound: new THREE.SphereGeometry(1, 8, 5), lampPole: new THREE.CylinderGeometry(0.1, 0.12, 7, 6), lampHead: new THREE.BoxGeometry(0.9, 0.18, 0.4),
+    crate: new THREE.BoxGeometry(1.2, 1.2, 1.2), barrier: new THREE.BoxGeometry(4.8, 0.9, 0.6), stripe: new THREE.BoxGeometry(0.5, 0.92, 0.62)
+  };
+  const bMat = {
+    leaf: mat(0x4f9a45), leaf2: mat(0x62ad4e), cactus: mat(0x3f8a4a), mesa: mat(0xb9703b), sandRock: mat(0xc58a52), dry: mat(0x9a8452), snowCone: mat(0xffffff), snowTrunk: mat(0x4a3a2a), snowRock: mat(0xcfd6dc), snowLog: mat(0xdde7ee), snowMound: mat(0xffffff),
+    lamp: mat(0x2c2f36), lampLight: new THREE.MeshBasicMaterial({ color: 0xfff1b0 }), crate: mat(0xb07a3a), barrier: mat(0xe9e9e9), barStripe: mat(0xd94a3a), deadLog: mat(0x8a7458)
+  };
+  const winTex = (cols, rows) => {                        // lit windows on a concrete wall
+    const c = document.createElement('canvas'); c.width = 128; c.height = 256; const g = c.getContext('2d');
+    g.fillStyle = '#8b919b'; g.fillRect(0, 0, 128, 256);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) { g.fillStyle = Math.random() < 0.35 ? '#ffe9a8' : '#2d3a4d'; g.fillRect(8 + x * (112 / cols) + 2, 8 + y * (240 / rows) + 3, 112 / cols - 8, 240 / rows - 9); }
+    const t = new THREE.CanvasTexture(c); return t;
+  };
+  const buildings = [[8, 14], [9, 24], [10, 36]].map(([w, h], i) => ({ geo: new THREE.BoxGeometry(w, h, w), h, mats: [0xffffff, 0xe8d8c8, 0xc8d8e8].map(col => new THREE.MeshLambertMaterial({ color: col, map: winTex(4, 6 + i * 4) })) }));
+
   function buildCell(k) {
     const r = rng(k * 7919 + 13), group = new THREE.Group(), list = { ramps: [], obs: [] };
-    const s0 = k * CELL;
-    for (let i = 0; i < 9; i++) {                         // trees, bushes and rocks along both sides
-      const side = r() < 0.5 ? -1 : 1, d = side * (ROAD_W / 2 + 5 + r() * 38), s = s0 + r() * CELL, w = worldPos(s, d);
-      const kind = r();
-      if (kind < 0.62) {
-        const sc = 0.8 + r() * 1.1, t = new THREE.Mesh(geo.trunk, mats.trunk), c = new THREE.Mesh(geo.cone, r() < 0.5 ? mats.cone : mats.cone2);
-        t.position.set(w.x, 1.1 * sc, w.z); t.scale.setScalar(sc); c.position.set(w.x, (2.2 + 2.0) * sc, w.z); c.scale.setScalar(sc);
-        group.add(t, c);
-      } else if (kind < 0.82) {
-        const b = new THREE.Mesh(geo.bush, mats.bush); b.position.set(w.x, 0.5, w.z); b.scale.set(1 + r(), 0.8, 1 + r()); group.add(b);
-      } else {
-        const m = new THREE.Mesh(geo.rock, mats.rock); m.position.set(w.x, 0.5, w.z); m.scale.setScalar(0.8 + r() * 2.2); m.rotation.set(r() * 3, r() * 3, 0); group.add(m);
+    const s0 = k * CELL, bid = biomeIdAt(biomeIdxOfS(s0 + CELL / 2));
+    const at = (dmin, dspan) => { const side = r() < 0.5 ? -1 : 1, d = side * (ROAD_W / 2 + dmin + r() * dspan), s = s0 + r() * CELL; return worldPos(s, d); };
+    const put = (geom, m, w, y, sc) => { const o = new THREE.Mesh(geom, m); o.position.set(w.x, y, w.z); if (sc) o.scale.setScalar(sc); group.add(o); return o; };
+    const pine = (w, sc, lower, upper, trunk) => { put(geo.trunk, trunk, w, 1.1 * sc, sc); put(geo.cone, lower, w, 4.2 * sc, sc); put(bGeo.cone2, upper, w, 6.4 * sc, sc * 0.9); };
+    if (bid === 'grass') {
+      for (let i = 0; i < 4; i++) { const w = at(5, 40), sc = 0.8 + r() * 0.9; put(geo.trunk, mats.trunk, w, 1.1 * sc, sc); put(bGeo.canopy, r() < 0.5 ? bMat.leaf : bMat.leaf2, w, 3.6 * sc, sc); }
+      for (let i = 0; i < 4; i++) { const w = at(4, 40), b = put(geo.bush, mats.bush, w, 0.5); b.scale.set(1 + r(), 0.8, 1 + r()); }
+      for (let i = 0; i < 2; i++) { const w = at(5, 40), m = put(geo.rock, mats.rock, w, 0.5, 0.8 + r() * 2); m.rotation.set(r() * 3, r() * 3, 0); }
+    } else if (bid === 'forest') {
+      for (let i = 0; i < 16; i++) { const w = at(3.5, 38), sc = 0.9 + r() * 1.3; pine(w, sc, r() < 0.5 ? mats.cone : mats.cone2, mats.cone, mats.trunk); }
+      for (let i = 0; i < 3; i++) { const w = at(4, 30), b = put(geo.bush, mats.bush, w, 0.5); b.scale.set(1 + r(), 0.8, 1 + r()); }
+    } else if (bid === 'desert') {
+      for (let i = 0; i < 4; i++) {
+        const w = at(5, 38), sc = 0.8 + r() * 0.8; put(bGeo.cactus, bMat.cactus, w, 1.5 * sc, sc);
+        for (const sx of [-1, 1]) { const a = put(bGeo.arm, bMat.cactus, { x: w.x + sx * 0.55 * sc, z: w.z }, (1.9 + r() * 0.5) * sc, sc); a.rotation.z = sx * 0.25; }
+      }
+      for (let i = 0; i < 3; i++) { const w = at(6, 40), m = put(geo.rock, bMat.sandRock, w, 0.5, 1 + r() * 2.2); m.rotation.set(r() * 3, r() * 3, 0); }
+      for (let i = 0; i < 3; i++) { const w = at(4, 35), b = put(geo.bush, bMat.dry, w, 0.35); b.scale.set(0.8 + r() * 0.6, 0.45, 0.8 + r() * 0.6); }
+      if (r() < 0.5) { const w = at(24, 30), hh = 7 + r() * 9, m = put(bGeo.mesa, bMat.mesa, w, hh / 2); m.scale.set(8 + r() * 8, hh, 8 + r() * 8); m.rotation.y = r() * 3; }
+    } else if (bid === 'snow') {
+      for (let i = 0; i < 7; i++) { const w = at(5, 40), sc = 0.9 + r() * 1.1; pine(w, sc, bMat.snowCone, bMat.snowCone, bMat.snowTrunk); }
+      for (let i = 0; i < 3; i++) { const w = at(5, 40), m = put(geo.rock, bMat.snowRock, w, 0.5, 0.9 + r() * 2); m.rotation.set(r() * 3, r() * 3, 0); }
+      for (let i = 0; i < 3; i++) { const w = at(4, 38), m = put(bGeo.mound, bMat.snowMound, w, 0.1); m.scale.set(1.5 + r() * 2.5, 0.7 + r() * 0.6, 1.5 + r() * 2.5); }
+    } else {                                              // city
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+        const b = buildings[Math.floor(r() * 3)], s = s0 + 5 + i * 10, w = worldPos(s, side * (ROAD_W / 2 + 8 + b.geo.parameters.width / 2 + r() * 5));
+        const m = new THREE.Mesh(b.geo, b.mats[Math.floor(r() * 3)]); m.position.set(w.x, b.h / 2, w.z); m.rotation.y = -w.th; group.add(m);
+      }
+      for (const side of [-1, 1]) {
+        const w = worldPos(s0 + 15, side * (ROAD_W / 2 + 3.4));
+        put(bGeo.lampPole, bMat.lamp, w, 3.5);
+        const hd = put(bGeo.lampHead, bMat.lampLight, { x: w.x - side * Math.cos(w.th) * 0.5, z: w.z - side * Math.sin(w.th) * 0.5 }, 7.0); hd.rotation.y = -w.th;
       }
     }
     if (k >= 4) {                                         // nothing on the first 120 m
@@ -126,18 +191,24 @@
       if (roll < 0.2) {                                    // a ramp
         const d = (r() - 0.5) * 4, s = s0 + 6 + r() * 10, w = worldPos(s, d), m = new THREE.Mesh(rampGeo, mat(0xc99a5b));
         m.position.set(w.x, 0, w.z); m.rotation.y = Math.PI / 2 - w.th; group.add(m);
-        const edge = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 4.6), mat(0xffffff)); edge.position.set(w.x, 1.72, w.z); edge.rotation.y = Math.PI / 2 - w.th;
+        const edge = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 4.6), mat(0xffffff)); edge.rotation.y = Math.PI / 2 - w.th;
         const ax = Math.sin(w.th) * 7, az = -Math.cos(w.th) * 7; edge.position.set(w.x + ax, 1.72, w.z + az); group.add(edge);
         list.ramps.push({ s, d, len: 7, w: 4.6, h: 1.7 });
-      } else if (roll < 0.75) {                            // rocks / logs on the road
+      } else if (roll < 0.75) {                            // rocks / logs / crates / barriers on the road
         const n = 1 + (r() < 0.35 ? 1 : 0);
         for (let i = 0; i < n; i++) {
-          const d = (r() - 0.5) * (ROAD_W - 1.5), s = s0 + 4 + r() * 22, w = worldPos(s, d), log = r() < 0.4;
-          const m = new THREE.Mesh(log ? geo.log : geo.rock, log ? mats.log : mats.rock);
-          if (log) { m.rotation.z = Math.PI / 2; m.rotation.y = -w.th; m.position.set(w.x, 0.42, w.z); }
-          else { m.position.set(w.x, 0.55, w.z); m.scale.setScalar(0.8 + r() * 0.5); m.rotation.set(r() * 3, r() * 3, 0); }
+          const d = (r() - 0.5) * (ROAD_W - 1.5), s = s0 + 4 + r() * 22, w = worldPos(s, d), big = r() < 0.4;
+          let m;
+          if (bid === 'city') {
+            if (big) { m = new THREE.Mesh(bGeo.barrier, bMat.barrier); m.rotation.y = -w.th; m.position.set(w.x, 0.45, w.z); for (const x of [-1.6, 0, 1.6]) { const st2 = new THREE.Mesh(bGeo.stripe, bMat.barStripe); st2.position.x = x; m.add(st2); } }
+            else { m = new THREE.Mesh(bGeo.crate, bMat.crate); m.rotation.y = r() * 3; m.position.set(w.x, 0.6, w.z); }
+          } else if (big) {
+            m = new THREE.Mesh(geo.log, bid === 'snow' ? bMat.snowLog : bid === 'desert' ? bMat.deadLog : mats.log); m.rotation.z = Math.PI / 2; m.rotation.y = -w.th; m.position.set(w.x, 0.42, w.z);
+          } else {
+            m = new THREE.Mesh(geo.rock, bid === 'snow' ? bMat.snowRock : bid === 'desert' ? bMat.sandRock : mats.rock); m.position.set(w.x, 0.55, w.z); m.scale.setScalar(0.8 + r() * 0.5); m.rotation.set(r() * 3, r() * 3, 0);
+          }
           group.add(m);
-          list.obs.push({ s, d, rs: log ? 0.5 : 0.8, rd: log ? 2.4 : 0.8 });
+          list.obs.push({ s, d, rs: big ? (bid === 'city' ? 0.5 : 0.5) : (bid === 'city' ? 0.7 : 0.8), rd: big ? 2.4 : (bid === 'city' ? 0.7 : 0.8) });
         }
       }
     }
@@ -189,6 +260,12 @@
     const boot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.34), mat(0x111111)); boot.position.set(sx * 0.3, 0.88, 0.18); rider.add(boot);
   }
   scene.add(bike);
+  const snow = (() => {
+    const g = new THREE.BufferGeometry(), a = new Float32Array(260 * 3);
+    for (let i = 0; i < 260; i++) { a[i * 3] = (Math.random() - 0.5) * 50; a[i * 3 + 1] = Math.random() * 25; a[i * 3 + 2] = (Math.random() - 0.5) * 50; }
+    g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const p = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.3, transparent: true, opacity: 0 })); p.frustumCulled = false; p.visible = false; scene.add(p); return p;
+  })();
   const blob = new THREE.Mesh(new THREE.CircleGeometry(0.9, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
   blob.rotation.x = -Math.PI / 2; scene.add(blob);
 
@@ -202,7 +279,7 @@
 
   // ---------- state ----------
   const MAX_SPEED = 34, NITRO_SPEED = 50;
-  const st = { s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, best: 0, started: false, over: 0, roll: 0, shake: 0, camYaw: 0 };
+  const st = { wheelie: false, wp: 0, wTime: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, best: 0, started: false, over: 0, roll: 0, shake: 0, camYaw: 0 };
   try { st.best = parseInt(localStorage.getItem('dirtbike-best') || '0', 10) || 0; } catch (e) { /* storage blocked */ }
   const keys = {};
   let muted = false;
@@ -233,7 +310,7 @@
   function begin() { startAudio(); if (actx && actx.state === 'suspended') actx.resume(); st.started = true; $('start').classList.add('hidden'); }
   $('start').addEventListener('click', begin);
   function restart() {
-    Object.assign(st, { dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
+    Object.assign(st, { wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
     st.camYaw = 0; toast('GO!', 1);
   }
   window.addEventListener('keydown', e => {
@@ -242,6 +319,7 @@
     if (!st.started) { if (e.code === 'Enter' || e.code === 'Space') begin(); return; }
     if (e.code === 'KeyR') restart();
     if (e.code === 'KeyM') { muted = !muted; toast(muted ? 'ENGINE MUTED' : 'ENGINE ON', 1); }
+    if (e.code === 'KeyE' && !e.repeat && !st.air && st.crash <= 0) { if (st.wheelie) endWheelie(); else { st.wheelie = true; st.wTime = 0; toast('WHEELIE!', 0.8); blip(300, 0.1, 'square', 0.04); } }
     if (e.code === 'Space' && st.air && !st.flipping && st.crash <= 0) { st.flipping = true; st.flip = 0; }
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -252,8 +330,14 @@
     for (const r of ramps) if (Math.abs(d - r.d) < r.w / 2 + 0.15 && s >= r.s && s <= r.s + r.len) return r.h * (s - r.s) / r.len;
     return 0;
   }
+  function endWheelie() {
+    if (!st.wheelie) return;
+    st.wheelie = false;
+    if (st.wTime >= 1.5) { const n = Math.round(st.wTime * 8); addScore(n); toast('WHEELIE +' + n + ' m', 1.4); }
+  }
   function crash(why) {
     if (st.crash > 0) return;
+    st.wheelie = false;
     st.crash = 1.5; st.speed = 0; st.flipping = false; st.flip = 0; st.vy = Math.max(0, st.vy);
     toast(why, 1.4); flash(0.6); st.shake = 0.6; blip(110, 0.4, 'sawtooth', 0.09);
   }
@@ -266,8 +350,10 @@
       if (st.crash <= 0) { st.roll = 0; st.d = Math.max(-2, Math.min(2, st.d)); st.yaw = 0; st.lat = 0; st.y = 0; st.vy = 0; st.air = false; }
       return;
     }
+    if (st.wheelie && (down || st.air || st.speed < 4)) endWheelie();
+    if (st.wheelie) st.wTime += dt;
     const offroad = Math.abs(st.d) > ROAD_W / 2 + 0.2, rough = Math.abs(st.d) > ROAD_W / 2 + 3.2;
-    let top = MAX_SPEED * (rough ? 0.62 : offroad ? 0.85 : 1), acc = up ? 15 : 0;
+    let top = MAX_SPEED * (rough ? 0.62 : offroad ? 0.85 : 1) * (st.wheelie ? 0.92 : 1), acc = up ? 15 : 0;
     if (boosting && st.nitro > 0 && up) { top = NITRO_SPEED * (rough ? 0.7 : 1); acc += 14; st.nitro = Math.max(0, st.nitro - 34 * dt); }
     else st.nitro = Math.min(100, st.nitro + 7 * dt);
     if (acc && st.speed < top) st.speed = Math.min(top, st.speed + acc * (1 - st.speed / (top + 8)) * dt * 1.6);
@@ -276,7 +362,7 @@
     if (down) st.speed = Math.max(0, st.speed - 30 * dt);
     if (st.air) st.speed = Math.max(0, st.speed - 0.4 * dt);
     // steering: the bike yaws toward the stick direction and slides across the road
-    const grip = st.air ? 0.25 : 1, targetYaw = steer * 0.5 * Math.min(1, 0.3 + st.speed / 14) * grip;
+    const grip = st.air ? 0.25 : 1, targetYaw = steer * 0.5 * Math.min(1, 0.3 + st.speed / 14) * grip * (st.wheelie ? 0.7 : 1);
     st.yaw += (targetYaw - st.yaw) * Math.min(1, 5.5 * dt);
     const curv = curvature(st.s);
     if (!st.air) st.lat += (-curv * st.speed * st.speed * 0.22 - st.lat * 1.8) * dt;   // the bend pushes you to the outside
@@ -332,9 +418,12 @@
     lean.rotation.z += (targetLean - lean.rotation.z) * Math.min(1, 8 * dt);
     let pitch = 0;
     if (!st.crash) { if (st.air) pitch = st.flipping ? -st.flip : Math.max(-0.35, Math.min(0.35, -st.vy * 0.03)); else { const gh2 = groundHeight(st.s + 1, st.d) - groundHeight(st.s - 1, st.d); pitch = Math.atan2(gh2, 2); } }
+    st.wp += ((st.wheelie ? 1 : 0) - st.wp) * Math.min(1, 6 * dt);
+    const wa = 0.62 * st.wp; pitch += wa;
     body.rotation.x += (pitch - body.rotation.x) * Math.min(1, st.flipping ? 1 : 12 * dt);
     if (st.flipping) body.rotation.x = -st.flip;
-    body.position.y = Math.sin(time * 38) * 0.015 * Math.min(1, st.speed / 10) * (st.air ? 0 : 1) * (Math.abs(st.d) > ROAD_W / 2 + 0.2 ? 3 : 1);
+    const offY = 0.46 * (1 - Math.cos(wa)) + 0.9 * Math.sin(wa), offZ = 0.9 - (0.46 * Math.sin(wa) + 0.9 * Math.cos(wa)); body.position.z = offZ;
+    body.position.y = offY + Math.sin(time * 38) * 0.015 * Math.min(1, st.speed / 10) * (st.air ? 0 : 1) * (Math.abs(st.d) > ROAD_W / 2 + 0.2 ? 3 : 1);
     for (const g of wheels) g.rotation.x += st.speed * dt / 0.46;
     rider.rotation.x = st.crash > 0 ? 0.2 : -Math.min(0.3, st.speed / 120);
     blob.position.set(w.x, 0.07, w.z); blob.scale.setScalar(Math.max(0.4, 1 - st.y * 0.2));
@@ -348,6 +437,19 @@
       puff(bx, 0.2, bz, (Math.random() - 0.5) * 1.5, 0.8 + Math.random(), (Math.random() - 0.5) * 1.5);
     }
     for (const d of dust) { if (d.life <= 0) { d.m.visible = false; continue; } d.life -= dt; d.m.position.addScaledVector(d.v, dt); d.m.scale.addScalar(dt * 2.5); d.m.material.opacity = Math.max(0, d.life * 0.6); }
+    // biome colours, falling snow and the biome banner
+    const pal = paletteAt(st.s);
+    scene.background.copy(pal.sky); scene.fog.color.copy(pal.sky); scene.fog.near = pal.fogN; scene.fog.far = pal.fogF;
+    ground.material.color.copy(pal.ground); shoulder.material.color.copy(pal.shoulder); asphalt.material.color.copy(pal.road);
+    const snowW = (pal.a === 'snow' ? 1 - pal.t : 0) + (pal.b === 'snow' ? pal.t : 0);
+    snow.visible = snowW > 0.02; snow.material.opacity = 0.9 * snowW;
+    if (snow.visible) { const p = snow.geometry.attributes.position; for (let i = 0; i < p.count; i++) { let y = p.getY(i) - (3 + (i % 5)) * dt; if (y < 0) y += 25; p.setY(i, y); p.setX(i, p.getX(i) + Math.sin(time + i) * dt * 0.8); } p.needsUpdate = true; snow.position.set(w.x, 0, w.z); }
+    const bi = biomeIdxOfS(st.s);
+    if (bi !== st.biomeIdx) {
+      const first = st.biomeIdx === undefined; st.biomeIdx = bi;
+      const nm = BIOMES[biomeIdAt(bi)].name; $('biome').textContent = nm;
+      if (!first) { const b = $('banner'); b.textContent = nm; b.classList.add('show'); setTimeout(() => b.classList.remove('show'), 2400); blip(660, 0.12); blip(990, 0.18, 'square', 0.05); }
+    }
     // chase camera
     st.camYaw += (th - st.camYaw) * Math.min(1, 3.2 * dt);
     const back = 5.8 + st.speed * 0.03, height = 2.5 + st.y * 0.5;
@@ -370,6 +472,6 @@
   }
   window.addEventListener('beforeunload', () => { try { localStorage.setItem('dirtbike-best', String(st.best)); } catch (e) { /* ignore */ } });
   extend(400); updateRoad(0); updateCells(0);
-  if (location.hash === '#debug') window.__db = { st, keys, step, begin, crash, obstacles: () => obstacles, ramps: () => ramps, worldPos, restart };
+  if (location.hash === '#debug') window.__db = { order, biomeIdAt, st, keys, step, begin, crash, obstacles: () => obstacles, ramps: () => ramps, worldPos, restart };
   frame();
 })();
