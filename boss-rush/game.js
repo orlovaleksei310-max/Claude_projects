@@ -70,6 +70,7 @@
   function toward(o, tx, ty, sp, dt) { const a = Math.atan2(ty - o.y, tx - o.x); o.x += Math.cos(a) * sp * dt; o.y += Math.sin(a) * sp * dt; }
 
   // ------------------------------------------------------------------ bosses
+  let slamHinted = false;
   const BOSSES = [mkGolem, mkBat, mkSlime, mkSpider, mkWyrm];
   function base(name, hp, r) { return { name, hp, max: hp, r, x: ARENA.x, y: ARENA.y - 130, flash: 0, st: 1.5, state: 'idle', n: 0, t: 0, ph: 1, z: 0 }; }
 
@@ -80,9 +81,9 @@
       this.st -= dt;
       if (this.state === 'idle') {
         toward(this, player.x, player.y, ph === 2 ? 75 : 55, dt);
-        if (this.st <= 0) { const o = ['slam', 'throw']; if (ph === 2) o.push('charge'); this.state = pick(o); this.n = 0; this.st = this.state === 'slam' ? 0.95 : this.state === 'throw' ? 0.6 : 0.8; if (this.state === 'slam') zone(this.x, this.y, 125, 0.9, 0.15, {}); if (this.state === 'charge') this.ca = angTo(this, player); }
+        if (this.st <= 0) { const o = ['slam', 'throw']; if (ph === 2) o.push('charge'); this.state = pick(o); this.n = 0; this.st = this.state === 'slam' ? 1.25 : this.state === 'throw' ? 0.6 : 0.8; if (this.state === 'slam') { zone(this.x, this.y, 105, 1.2, 0.15, {}); if (!slamHinted) { slamHinted = true; toastMsg('Dash through the shockwave, or hide behind a pillar!', 2.8); } } if (this.state === 'charge') this.ca = angTo(this, player); }
       } else if (this.state === 'slam') {
-        if (this.st <= 0) { wave(this.x, this.y, 250, 400, {}); shake = 14; blip(70, 0.3, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = ph === 2 ? 0.9 : 1.4; }
+        if (this.st <= 0) { wave(this.x, this.y, 175, 440, { w: 30, c: '#ffb27a' }); shake = 14; blip(70, 0.3, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = ph === 2 ? 1.1 : 1.6; }
       } else if (this.state === 'throw') {
         if (this.st <= 0) { ring(this.x, this.y, ph === 2 ? 12 : 8, this.n * 0.4, 170, 9, { c: '#9a8f86' }); blip(200, 0.15, 'square', 0.05); this.n++; this.st = 0.5; if (this.n >= 3) { this.state = 'idle'; this.st = 1.2; } }
       } else if (this.state === 'charge') {
@@ -93,6 +94,7 @@
     b.draw = function () {
       const x = this.x, y = this.y, f = this.flash > 0;
       if (this.tel !== null && this.tel !== undefined && this.state === 'charge' && this.st > 0) { ctx.strokeStyle = 'rgba(255,80,60,.55)'; ctx.lineWidth = 30; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(this.tel) * 520, y + Math.sin(this.tel) * 520); ctx.stroke(); }
+      if (this.state === 'slam') { ctx.strokeStyle = 'rgba(255,178,122,.35)'; ctx.lineWidth = 2; ctx.setLineDash([10, 10]); ctx.beginPath(); ctx.arc(x, y, 440, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
       ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 44, 52, 16, 0, 0, TAU); ctx.fill();
       for (const sx of [-1, 1]) { ctx.fillStyle = f ? '#fff' : '#6d655e'; ctx.beginPath(); ctx.arc(x + sx * 58, y + 8 + Math.sin(time * 3 + sx) * 3, 20, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#58514b'; ctx.beginPath(); ctx.arc(x + sx * 34, y + 2, 22, 0, TAU); ctx.fill(); }
       ctx.fillStyle = f ? '#fff' : '#85796f'; ctx.beginPath(); ctx.arc(x, y, 46, 0, TAU); ctx.fill();
@@ -292,6 +294,11 @@
 
   function hitCircle(a, b, extra) { return Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r + (extra || 0); }
 
+  function shielded(h) {                                 // a pillar between the shockwave's centre and you blocks it
+    const dx = player.x - h.x, dy = player.y - h.y, L2 = dx * dx + dy * dy || 1;
+    for (const p of pillars) { const t = clamp(((p.x - h.x) * dx + (p.y - h.y) * dy) / L2, 0, 1); if (t < 1 && Math.hypot(h.x + dx * t - p.x, h.y + dy * t - p.y) < p.r + 4) return true; }
+    return false;
+  }
   function updateFight(dt) {
     if (introT > 0) { introT -= dt; movePlayer(dt); return; }
     runTime += dt; movePlayer(dt);
@@ -321,7 +328,7 @@
     for (const h of hazards) {
       if (h.k === 'zone') { h.t += dt; if (h.t >= h.delay && h.t < h.delay + h.dur && !h.hit && Math.hypot(player.x - h.x, player.y - h.y) < h.r + player.r * 0.5) { if (player.inv <= 0 && player.dashT <= 0) { hurt(h.dmg); h.hit = true; } } if (h.t >= h.delay + h.dur) h.dead = true; if (h.t === dt && h.delay > 0.5) blip(180, 0.1, 'sine', 0.03); }
       else if (h.k === 'web') { h.t += dt; if (Math.hypot(player.x - h.x, player.y - h.y) < h.r) player.slow = 0.25; if (h.t > h.dur) h.dead = true; }
-      else if (h.k === 'wave') { h.r += h.sp * dt; if (h.r > h.maxR) h.dead = true; const d = Math.hypot(player.x - h.x, player.y - h.y); if (!h.hit && Math.abs(d - h.r) < h.w / 2 + player.r * 0.5 && player.inv <= 0 && player.dashT <= 0) { hurt(1); h.hit = true; } }
+      else if (h.k === 'wave') { h.r += h.sp * dt; if (h.r > h.maxR) h.dead = true; const d = Math.hypot(player.x - h.x, player.y - h.y); if (!h.hit && Math.abs(d - h.r) < h.w / 2 + player.r * 0.3 && player.inv <= 0 && player.dashT <= 0 && !shielded(h)) { hurt(1); h.hit = true; } }
       else if (h.k === 'beam') {
         h.t += dt; if (h.t > h.delay) h.a += h.rot * dt; else h.a += 0;
         if (h.t > h.delay + h.dur) h.dead = true;
