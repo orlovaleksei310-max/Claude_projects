@@ -7,6 +7,8 @@
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   $('game').appendChild(renderer.domElement);
   const scene = new THREE.Scene();
   const SKY = 0x8cc2ef;
@@ -15,6 +17,8 @@
   const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 500);
   scene.add(new THREE.HemisphereLight(0xdfeeff, 0x8a7a55, 0.95));
   const sun = new THREE.DirectionalLight(0xfff1d0, 0.9); sun.position.set(40, 80, 30); scene.add(sun);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 10, far: 200 }); scene.add(sun.target);
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
@@ -55,7 +59,7 @@
     g.setIndex(idx);
     const nrm = new Float32Array(SEGS * 2 * 3); for (let i = 0; i < SEGS * 2; i++) nrm[i * 3 + 1] = 1;
     g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-    const m = new THREE.Mesh(g, mat(color, { side: THREE.DoubleSide })); m.frustumCulled = false; m.userData = { offsets, y };
+    const m = new THREE.Mesh(g, mat(color, { side: THREE.DoubleSide })); m.frustumCulled = false; m.receiveShadow = true; m.userData = { offsets, y };
     scene.add(m); return m;
   }
   const shoulder = ribbon(0xcaa675, [-ROAD_W / 2 - 3, ROAD_W / 2 + 3], 0.01);
@@ -89,15 +93,15 @@
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(40, 40); return t;
   })();
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshLambertMaterial({ map: gtex }));
-  ground.rotation.x = -Math.PI / 2; scene.add(ground);
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
   // ---------- scenery and obstacles, generated per 30 m cell from a seeded random ----------
   const CELL = 30;
   const rng = seed => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const geo = {
-    trunk: new THREE.CylinderGeometry(0.25, 0.35, 2.2, 6), cone: new THREE.ConeGeometry(1.6, 4.2, 7),
+    trunk: new THREE.CylinderGeometry(0.25, 0.35, 2.2, 10), cone: new THREE.ConeGeometry(1.6, 4.2, 12),
     rock: new THREE.DodecahedronGeometry(0.85, 0), log: new THREE.CylinderGeometry(0.42, 0.42, 5.2, 8),
-    bush: new THREE.SphereGeometry(0.9, 7, 6), cactus: new THREE.CylinderGeometry(0.3, 0.3, 2.6, 6)
+    bush: new THREE.SphereGeometry(0.9, 14, 10), cactus: new THREE.CylinderGeometry(0.3, 0.3, 2.6, 6)
   };
   const mats = { trunk: mat(0x6b4a2b), cone: mat(0x2f6b3a), cone2: mat(0x3d7d3f), rock: mat(0x8d8f94), log: mat(0x7a5230), bush: mat(0x4d7a3a) };
   let ramps = [];                                        // active ramps (for the physics)
@@ -137,7 +141,7 @@
   }
 
   const bGeo = {
-    canopy: new THREE.SphereGeometry(1.9, 8, 7), cone2: new THREE.ConeGeometry(1.2, 3.2, 7), cactus: new THREE.CylinderGeometry(0.32, 0.36, 3.0, 8), arm: new THREE.CylinderGeometry(0.2, 0.2, 1.0, 6),
+    canopy: new THREE.SphereGeometry(1.9, 14, 10), cone2: new THREE.ConeGeometry(1.2, 3.2, 12), cactus: new THREE.CylinderGeometry(0.32, 0.36, 3.0, 8), arm: new THREE.CylinderGeometry(0.2, 0.2, 1.0, 6),
     mesa: new THREE.BoxGeometry(1, 1, 1), mound: new THREE.SphereGeometry(1, 8, 5), lampPole: new THREE.CylinderGeometry(0.1, 0.12, 7, 6), lampHead: new THREE.BoxGeometry(0.9, 0.18, 0.4),
     crate: new THREE.BoxGeometry(1.2, 1.2, 1.2), barrier: new THREE.BoxGeometry(4.8, 0.9, 0.6), stripe: new THREE.BoxGeometry(0.5, 0.92, 0.62)
   };
@@ -351,6 +355,7 @@
     limb([sx * 0.27, 0.7, 0.2], [sx * 0.29, 0.56, 0.02], 0.075, M.black, rider);                // boot
     const knee = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), M.white); knee.position.set(sx * 0.25, 1.2, -0.07); knee.scale.set(0.8, 1, 1); rider.add(knee);   // knee guard
   }
+  bike.traverse(o => { if (o.isMesh) o.castShadow = true; });
   scene.add(bike);
   const snow = (() => {
     const g = new THREE.BufferGeometry(), a = new Float32Array(260 * 3);
@@ -524,6 +529,7 @@
     body.position.y = offY + Math.sin(time * 38) * 0.015 * Math.min(1, st.speed / 10) * (st.air ? 0 : 1) * (Math.abs(st.d) > ROAD_W / 2 + 0.2 ? 3 : 1);
     for (const g of wheels) g.rotation.x += st.speed * dt / 0.46;
     rider.rotation.x = st.crash > 0 ? 0.2 : -Math.min(0.1, st.speed / 300);
+    blob.visible = false; sun.target.position.set(w.x, 0, w.z); sun.position.set(w.x + 40, 80, w.z + 30);
     blob.position.set(w.x, 0.07, w.z); blob.scale.setScalar(Math.max(0.4, 1 - st.y * 0.2));
     // ground + road follow the bike
     ground.position.set(w.x, 0, w.z); gtex.offset.set(w.x / 17.5, -w.z / 17.5);

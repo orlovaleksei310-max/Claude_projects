@@ -28,3 +28,8 @@ td { padding: 4px 12px; color: #d7deea; } td:first-child { white-space: nowrap; 
 #level { margin-top: 2px; font-size: 14px; letter-spacing: 3px; color: #ffb347; font-weight: 700; }
 #pts { margin-top: 2px; font-size: 14px; letter-spacing: 2px; color: #ffe066; font-weight: 700; }
 #pts b { font-size: 18px; }
+
+#hud { padding: 12px 18px; background: rgba(12, 18, 30, .38); border: 1px solid rgba(255, 255, 255, .18); border-radius: 14px; backdrop-filter: blur(6px); }
+#speedo { padding: 12px 18px; background: rgba(12, 18, 30, .38); border: 1px solid rgba(255, 255, 255, .18); border-radius: 14px; backdrop-filter: blur(6px); }
+#nitro { border: 1px solid rgba(255, 255, 255, .7); }
+#toast { font-size: 26px; }
