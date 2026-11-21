@@ -99,7 +99,7 @@
   const mapC = $('map'), mctx = mapC.getContext('2d'), MAP_R = 90, MAP_SZ = 200;
   mapC.width = mapC.height = MAP_SZ * 2; mapC.style.width = mapC.style.height = MAP_SZ + 'px';
   function drawMap(bikeW) {
-    const c = mctx, S = MAP_SZ * 2, k = S / 2 / MAP_R * 1.0, th = roadAt(st.s).th, sn = Math.sin(th), cs = Math.cos(th), cx = S / 2, cy = S * 0.68;
+    const c = mctx, S = MAP_SZ * 2, k = S / 2 / MAP_R * 1.0, th = roadAt(st.s).th, sn = Math.sin(th), cs = Math.cos(th), cx = S / 2, cy = S * 0.58;
     const P = (x, z) => { const dx = x - bikeW.x, dz = z - bikeW.z; return [cx + (dx * cs + dz * sn) * k, cy - (dx * sn - dz * cs) * k]; };
     c.clearRect(0, 0, S, S);
     c.save(); c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 3, 0, 6.2832); c.clip();
@@ -109,7 +109,7 @@
       for (let q = from; q <= to; q += 4) { const r = roadAt(q), p = P(r.x, r.z); if (first) { c.moveTo(p[0], p[1]); first = false; } else c.lineTo(p[0], p[1]); }
       c.lineWidth = w; c.strokeStyle = col; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke();
     };
-    const a = Math.max(0, st.s - 50), b = st.s + MAP_R * 1.4;
+    const a = Math.max(0, st.s - MAP_R * 1.5), b = st.s + MAP_R * 1.4;
     line(a, b, 15, '#e9edf3'); line(a, b, 11, '#4a505c');
     c.setLineDash([8, 10]); line(a, b, 1.6, '#ffd23f'); c.setLineDash([]);
     for (const r of ramps) { if (r.s < a || r.s > b) continue; const p = worldPos(r.s + r.len / 2, r.d), q = P(p.x, p.z); c.fillStyle = '#3ddc84'; c.fillRect(q[0] - 4, q[1] - 4, 8, 8); }
@@ -432,7 +432,8 @@
   function begin() { startAudio(); if (actx && actx.state === 'suspended') actx.resume(); st.started = true; $('start').classList.add('hidden'); }
   $('start').addEventListener('click', begin);
   function restart() {
-    Object.assign(st, { pts: 0, ptsAcc: 0, level: 0, wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
+    $('dead').classList.remove('show');
+    Object.assign(st, { dead: false, offT: 0, pts: 0, ptsAcc: 0, level: 0, wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
     st.camYaw = 0; toast('GO!', 1);
   }
   window.addEventListener('keydown', e => {
@@ -457,6 +458,7 @@
     st.wheelie = false;
     if (st.wTime >= 1.5) toast('WHEELIE ' + Math.round(st.wTime * 25) + ' pts', 1.2);
   }
+  const OFF_LIMIT = 10;
   function crash(why) {
     if (st.crash > 0) return;
     st.wheelie = false;
@@ -464,6 +466,7 @@
     toast(why, 1.4); flash(0.6); st.shake = 0.6; blip(110, 0.4, 'sawtooth', 0.09);
   }
   function step(dt) {
+    if (st.dead) { st.speed = 0; return; }
     const up = keys.KeyW || keys.ArrowUp, down = keys.KeyS || keys.ArrowDown;
     const steer = ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft) ? 1 : 0);
     const boosting = !!keys.ShiftLeft || !!keys.ShiftRight;
@@ -474,6 +477,15 @@
     }
     if (st.wheelie && (down || st.air || st.speed < 4)) endWheelie();
     if (st.wheelie) { st.wTime += dt; st.nitro = Math.max(0, st.nitro - 15 * dt); st.pts += 25 * dt; if (st.nitro <= 0) { endWheelie(); toast('OUT OF NITRO', 0.8); } }
+    const offOn = Math.abs(st.d) > ROAD_W / 2 + 0.2;
+    if (offOn && st.crash <= 0) {
+      st.offT = (st.offT || 0) + dt;
+      if (st.offT >= OFF_LIMIT) {
+        st.dead = true; st.speed = 0; st.wheelie = false; st.flipping = false; st.offT = OFF_LIMIT;
+        $('dead').innerHTML = 'YOU DIED<small>Off the road for too long. Press R to restart</small>'; $('dead').classList.add('show'); flash(0.7); blip(90, 0.8, 'sawtooth', 0.1);
+        return;
+      }
+    } else st.offT = Math.max(0, (st.offT || 0) - dt * 2);
     const offroad = Math.abs(st.d) > ROAD_W / 2 + 0.2, rough = Math.abs(st.d) > ROAD_W / 2 + 3.2;
     const hd = hardness(st.s);                                 // later levels are faster
     let top = (MAX_SPEED + 7 * hd) * (rough ? 0.62 : offroad ? 0.85 : 1) * (st.wheelie ? 0.92 : 1), acc = up ? 15 : 0;
@@ -601,6 +613,7 @@
     if (score > st.best) { st.best = score; $('bestv').textContent = st.best; if (Math.floor(time * 2) % 20 === 0) try { localStorage.setItem('dirtbike-best', String(st.best)); } catch (e) { /* ignore */ } }
     $('speed').textContent = Math.round(st.speed * 3.6);
     drawMap(w);
+    { const wn = $('offwarn'); if (!st.dead && st.offT > 0.01 && Math.abs(st.d) > ROAD_W / 2 + 0.2) { wn.textContent = 'GET BACK ON THE ROAD: ' + Math.max(0, OFF_LIMIT - st.offT).toFixed(1) + 's'; wn.classList.add('show'); } else wn.classList.remove('show'); }
     $('ptsv').textContent = Math.floor(st.pts);
     $('nitrobar').style.width = st.nitro + '%';
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }
