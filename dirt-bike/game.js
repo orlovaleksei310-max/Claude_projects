@@ -442,8 +442,9 @@
     if (!st.started) { if (e.code === 'Enter' || e.code === 'Space') begin(); return; }
     if (e.code === 'KeyR') restart();
     if (e.code === 'KeyM') { muted = !muted; toast(muted ? 'ENGINE MUTED' : 'ENGINE ON', 1); }
+    if (e.code === 'KeyE' && !e.repeat && st.air && !st.flipping && !st.trick && st.crash <= 0) { startTrick(); }
     if (e.code === 'KeyE' && !e.repeat && !st.air && st.crash <= 0) { if (st.wheelie) endWheelie(); else if (st.nitro < 8) toast('NOT ENOUGH NITRO', 0.8); else { st.wheelie = true; st.wTime = 0; toast('WHEELIE!', 0.8); blip(300, 0.1, 'square', 0.04); } }
-    if (e.code === 'Space' && st.air && !st.flipping && st.crash <= 0) { if (st.nitro < 20) toast('NOT ENOUGH NITRO', 0.8); else { st.nitro -= 20; st.flipping = true; st.flip = 0; } }
+    if (e.code === 'Space' && st.air && !st.flipping && !st.trick && st.crash <= 0) { if (st.nitro < 20) toast('NOT ENOUGH NITRO', 0.8); else { st.nitro -= 20; st.flipping = true; st.flip = 0; } }
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -458,11 +459,36 @@
     st.wheelie = false;
     if (st.wTime >= 1.5) toast('WHEELIE ' + Math.round(st.wTime * 25) + ' pts', 1.2);
   }
-  const OFF_LIMIT = 10;
+  const OFF_LIMIT = 10, TAU = Math.PI * 2;
+  const TRICKS = [{ n: 'TABLETOP', base: 300, dur: 0.8 }, { n: 'SUPERMAN', base: 400, dur: 0.9 }, { n: '360 SPIN', base: 600, dur: 0.95 }, { n: 'WHIP', base: 350, dur: 0.7 }, { n: 'NAC NAC', base: 450, dur: 0.85 }];
+  function startTrick() { const t = TRICKS[Math.floor(Math.random() * TRICKS.length)]; st.trick = { n: t.n, base: t.base, dur: t.dur, t: 0 }; blip(500, 0.08, 'square', 0.04); }
+  const ease = u => u * u * (3 - 2 * u), env = u => Math.sin(Math.PI * Math.min(1, u));
+  function poseTrick() {                                  // animates the bike and rider for the current air trick
+    const k = st.trick, u = k ? k.t / k.dur : 0, e = k ? env(u) : 0;
+    let ry = 0, rz = 0, rrx = 0, rpy = 0, rpz = 0;
+    if (k) {
+      if (k.n === 'TABLETOP') rz = 1.35 * e;
+      else if (k.n === 'SUPERMAN') { rrx = 1.25 * e; rpz = 0.55 * e; rpy = -0.15 * e; }
+      else if (k.n === '360 SPIN') ry = TAU * ease(Math.min(1, u));
+      else if (k.n === 'WHIP') { rz = 0.9 * e; ry = 0.7 * e; }
+      else if (k.n === 'NAC NAC') { rrx = 0.35 * e; rpz = 0.1 * e; rz = 0.25 * e; }
+    }
+    body.rotation.y = ry; body.rotation.z = rz;
+    rider.position.set(0, rpy, rpz); if (k) rider.rotation.x = -0.1 + rrx;
+  }
+  function landTrick() {                                  // grade the trick when the wheels touch down
+    const k = st.trick; if (!k) return;
+    if (k.t >= k.dur) {
+      const m = 0.6 + Math.min(1.4, (st.peak || 0) / 3), n = Math.round(k.base * m / 10) * 10;
+      const grade = m < 0.95 ? 'OK' : m < 1.35 ? 'NICE' : m < 1.75 ? 'SICK' : 'INSANE';
+      st.pts += n; toast(grade + ' ' + k.n + ' +' + n + ' pts', 1.8); blip(880, 0.12); blip(1100, 0.15, 'square', 0.05);
+    } else toast('TRICK CUT SHORT: no points', 1.2);
+    st.trick = null;
+  }
   function crash(why) {
     if (st.crash > 0) return;
     st.wheelie = false;
-    st.crash = 1.5; st.speed = 0; st.flipping = false; st.flip = 0; st.vy = Math.max(0, st.vy);
+    st.crash = 1.5; st.speed = 0; st.flipping = false; st.trick = null; st.flip = 0; st.vy = Math.max(0, st.vy);
     toast(why, 1.4); flash(0.6); st.shake = 0.6; blip(110, 0.4, 'sawtooth', 0.09);
   }
   function step(dt) {
@@ -512,18 +538,21 @@
       const prev = st.y;
       st.y = gh;
       if (prev > 1.0 && gh < prev - 0.3 && st.speed > 6) {          // flew off the end of a ramp
-        st.air = true; st.airT = 0; st.vy = Math.max(4, st.speed * 0.28); st.y = prev; st.flip = 0; st.flipping = false;
+        st.air = true; st.airT = 0; st.peak = 0; st.trick = null; st.vy = Math.max(4, st.speed * 0.28); st.y = prev; st.flip = 0; st.flipping = false;
       }
     }
     if (st.air) {
       st.airT += dt; st.vy -= 14 * dt; st.y += st.vy * dt;
       if (st.flipping) st.flip += dt * 8;
+      if (st.trick) st.trick.t += dt;
+      st.peak = Math.max(st.peak || 0, st.y);
       if (st.y <= gh) {
         st.y = gh; st.air = false;
         if (st.flipping) {
           if (st.flip >= TAU - 0.9) { const n = Math.max(1, Math.round(st.flip / TAU)); st.pts += 500 * n; toast((n > 1 ? n + 'x ' : '') + 'FLIP! +' + 500 * n + ' pts', 1.6); blip(880, 0.15); blip(1320, 0.2, 'square', 0.05); }
           else if (st.flip > 0.9) crash('BAD LANDING!');
         } else if (st.airT > 0.5) { st.pts += Math.round(st.airT * 40); toast('AIR TIME +' + Math.round(st.airT * 40) + ' pts', 1.2); }
+        landTrick();
         st.flip = 0; st.flipping = false; st.vy = 0; st.shake = Math.max(st.shake, 0.25);
       }
     }
@@ -562,10 +591,11 @@
     const wa = 0.62 * st.wp; pitch += wa;
     body.rotation.x += (pitch - body.rotation.x) * Math.min(1, st.flipping ? 1 : 12 * dt);
     if (st.flipping) body.rotation.x = -st.flip;
+    poseTrick();
     const offY = 0.46 * (1 - Math.cos(wa)) + 0.9 * Math.sin(wa), offZ = 0.9 - (0.46 * Math.sin(wa) + 0.9 * Math.cos(wa)); body.position.z = offZ;
     body.position.y = offY + Math.sin(time * 38) * 0.015 * Math.min(1, st.speed / 10) * (st.air ? 0 : 1) * (Math.abs(st.d) > ROAD_W / 2 + 0.2 ? 3 : 1);
     for (const g of wheels) g.rotation.x += st.speed * dt / 0.46;
-    rider.rotation.x = st.crash > 0 ? 0.2 : -Math.min(0.1, st.speed / 300);
+    if (!st.trick) rider.rotation.x = st.crash > 0 ? 0.2 : -Math.min(0.1, st.speed / 300);
     blob.visible = false; sun.target.position.set(w.x, 0, w.z); sun.position.set(w.x + 40, 80, w.z + 30);
     blob.position.set(w.x, 0.07, w.z); blob.scale.setScalar(Math.max(0.4, 1 - st.y * 0.2));
     // ground + road follow the bike
