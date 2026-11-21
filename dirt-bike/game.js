@@ -107,11 +107,11 @@
   const rampGeo = ramp(7, 4.6, 1.7);
   // ---------- biomes: every 1000 m the scenery changes, and no biome repeats ----------
   const BIOMES = {
-    grass:  { name: 'GRASSLAND',       sky: 0x8cc2ef, ground: 0x86a95a, shoulder: 0xc9aa78, road: 0x6b6f7a, fogN: 90, fogF: 330 },
-    forest: { name: 'FOREST',          sky: 0x86b3a4, ground: 0x4f7c3d, shoulder: 0x8a6e4a, road: 0x585c66, fogN: 55, fogF: 250 },
-    desert: { name: 'DESERT',          sky: 0xf1dba8, ground: 0xdfba78, shoulder: 0xeed3a0, road: 0x7a756d, fogN: 100, fogF: 340 },
-    snow:   { name: 'SNOWY MOUNTAINS', sky: 0xc6dbed, ground: 0xf2f6fb, shoulder: 0xd7e1ec, road: 0x4b5059, fogN: 45, fogF: 220 },
-    city:   { name: 'CITY',            sky: 0xa9bcd2, ground: 0x777c85, shoulder: 0x9ea2aa, road: 0x3c3f46, fogN: 80, fogF: 300 }
+    grass:  { name: 'GRASSLAND', hint: 'Rocks and logs',       sky: 0x8cc2ef, ground: 0x86a95a, shoulder: 0xc9aa78, road: 0x6b6f7a, fogN: 90, fogF: 330 },
+    forest: { name: 'FOREST', hint: 'Stumps, fallen trees and slow mud',          sky: 0x86b3a4, ground: 0x4f7c3d, shoulder: 0x8a6e4a, road: 0x585c66, fogN: 55, fogF: 250 },
+    desert: { name: 'DESERT', hint: 'Cacti and rolling tumbleweeds',          sky: 0xf1dba8, ground: 0xdfba78, shoulder: 0xeed3a0, road: 0x7a756d, fogN: 100, fogF: 340 },
+    snow:   { name: 'SNOWY MOUNTAINS', hint: 'Slippery ice and snowmen', sky: 0xc6dbed, ground: 0xf2f6fb, shoulder: 0xd7e1ec, road: 0x4b5059, fogN: 45, fogF: 220 },
+    city:   { name: 'CITY', hint: 'Stopped cars, barriers and crates',            sky: 0xa9bcd2, ground: 0x777c85, shoulder: 0x9ea2aa, road: 0x3c3f46, fogN: 80, fogF: 300 }
   };
   const BIOME_IDS = Object.keys(BIOMES);
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -149,6 +149,64 @@
     const t = new THREE.CanvasTexture(c); return t;
   };
   const buildings = [[8, 14], [9, 24], [10, 36]].map(([w, h], i) => ({ geo: new THREE.BoxGeometry(w, h, w), h, mats: [0xffffff, 0xe8d8c8, 0xc8d8e8].map(col => new THREE.MeshLambertMaterial({ color: col, map: winTex(4, 6 + i * 4) })) }));
+
+  const oGeo = {
+    stump: new THREE.CylinderGeometry(0.55, 0.65, 0.7, 9), fallen: new THREE.CylinderGeometry(0.6, 0.6, 6.2, 9), disc: new THREE.CircleGeometry(2.3, 20), tumble: new THREE.IcosahedronGeometry(0.62, 0),
+    ball: new THREE.SphereGeometry(0.5, 10, 8), carBody: new THREE.BoxGeometry(4.2, 0.75, 2.0), carCab: new THREE.BoxGeometry(2.1, 0.7, 1.7), carWheel: new THREE.CylinderGeometry(0.38, 0.38, 0.3, 10), carrot: new THREE.ConeGeometry(0.1, 0.5, 6)
+  };
+  const oMat = {
+    fallen: mat(0x5a4328), mud: new THREE.MeshLambertMaterial({ color: 0x4f3622 }), ice: new THREE.MeshLambertMaterial({ color: 0x9fe0ff, transparent: true, opacity: 0.85 }), tumble: mat(0xa88a55), snowman: mat(0xffffff), carrot: mat(0xff7a1a), coal: mat(0x111111),
+    cars: [0xd23a3a, 0x2f6fd0, 0xe0c13a, 0x3aa86a].map(c => mat(c)), glass: mat(0x1b2733), tire: mat(0x151515)
+  };
+  function makeObstacle(bid, r, s, d, w) {
+    const y = Math.PI / 2 - w.th;                          // turns local x along the road
+    const place = (m, h) => { m.position.set(w.x, h, w.z); return m; };
+    const pick = r();
+    if (bid === 'grass') {
+      if (pick < 0.6) { const m = place(new THREE.Mesh(geo.rock, mats.rock), 0.55); m.scale.setScalar(0.8 + r() * 0.5); m.rotation.set(r() * 3, r() * 3, 0); return { mesh: m, obs: { s, d, rs: 0.8, rd: 0.8, kind: 'crash' } }; }
+      const m = place(new THREE.Mesh(geo.log, mats.log), 0.42); m.rotation.z = Math.PI / 2; m.rotation.y = -w.th; return { mesh: m, obs: { s, d, rs: 0.5, rd: 2.4, kind: 'crash' } };
+    }
+    if (bid === 'forest') {
+      if (pick < 0.35) { const m = place(new THREE.Mesh(oGeo.stump, mats.trunk), 0.35); return { mesh: m, obs: { s, d, rs: 0.7, rd: 0.7, kind: 'crash' } }; }
+      if (pick < 0.65) { const m = place(new THREE.Mesh(oGeo.fallen, oMat.fallen), 0.6); m.rotation.z = Math.PI / 2; m.rotation.y = -w.th; return { mesh: m, obs: { s, d, rs: 0.65, rd: 3.1, kind: 'crash' } }; }
+      const m = place(new THREE.Mesh(oGeo.disc, oMat.mud), 0.06); m.rotation.x = -Math.PI / 2; m.scale.set(1.1, 1.3, 1);
+      return { mesh: m, obs: { s, d, rs: 2.5, rd: 2.3, kind: 'mud' } };
+    }
+    if (bid === 'desert') {
+      if (pick < 0.5) {
+        const g = new THREE.Group(); g.position.set(w.x, 0, w.z);
+        const c = new THREE.Mesh(bGeo.cactus, bMat.cactus); c.position.y = 1.5; g.add(c);
+        for (const sx of [-1, 1]) { const a = new THREE.Mesh(bGeo.arm, bMat.cactus); a.position.set(sx * 0.55, 1.9, 0); a.rotation.z = sx * 0.25; g.add(a); }
+        return { mesh: g, obs: { s, d, rs: 0.6, rd: 0.7, kind: 'crash' } };
+      }
+      const m = place(new THREE.Mesh(oGeo.tumble, oMat.tumble), 0.62);                 // a tumbleweed rolling across the road
+      const v = (r() < 0.5 ? -1 : 1) * (2.2 + r() * 1.8);
+      const o = { s, d: Math.max(-ROAD_W / 2 + 0.6, Math.min(ROAD_W / 2 - 0.6, d)), rs: 0.65, rd: 0.65, kind: 'crash', v };
+      o.mesh = m; return { mesh: m, obs: o };
+    }
+    if (bid === 'snow') {
+      if (pick < 0.45) { const m = place(new THREE.Mesh(oGeo.disc, oMat.ice), 0.06); m.rotation.x = -Math.PI / 2; m.scale.set(1.2, 1.3, 1); return { mesh: m, obs: { s, d, rs: 2.8, rd: 2.7, kind: 'ice' } }; }
+      if (pick < 0.8) {
+        const g = new THREE.Group(); g.position.set(w.x, 0, w.z);
+        const b1 = new THREE.Mesh(oGeo.ball, oMat.snowman); b1.position.y = 0.5; b1.scale.setScalar(1.3); g.add(b1);
+        const b2 = new THREE.Mesh(oGeo.ball, oMat.snowman); b2.position.y = 1.35; b2.scale.setScalar(0.95); g.add(b2);
+        const b3 = new THREE.Mesh(oGeo.ball, oMat.snowman); b3.position.y = 2.0; b3.scale.setScalar(0.65); g.add(b3);
+        const nose = new THREE.Mesh(oGeo.carrot, oMat.carrot); nose.position.set(0, 2.0, 0.4); nose.rotation.x = Math.PI / 2; g.add(nose);
+        return { mesh: g, obs: { s, d, rs: 0.75, rd: 0.75, kind: 'crash' } };
+      }
+      const m = place(new THREE.Mesh(geo.rock, bMat.snowRock), 0.6); m.scale.setScalar(1.0 + r() * 0.5); m.rotation.set(r() * 3, r() * 3, 0); return { mesh: m, obs: { s, d, rs: 0.9, rd: 0.9, kind: 'crash' } };
+    }
+    // city
+    if (pick < 0.35) {                                     // a stopped car blocks part of the road
+      const g = new THREE.Group(); g.position.set(w.x, 0, w.z); g.rotation.y = y;
+      const body = new THREE.Mesh(oGeo.carBody, oMat.cars[Math.floor(r() * 4)]); body.position.y = 0.6; g.add(body);
+      const cab = new THREE.Mesh(oGeo.carCab, oMat.glass); cab.position.set(-0.2, 1.2, 0); g.add(cab);
+      for (const x of [-1.4, 1.4]) for (const z of [-0.95, 0.95]) { const wh = new THREE.Mesh(oGeo.carWheel, oMat.tire); wh.rotation.x = Math.PI / 2; wh.position.set(x, 0.38, z); g.add(wh); }
+      return { mesh: g, obs: { s, d, rs: 2.2, rd: 1.15, kind: 'crash' } };
+    }
+    if (pick < 0.7) { const m = new THREE.Mesh(bGeo.barrier, bMat.barrier); m.rotation.y = -w.th; m.position.set(w.x, 0.45, w.z); for (const x of [-1.6, 0, 1.6]) { const st2 = new THREE.Mesh(bGeo.stripe, bMat.barStripe); st2.position.x = x; m.add(st2); } return { mesh: m, obs: { s, d, rs: 0.5, rd: 2.4, kind: 'crash' } }; }
+    const m = place(new THREE.Mesh(bGeo.crate, bMat.crate), 0.6); m.rotation.y = r() * 3; return { mesh: m, obs: { s, d, rs: 0.7, rd: 0.7, kind: 'crash' } };
+  }
 
   function buildCell(k) {
     const r = rng(k * 7919 + 13), group = new THREE.Group(), list = { ramps: [], obs: [] };
@@ -194,21 +252,12 @@
         const edge = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 4.6), mat(0xffffff)); edge.rotation.y = Math.PI / 2 - w.th;
         const ax = Math.sin(w.th) * 7, az = -Math.cos(w.th) * 7; edge.position.set(w.x + ax, 1.72, w.z + az); group.add(edge);
         list.ramps.push({ s, d, len: 7, w: 4.6, h: 1.7 });
-      } else if (roll < 0.75) {                            // rocks / logs / crates / barriers on the road
+      } else if (roll < 0.75) {                            // obstacles: every biome has its own kinds
         const n = 1 + (r() < 0.35 ? 1 : 0);
         for (let i = 0; i < n; i++) {
-          const d = (r() - 0.5) * (ROAD_W - 1.5), s = s0 + 4 + r() * 22, w = worldPos(s, d), big = r() < 0.4;
-          let m;
-          if (bid === 'city') {
-            if (big) { m = new THREE.Mesh(bGeo.barrier, bMat.barrier); m.rotation.y = -w.th; m.position.set(w.x, 0.45, w.z); for (const x of [-1.6, 0, 1.6]) { const st2 = new THREE.Mesh(bGeo.stripe, bMat.barStripe); st2.position.x = x; m.add(st2); } }
-            else { m = new THREE.Mesh(bGeo.crate, bMat.crate); m.rotation.y = r() * 3; m.position.set(w.x, 0.6, w.z); }
-          } else if (big) {
-            m = new THREE.Mesh(geo.log, bid === 'snow' ? bMat.snowLog : bid === 'desert' ? bMat.deadLog : mats.log); m.rotation.z = Math.PI / 2; m.rotation.y = -w.th; m.position.set(w.x, 0.42, w.z);
-          } else {
-            m = new THREE.Mesh(geo.rock, bid === 'snow' ? bMat.snowRock : bid === 'desert' ? bMat.sandRock : mats.rock); m.position.set(w.x, 0.55, w.z); m.scale.setScalar(0.8 + r() * 0.5); m.rotation.set(r() * 3, r() * 3, 0);
-          }
-          group.add(m);
-          list.obs.push({ s, d, rs: big ? (bid === 'city' ? 0.5 : 0.5) : (bid === 'city' ? 0.7 : 0.8), rd: big ? 2.4 : (bid === 'city' ? 0.7 : 0.8) });
+          const d = (r() - 0.5) * (ROAD_W - 1.5), s = s0 + 4 + r() * 22, w = worldPos(s, d);
+          const o = makeObstacle(bid, r, s, d, w);
+          group.add(o.mesh); list.obs.push(o.obs);
         }
       }
     }
@@ -362,7 +411,7 @@
     if (down) st.speed = Math.max(0, st.speed - 30 * dt);
     if (st.air) st.speed = Math.max(0, st.speed - 0.4 * dt);
     // steering: the bike yaws toward the stick direction and slides across the road
-    const grip = st.air ? 0.25 : 1, targetYaw = steer * 0.5 * Math.min(1, 0.3 + st.speed / 14) * grip * (st.wheelie ? 0.7 : 1);
+    const grip = st.air ? 0.25 : (st.slip > 0 ? 0.22 : 1), targetYaw = steer * 0.5 * Math.min(1, 0.3 + st.speed / 14) * grip * (st.wheelie ? 0.7 : 1);
     st.yaw += (targetYaw - st.yaw) * Math.min(1, 5.5 * dt);
     const curv = curvature(st.s);
     if (!st.air) st.lat += (-curv * st.speed * st.speed * 0.22 - st.lat * 1.8) * dt;   // the bend pushes you to the outside
@@ -393,8 +442,13 @@
       }
     }
     // obstacles
+    st.slip = Math.max(0, (st.slip || 0) - dt); st.hazT = Math.max(0, (st.hazT || 0) - dt);
     if (!st.air || st.y < 0.5) for (const o of obstacles) {
-      if (Math.abs(st.s - o.s) < o.rs + 0.35 && Math.abs(st.d - o.d) < o.rd + 0.3 && st.y < 0.7) { crash('CRASH!'); break; }
+      if (Math.abs(st.s - o.s) < o.rs + 0.35 && Math.abs(st.d - o.d) < o.rd + 0.3 && st.y < 0.7) {
+        if (o.kind === 'mud') { if (st.speed > 12) st.speed = Math.max(12, st.speed - 70 * dt); st.shake = Math.max(st.shake, 0.15); if (st.hazT <= 0) { toast('MUD! You are slowing down', 1.2); st.hazT = 2; } }
+        else if (o.kind === 'ice') { st.slip = 0.5; if (st.hazT <= 0) { toast('ICE! Steering is slippery', 1.2); st.hazT = 2; } }
+        else { crash(o.v ? 'HIT A TUMBLEWEED!' : 'CRASH!'); break; }
+      }
     }
     st.shake = Math.max(0, st.shake - dt * 2);
     if (st.s > st.dist) st.dist = st.s;
@@ -437,6 +491,10 @@
       puff(bx, 0.2, bz, (Math.random() - 0.5) * 1.5, 0.8 + Math.random(), (Math.random() - 0.5) * 1.5);
     }
     for (const d of dust) { if (d.life <= 0) { d.m.visible = false; continue; } d.life -= dt; d.m.position.addScaledVector(d.v, dt); d.m.scale.addScalar(dt * 2.5); d.m.material.opacity = Math.max(0, d.life * 0.6); }
+    for (const o of obstacles) if (o.v) {                  // tumbleweeds roll across the road
+      o.d += o.v * dt; if (Math.abs(o.d) > ROAD_W / 2 - 0.4) { o.d = Math.sign(o.d) * (ROAD_W / 2 - 0.4); o.v = -o.v; }
+      const p = worldPos(o.s, o.d); o.mesh.position.x = p.x; o.mesh.position.z = p.z; o.mesh.rotation.z -= o.v * dt * 1.6; o.mesh.rotation.x += st.speed * dt * 0.05;
+    }
     // biome colours, falling snow and the biome banner
     const pal = paletteAt(st.s);
     scene.background.copy(pal.sky); scene.fog.color.copy(pal.sky); scene.fog.near = pal.fogN; scene.fog.far = pal.fogF;
@@ -447,8 +505,8 @@
     const bi = biomeIdxOfS(st.s);
     if (bi !== st.biomeIdx) {
       const first = st.biomeIdx === undefined; st.biomeIdx = bi;
-      const nm = BIOMES[biomeIdAt(bi)].name; $('biome').textContent = nm;
-      if (!first) { const b = $('banner'); b.textContent = nm; b.classList.add('show'); setTimeout(() => b.classList.remove('show'), 2400); blip(660, 0.12); blip(990, 0.18, 'square', 0.05); }
+      const nm = BIOMES[biomeIdAt(bi)].name, hint = BIOMES[biomeIdAt(bi)].hint; $('biome').textContent = nm;
+      if (!first) { const b = $('banner'); b.innerHTML = nm + '<small>Watch out for: ' + hint + '</small>'; b.classList.add('show'); setTimeout(() => b.classList.remove('show'), 2400); blip(660, 0.12); blip(990, 0.18, 'square', 0.05); }
     }
     // chase camera
     st.camYaw += (th - st.camYaw) * Math.min(1, 3.2 * dt);
