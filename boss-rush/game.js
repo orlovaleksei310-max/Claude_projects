@@ -51,17 +51,27 @@
   ];
 
   const admin = { open: false, ok: false, god: false, infDash: false, freeze: false, onehit: false, speedMul: 1 };
+  const UPGRADES2 = [
+    { id: 'u_heart', name: 'Phoenix Heart', desc: '+2 max hearts and heal 2', apply: p => { p.maxHp += 2; p.hp = Math.min(p.maxHp, p.hp + 2); } },
+    { id: 'u_dmg', name: 'Hellfire Rounds', desc: '+60% shot damage', apply: p => { p.dmg *= 1.6; } },
+    { id: 'u_rate', name: 'Demon Loader', desc: 'Shoot 35% faster', apply: p => { p.fireDelay *= 0.65; } },
+    { id: 'u_speed', name: 'Ember Boots', desc: '+20% move speed', apply: p => { p.speed *= 1.2; } },
+    { id: 'u_dash', name: 'Shadow Step', desc: 'Dash recharges 40% faster', apply: p => { p.dashCd *= 0.6; } },
+    { id: 'u_multi', name: 'Triple Barrel', desc: '+2 bullets per shot (max 5)', apply: p => { p.shots = Math.min(5, p.shots + 2); }, ok: p => p.shots < 5 },
+    { id: 'u_pierce', name: 'Piercing Flames', desc: 'Bullets pass through enemies', apply: p => { p.pierce = true; }, ok: p => !p.pierce },
+    { id: 'u_armor', name: 'Magma Armor', desc: 'Heal fully and +1 max heart', apply: p => { p.maxHp++; p.hp = p.maxHp; } }
+  ];
   function hurt(n, from) {
-    if (admin.god) return;
+    if (admin.god && !bossMode) return;
     if (player.inv > 0 || player.dashT > 0 || state !== S.FIGHT && state !== S.HUB) return;
-    player.hp -= n; player.inv = 1.15; shake = 10; blip(120, 0.25, 'sawtooth', 0.09, 0.5); burst(player.x, player.y, 10, '#ff5a4d', 160);
+    player.hp -= n; player.inv = player.invDur || 1.15; shake = 10; blip(120, 0.25, 'sawtooth', 0.09, 0.5); burst(player.x, player.y, 10, '#ff5a4d', 160);
     if (player.hp <= 0) { player.hp = 0; die(); }
   }
-  function die() { state = S.OVER; deadT = 0; overTitle = 'YOU FELL IN THE CAVE'; blip(90, 0.8, 'sawtooth', 0.1, 0.4); }
+  function die() { if (bossMode) { endBossMode(true); return; } state = S.OVER; deadT = 0; overTitle = 'YOU FELL IN THE CAVE'; blip(90, 0.8, 'sawtooth', 0.1, 0.4); }
 
   // ------------------------------------------------------------------ helpers
   function burst(x, y, n, color, sp) { for (let i = 0; i < n; i++) { const a = rnd(0, TAU), v = rnd(0.3, 1) * sp; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.3, 0.7), max: 0.7, c: color, r: rnd(2, 4) }); } }
-  function ebul(x, y, a, sp, r, o) { eBul.push(Object.assign({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: r || 7, life: 6, c: '#ff7a3d' }, o)); }
+  function ebul(x, y, a, sp, r, o) { if (eBul.length > 170) eBul.splice(0, 20); eBul.push(Object.assign({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: r || 7, life: 6, c: '#ff7a3d' }, o)); }
   function fan(x, y, a, n, spread, sp, r, o) { for (let i = 0; i < n; i++) ebul(x, y, a + (n === 1 ? 0 : (i / (n - 1) - 0.5) * spread), sp, r, o); }
   function ring(x, y, n, off, sp, r, o, gap) { for (let i = 0; i < n; i++) { if (gap && i < gap) continue; ebul(x, y, off + i * TAU / n, sp, r, o); } }
   function zone(x, y, r, delay, dur, o) { hazards.push(Object.assign({ k: 'zone', x, y, r, delay, dur, t: 0, hit: false, dmg: 1, c: '#ff4d3d' }, o)); }
@@ -221,7 +231,7 @@
       this.ang += dt * (0.45 + ph * 0.12); toward(this, ARENA.x + Math.cos(this.ang) * 130, ARENA.y - 20 + Math.sin(this.ang) * 100, 220, dt);
       this.hist.unshift({ x: this.x, y: this.y }); if (this.hist.length > 70) this.hist.pop();
       this.spin += dt * (ph === 3 ? 1.5 : 0.9); this.fireT -= dt;
-      if (this.fireT <= 0) { const arms = ph === 3 ? 4 : ph === 1 ? 3 : 2; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.spin + i * TAU / arms, ph === 3 ? 165 : 140, 7, { c: '#7fe3ff', life: 7 }); this.fireT = ph === 3 ? 0.11 : 0.15; }
+      if (this.fireT <= 0) { const arms = ph === 3 ? 4 : ph === 1 ? 3 : 2; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.spin + i * TAU / arms, ph === 3 ? 165 : 140, 7, { c: '#7fe3ff', life: 7 }); this.fireT = ph === 3 ? 0.13 : 0.17; }
       this.burstT -= dt; if (this.burstT <= 0) { fan(this.x, this.y, angTo(this, player), ph === 3 ? 7 : 5, 0.9, 250, 8, { c: '#ff9dd2' }); blip(300, 0.12, 'sawtooth', 0.05); this.burstT = ph === 3 ? 2.2 : 3.2; }
       if (ph >= 2) { this.rainT -= dt; if (this.rainT <= 0) { zone(player.x + rnd(-30, 30), player.y + rnd(-30, 30), 48, 0.85, 0.15, { c: '#7fe3ff' }); this.rainT = ph === 3 ? 0.5 : 0.85; } }
       if (ph >= 2) { this.beamT -= dt; if (this.beamT <= 0) { const a = rnd(0, TAU), d = Math.random() < 0.5 ? 1 : -1; beam(this.x, this.y, a, 0.5 * d, 1.0, 2.6); if (ph === 3) beam(this.x, this.y, a + Math.PI, 0.5 * d, 1.0, 2.6); this.beamT = ph === 3 ? 7 : 8; } }
@@ -378,10 +388,10 @@
   }
 
   function mkDrake() {
-    const b = base('INFERNO DRAKE', 480, 46); b.ang = 0; b.spin = 0; b.fireT = 0; b.rainT = 2; b.burstT = 3; b.beamT = 5; b.ringT = 4; b.homeT = 5; b.impT = 9; b.hist = [];
+    const b = base('INFERNAL DRAGON', 560, 50); b.ang = 0; b.spin = 0; b.fireT = 0; b.rainT = 2; b.burstT = 3; b.beamT = 5; b.ringT = 4; b.homeT = 5; b.impT = 9; b.hist = [];
     b.update = function (dt) {
       const f = this.hp / this.max, ph = f > 0.75 ? 1 : f > 0.5 ? 2 : f > 0.25 ? 3 : 4;
-      if (ph !== this.ph) { this.ph = ph; toastMsg(['', '', 'PHASE 2: the drake ignites', 'PHASE 3: the sky burns', 'FINAL PHASE: INFERNO'][ph]); shake = 16; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 36, '#ff8a1a', 280); }
+      if (ph !== this.ph) { this.ph = ph; toastMsg(['', '', 'PHASE 2: the drake ignites', 'PHASE 3: the sky burns', 'FINAL PHASE: THE DRAGON UNLEASHED'][ph]); shake = 16; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 36, '#ff8a1a', 280); }
       this.ang += dt * (0.4 + ph * 0.12); toward(this, ARENA.x + Math.cos(this.ang) * 125, ARENA.y - 20 + Math.sin(this.ang) * 95, 230, dt);
       this.hist.unshift({ x: this.x, y: this.y }); if (this.hist.length > 70) this.hist.pop();
       this.spin += dt * (0.8 + ph * 0.2); this.fireT -= dt;
@@ -405,23 +415,95 @@
     return b;
   }
 
+
+  // ------------------------------------------------------------------ admin mode: YOU are the boss, the hero is an AI that dodges well
+  let bossMode = false;
+  function mkOverlord() {
+    const b = base('YOU: THE OVERLORD', 420, 34); b.x = ARENA.x; b.y = ARENA.y - 120; b.cd = { fire: 0, q: 0, e: 0, r: 0, f: 0, d: 0 }; b.dashT = 0; b.dv = { x: 0, y: 1 }; b.ang = 0;
+    b.update = function (dt) {
+      for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
+      let dx = 0, dy = 0; if (keys.has('KeyA') || keys.has('ArrowLeft')) dx--; if (keys.has('KeyD') || keys.has('ArrowRight')) dx++; if (keys.has('KeyW') || keys.has('ArrowUp')) dy--; if (keys.has('KeyS') || keys.has('ArrowDown')) dy++;
+      const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; let sp = 200;
+      if (this.dashT > 0) { this.dashT -= dt; sp = 620; dx = this.dv.x; dy = this.dv.y; if (Math.random() < 0.7) parts.push({ x: this.x, y: this.y, vx: 0, vy: 0, life: 0.3, max: 0.3, c: '#ff4dc8', r: 9 }); }
+      else if ((keys.has('Space') || keys.has('ShiftLeft')) && this.cd.d <= 0 && (dx || dy)) { this.dashT = 0.2; this.cd.d = 1.6; this.dv = { x: dx, y: dy }; }
+      this.x += dx * sp * dt; this.y += dy * sp * dt; inArena(this); this.ang = Math.atan2(mouse.y - this.y, mouse.x - this.x);
+      if (mouse.down && this.cd.fire <= 0) { fan(this.x, this.y, this.ang, 3, 0.3, 360, 8, { c: '#ff5acd' }); this.cd.fire = 0.24; blip(180, 0.08, 'sawtooth', 0.04); }
+      if (keys.has('KeyQ') && this.cd.q <= 0) { ring(this.x, this.y, 20, rnd(0, 1), 230, 8, { c: '#ff5acd' }); this.cd.q = 3; blip(120, 0.25, 'sawtooth', 0.07); }
+      if (keys.has('KeyE') && this.cd.e <= 0) { wave(this.x, this.y, 260, 480, { w: 26, c: '#ff5acd' }); this.cd.e = 5; shake = 8; blip(70, 0.3, 'sawtooth', 0.08); }
+      if (keys.has('KeyR') && this.cd.r <= 0) { for (let i = 0; i < 3; i++) meteor(player.x + (i ? rnd(-90, 90) : 0), player.y + (i ? rnd(-90, 90) : 0), 0.7 + i * 0.25, 52); this.cd.r = 5; }
+      if (keys.has('KeyF') && this.cd.f <= 0 && minions.length < 4) { for (let i = 0; i < 2; i++) minions.push(mkImp(this.x + rnd(-30, 30), this.y + rnd(-30, 30))); this.cd.f = 10; burst(this.x, this.y, 14, '#ff5acd', 160); }
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y, f = this.flash > 0;
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 38, 38, 11, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#2a1238'; ctx.beginPath(); ctx.moveTo(x - 28, y - 12); ctx.lineTo(x + 28, y - 12); ctx.lineTo(x + 44, y + 42); ctx.lineTo(x - 44, y + 42); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#4a2268'; ctx.beginPath(); ctx.ellipse(x, y, 28, 32, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#6a3a8c'; ctx.beginPath(); ctx.arc(x, y - 26, 17, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.moveTo(x - 16, y - 38); ctx.lineTo(x - 14, y - 54); ctx.lineTo(x - 6, y - 44); ctx.lineTo(x, y - 58); ctx.lineTo(x + 6, y - 44); ctx.lineTo(x + 14, y - 54); ctx.lineTo(x + 16, y - 38); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff4dc8'; ctx.shadowColor = '#ff4dc8'; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(x - 6, y - 28, 3.5, 0, TAU); ctx.arc(x + 6, y - 28, 3.5, 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.ang); ctx.fillStyle = '#ff4dc8'; ctx.fillRect(18, -4, 24, 8); ctx.restore();
+    };
+    return b;
+  }
+  function newHero() { const p = newPlayer(); Object.assign(p, { hp: 18, maxHp: 18, speed: 260, shots: 2, fireDelay: 0.12, dashCd: 0.85, dmg: 1.3, invDur: 0.8 }); return p; }
+  function startBossMode() {
+    bossMode = true; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); player = newHero(); player.x = ARENA.x; player.y = ARENA.y + ARENA.r - 60; player.inv = 1;
+    boss = mkOverlord(); introT = 0; runTime = 0; ai.dir = { x: 0, y: 0 }; toastMsg('You are the boss! Kill the hero.', 3.5);
+  }
+  function endBossMode(win) { state = S.OVER; deadT = 0; overTitle = win ? 'THE HERO HAS FALLEN!' : 'YOU WERE SLAIN'; blip(win ? 600 : 90, 0.8, win ? 'square' : 'sawtooth', 0.1, win ? 2 : 0.4); }
+  const ai = { dir: { x: 0, y: 0 }, prev: null, dashCheck: 0 };
+  function heroAI(dt) {                                   // a very good dodger: scores 17 moves against everything that will hit in the next half second
+    const p = player; p.inv = Math.max(0, p.inv - dt); p.dashCdT = Math.max(0, p.dashCdT - dt); p.slow = Math.max(0, p.slow - dt);
+    const bs = boss, bv = ai.prev ? { x: (bs.x - ai.prev.x) / Math.max(dt, 0.001), y: (bs.y - ai.prev.y) / Math.max(dt, 0.001) } : { x: 0, y: 0 }; ai.prev = { x: bs.x, y: bs.y };
+    const spd = p.speed * (p.slow > 0 ? 0.5 : 1), HZ = [0.08, 0.16, 0.24, 0.32, 0.42, 0.55];
+    const danger = (cx, cy, vx, vy) => {                  // cost of standing at (cx,cy) while moving with velocity (vx,vy)
+      let c = 0; const R = p.r + 6;
+      for (const b of eBul) for (let i = 0; i < HZ.length; i++) { const t = HZ[i], bx = b.x + b.vx * t, by = b.y + b.vy * t, px = cx + vx * t, py = cy + vy * t, d = Math.hypot(bx - px, by - py), lim = b.r + R; if (d < lim) c += 9 * (1 - d / lim) + 2; }
+      for (const h of hazards) {
+        if (h.k === 'zone') { if (h.t < h.delay + h.dur && Math.hypot(cx - h.x, cy - h.y) < h.r + 18) c += h.t > h.delay - 0.5 ? 12 : 5; }
+        else if (h.k === 'fire') { if (Math.hypot(cx - h.x, cy - h.y) < h.r + 14) c += 8; }
+        else if (h.k === 'wave') { if (h.delay > 0) continue; for (const t of [0.15, 0.3, 0.45]) { const dd = Math.hypot(cx - h.x, cy - h.y), rr = h.r + h.sp * t; if (Math.abs(dd - rr) < h.w / 2 + 16) c += 7; } }
+        else if (h.k === 'beam') { const a = h.a + h.rot * (h.t > h.delay ? 0.2 : 0), dx = cx - h.x, dy = cy - h.y, along = dx * Math.cos(a) + dy * Math.sin(a), perp = Math.abs(-dx * Math.sin(a) + dy * Math.cos(a)); if (along > 0 && along < h.len && perp < 50) c += 10; }
+      }
+      for (const m of minions) { const d = Math.hypot(cx - m.x, cy - m.y); if (d < 60) c += 5 * (1 - d / 60); }
+      const bd = Math.hypot(cx - bs.x, cy - bs.y); if (bd < bs.r + 70) c += 8; c += Math.abs(bd - 250) * 0.006;
+      const ed = ARENA.r - Math.hypot(cx - ARENA.x, cy - ARENA.y); if (ed < 70) c += (70 - ed) * 0.15;
+      for (const s of pillars) { const d = Math.hypot(cx - s.x, cy - s.y); if (d < s.r + p.r + 4) c += 20; }
+      return c;
+    };
+    let best = null, bestC = 1e9, stayC = danger(p.x, p.y, 0, 0);
+    for (let i = 0; i < 16; i++) { const a = i * TAU / 16, dx = Math.cos(a), dy = Math.sin(a), c = danger(p.x + dx * spd * 0.2, p.y + dy * spd * 0.2, dx * spd, dy * spd) + (ai.dir.x * dx + ai.dir.y * dy < 0 ? 0.3 : 0) + (Math.random() * 0.2); if (c < bestC) { bestC = c; best = { x: dx, y: dy }; } }
+    let dx = 0, dy = 0; if (best && (bestC < stayC - 0.15 || stayC > 0.4)) { dx = best.x; dy = best.y; ai.dir = best; }
+    let sp = spd;
+    if (p.dashT > 0) { p.dashT -= dt; sp = 640; dx = p.dashDir.x; dy = p.dashDir.y; if (Math.random() < 0.8) parts.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.25, max: 0.25, c: '#9deaff', r: 6 }); }
+    else if (p.dashCdT <= 0 && stayC > 6 && bestC < stayC - 5 && (dx || dy)) { p.dashT = 0.17; p.dashCdT = p.dashCd; p.dashDir = { x: dx, y: dy }; }
+    p.x += dx * sp * dt; p.y += dy * sp * dt;
+    for (const s of pillars) { const d = Math.hypot(p.x - s.x, p.y - s.y), m = s.r + p.r; if (d < m) { p.x = s.x + (p.x - s.x) / d * m; p.y = s.y + (p.y - s.y) / d * m; } }
+    inArena(p, p.r + 6);
+    // aim with lead and fire
+    const tt = Math.hypot(bs.x - p.x, bs.y - p.y) / 560, ax = bs.x + bv.x * tt * 0.9 - p.x, ay = bs.y + bv.y * tt * 0.9 - p.y; p.face = Math.atan2(ay, ax); p.fireT -= dt;
+    if (p.fireT <= 0) { p.fireT = p.fireDelay; for (let i = 0; i < p.shots; i++) { const a = p.face + (i - (p.shots - 1) / 2) * 0.07; pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * 560, vy: Math.sin(a) * 560, r: 5, life: 0.9, dmg: p.dmg, hits: [] }); } }
+  }
+
   // ------------------------------------------------------------------ flow
   function resetWorld() { minions = []; pBul = []; eBul = []; hazards = []; parts = []; boss = null; shake = 0; }
   function mkPillars(kind) {
     if (kind === 'arena') { return [[-140, -110], [140, -110], [-140, 130], [140, 130]].map(([dx, dy]) => ({ x: ARENA.x + dx, y: ARENA.y + dy, r: 24 })); }
     return [{ x: 330, y: 250, r: 26 }, { x: 560, y: 470, r: 30 }, { x: 740, y: 230, r: 22 }];
   }
-  function newRun() { player = newPlayer(); bossIdx = 0; runTime = 0; resetWorld(); enterHub(true); }
+  function newRun() { bossMode = false; player = newPlayer(); bossIdx = 0; runTime = 0; resetWorld(); enterHub(true); }
   function enterHub(first) {
+    bossMode = false;
     state = S.HUB; resetWorld(); pillars = mkPillars('hub');
     if (first) { player.x = 140; player.y = 400; } else { player.x = 150; player.y = 380; player.hp = Math.min(player.maxHp, player.hp + 2); }
     player.inv = 0.5; player.dashT = 0; hub.t = 0;
     toastMsg(first ? 'You wake up deep in a cave...' : bossIdx === 5 ? 'The LAVA PORTAL has opened! The underworld awaits...' : 'You rest by the fire. Next: ' + BOSS_NAMES[bossIdx], first ? 3 : bossIdx === 5 ? 4 : 2.4);
     if (bossIdx === 5) shake = 14;
   }
-  const BOSS_NAMES = ['Rock Golem', 'Bat Queen', 'Slime King', 'Spider Matriarch', 'Crystal Wyrm', 'Hellhound', 'Ash Witch', 'Obsidian Titan', 'Demon Lord', 'Inferno Drake'];
+  const BOSS_NAMES = ['Rock Golem', 'Bat Queen', 'Slime King', 'Spider Matriarch', 'Crystal Wyrm', 'Hellhound', 'Ash Witch', 'Obsidian Titan', 'Demon Lord', 'Infernal Dragon'];
   const hub = { t: 0, portal: { x: 850, y: 355, r: 40 }, fire: { x: 470, y: 360 } };
   function startFight() {
+    bossMode = false;
     state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); introT = 2.2;
     player.x = ARENA.x; player.y = ARENA.y + ARENA.r - 50; player.inv = 1; player.dashT = 0;
     blip(120, 0.6, 'sawtooth', 0.08, 0.6);
@@ -431,7 +513,7 @@
     eBul.length = 0; hazards.length = 0; for (const m of minions) burst(m.x, m.y, 8, '#fff', 120); minions.length = 0;
     bossIdx++; saveBest(bossIdx); boss.dead = true; deadT = 0; state = S.FIGHT; boss.dying = true;
   }
-  function offerUpgrades() { const pool = UPGRADES.filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
+  function offerUpgrades() { const pool = (bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
   function chooseUpgrade(i) { const u = offered[i]; if (!u) return; u.apply(player); blip(660, 0.15, 'square', 0.06); blip(990, 0.2, 'square', 0.05); if (bossIdx >= BOSSES.length) { state = S.WIN; saveBest(bossIdx); } else enterHub(false); }
 
   // ------------------------------------------------------------------ update
@@ -454,8 +536,8 @@
     p.face = Math.atan2(ay, ax);
     p.fireT -= dt;
     if (aiming && p.fireT <= 0 && !(state === S.FIGHT && boss && boss.dying)) {
-      const ul = p.ultra; p.fireT = ul ? 0.035 : p.fireDelay; const n = ul ? 3 : p.shots;
-      for (let i = 0; i < n; i++) { const a = p.face + (n === 1 ? 0 : (i - (n - 1) / 2) * (ul ? 0.09 : 0.16)); pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * (ul ? 900 : 560), vy: Math.sin(a) * (ul ? 900 : 560), r: ul ? 8 : 5, life: 0.9, dmg: admin.onehit ? 99999 : ul ? 30 : p.dmg, pierce: !!ul, hits: [], c: ul ? '#7fffd4' : null }); }
+      const ul = p.ultra; p.fireT = ul ? 0.035 : p.fireDelay; const n = ul ? Math.max(3, p.shots) : p.shots;
+      for (let i = 0; i < n; i++) { const a = p.face + (n === 1 ? 0 : (i - (n - 1) / 2) * (ul ? 0.09 : 0.16)); pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * (ul ? 900 : 560), vy: Math.sin(a) * (ul ? 900 : 560), r: ul ? 8 : 5, life: 0.9, dmg: admin.onehit ? 99999 : ul ? 30 : p.dmg, pierce: !!ul || !!p.pierce, hits: [], c: ul ? '#7fffd4' : p.pierce ? '#ffb347' : null }); }
       blip(520 + Math.random() * 60, 0.06, 'square', 0.025, 0.6);
     }
   }
@@ -468,9 +550,9 @@
     return false;
   }
   function updateFight(dt) {
-    if (introT > 0) { introT -= dt; movePlayer(dt); return; }
-    runTime += dt; movePlayer(dt);
-    if (!admin.freeze) { if (boss && !boss.dying) boss.update(dt); for (const m of minions) m.update(dt); }
+    if (introT > 0) { introT -= dt; if (!bossMode) movePlayer(dt); return; }
+    runTime += dt; if (bossMode) heroAI(dt); else movePlayer(dt);
+    if (!admin.freeze || bossMode) { if (boss && !boss.dying) boss.update(dt); for (const m of minions) m.update(dt); }
     // player bullets
     for (const b of pBul) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
@@ -478,7 +560,7 @@
       for (const s of pillars) if (Math.hypot(b.x - s.x, b.y - s.y) < s.r + b.r) { b.life = 0; burst(b.x, b.y, 3, '#aaa', 60); }
       if (b.life <= 0) continue;
       for (const m of minions) if (m.hp > 0 && !(b.hits && b.hits.includes(m)) && hitCircle(b, m)) { m.hp -= (b.dmg || player.dmg); m.flash = 0.08; if (b.pierce) b.hits.push(m); else b.life = 0; burst(b.x, b.y, 4, '#fff', 100); if (m.hp <= 0) { burst(m.x, m.y, 10, '#fff', 150); blip(200, 0.1, 'square', 0.04, 0.5); } if (!b.pierce) break; }
-      if (b.life > 0 && boss && !boss.dying && !(b.hits && b.hits.includes(boss)) && hitCircle(b, boss, -4)) { boss.hp -= (b.dmg || player.dmg); boss.flash = 0.07; if (b.pierce) b.hits.push(boss); else b.life = 0; burst(b.x, b.y, 3, '#ffd23f', 110); blip(160, 0.05, 'square', 0.03); if (boss.hp <= 0) { boss.hp = 0; bossDefeated(); } }
+      if (b.life > 0 && boss && !boss.dying && !(b.hits && b.hits.includes(boss)) && hitCircle(b, boss, -4)) { boss.hp -= (b.dmg || player.dmg); boss.flash = 0.07; if (b.pierce) b.hits.push(boss); else b.life = 0; burst(b.x, b.y, 3, '#ffd23f', 110); blip(160, 0.05, 'square', 0.03); if (boss.hp <= 0) { boss.hp = 0; if (bossMode) endBossMode(false); else bossDefeated(); } }
     }
     pBul = pBul.filter(b => b.life > 0); minions = minions.filter(m => m.hp > 0);
     if (boss) boss.flash = Math.max(0, boss.flash - dt); for (const m of minions) m.flash = Math.max(0, m.flash - dt);
@@ -554,7 +636,7 @@
     g.shadowBlur = 0; return c;
   }
   let bgHub, bgArena, bgHubU, bgArenaU;
-  const hubUnder = () => bossIdx >= 6, arenaUnder = () => bossIdx >= 5, lavaPortal = () => bossIdx >= 5;
+  const hubUnder = () => bossIdx >= 6, arenaUnder = () => bossMode || bossIdx >= 5, lavaPortal = () => bossIdx >= 5;
 
   const lights = () => state === S.HUB ? [{ x: 150, y: 190, r: 150, c: 1 }, { x: 470, y: 360, r: 230, c: 1 }, { x: 830, y: 540, r: 140, c: 1 }, { x: hub.portal.x, y: hub.portal.y, r: 170, c: 0 }] : [{ x: ARENA.x - 220, y: ARENA.y - 180, r: 120, c: 1 }, { x: ARENA.x + 220, y: ARENA.y - 180, r: 120, c: 1 }, { x: ARENA.x - 220, y: ARENA.y + 190, r: 120, c: 1 }, { x: ARENA.x + 220, y: ARENA.y + 190, r: 120, c: 1 }];
 
@@ -597,7 +679,20 @@
     drawBullets(); drawPlayer();
   }
 
+  const spriteCache = {};
+  function glowSprite(color, r) {                         // pre-rendered glowing bullet: far cheaper than shadowBlur every frame
+    const key = color + r; if (spriteCache[key]) return spriteCache[key];
+    const sz = Math.ceil(r * 5), c = document.createElement('canvas'); c.width = c.height = sz; const g = c.getContext('2d'), m = sz / 2;
+    const gr = g.createRadialGradient(m, m, r * 0.5, m, m, m); gr.addColorStop(0, color); gr.addColorStop(0.35, color); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalAlpha = 0.45; g.fillStyle = gr; g.fillRect(0, 0, sz, sz); g.globalAlpha = 1;
+    g.fillStyle = color; g.beginPath(); g.arc(m, m, r, 0, TAU); g.fill(); g.fillStyle = 'rgba(255,255,255,.75)'; g.beginPath(); g.arc(m, m, r * 0.45, 0, TAU); g.fill();
+    return (spriteCache[key] = c);
+  }
+  let cutSprite = null;
   function drawBullets() {
+    for (const b of pBul) { const sp = glowSprite(b.c || '#fff3a0', b.r); ctx.drawImage(sp, b.x - sp.width / 2, b.y - sp.height / 2); }
+    for (const b of eBul) { const sp = glowSprite(b.c, b.r); ctx.drawImage(sp, b.x - sp.width / 2, b.y - sp.height / 2); }
+  }
+  function drawBulletsOld() {
     ctx.shadowBlur = 8; for (const b of pBul) { ctx.fillStyle = b.c || '#fff3a0'; ctx.shadowColor = b.c || '#ffd23f'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); } ctx.shadowBlur = 0;
     for (const b of eBul) { ctx.shadowColor = b.c; ctx.shadowBlur = 10; ctx.fillStyle = b.c; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.45, 0, TAU); ctx.fill(); } ctx.shadowBlur = 0;
   }
@@ -619,6 +714,7 @@
     ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(24, 50, 100, 8); ctx.fillStyle = player.dashCdT <= 0 ? '#9deaff' : '#4a7080'; ctx.fillRect(24, 50, 100 * (1 - player.dashCdT / player.dashCd), 8);
     ctx.fillStyle = '#d9cfc4'; ctx.font = '11px ' + FONT; ctx.textAlign = 'left'; ctx.fillText('DASH', 130, 58);
     ctx.textAlign = 'right'; ctx.fillText('BOSS ' + Math.min(bossIdx + (boss ? 1 : 0), BOSSES.length) + '/' + BOSSES.length + '   BEST ' + best + '   ' + fmtTime(runTime), W - 16, 22);
+    if (bossMode && boss && boss.cd) { const items = [['CLICK', 'shoot', boss.cd.fire, 0.24], ['Q', 'ring', boss.cd.q, 3], ['E', 'wave', boss.cd.e, 5], ['R', 'meteors', boss.cd.r, 5], ['F', 'imps', boss.cd.f, 10], ['SPACE', 'dash', boss.cd.d, 1.6]]; items.forEach(([k, n, c, m], i) => { const x = W / 2 - 3 * 78 + i * 78, y = H - 46; ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x, y, 72, 34); ctx.fillStyle = c <= 0 ? '#ff5acd' : '#5a2a50'; ctx.fillRect(x, y + 28, 72 * (1 - c / m), 6); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(k + ' ' + n, x + 36, y + 18); }); }
     if (state === S.FIGHT && boss) { const bw = 520, bx = (W - bw) / 2; ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(bx - 3, 12, bw + 6, 20); ctx.fillStyle = boss.dying ? '#555' : '#c0283c'; ctx.fillRect(bx, 15, bw * clamp(boss.hp / boss.max, 0, 1), 14); ctx.fillStyle = '#fff'; ctx.font = 'bold 13px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(boss.name, W / 2, 46); }
     if (toast) { ctx.globalAlpha = clamp(toast.life / 0.4, 0, 1); ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 22px ' + FONT; ctx.textAlign = 'center'; ctx.shadowColor = '#000'; ctx.shadowBlur = 6; ctx.fillText(toast.t, W / 2, 96); ctx.shadowBlur = 0; ctx.globalAlpha = 1; }
   }
@@ -646,7 +742,8 @@
     cut(player.x, player.y, 330, 1);
     for (const l of lights()) cut(l.x, l.y, l.r * 1.25 * (1 + Math.sin(time * 9 + l.x) * 0.04), 0.9);
     if (boss && !boss.dying) cut(boss.x, boss.y, 160, 0.55);
-    for (const b of eBul) cut(b.x, b.y, 38, 0.35);
+    if (!cutSprite) { cutSprite = document.createElement('canvas'); cutSprite.width = cutSprite.height = 76; const g = cutSprite.getContext('2d'), gr = g.createRadialGradient(38, 38, 4, 38, 38, 38); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 76, 76); }
+    dark.globalAlpha = 0.35; for (let i = 0; i < eBul.length; i += eBul.length > 90 ? 2 : 1) { const b = eBul[i]; dark.drawImage(cutSprite, b.x - 38, b.y - 38); } dark.globalAlpha = 1;
     for (const h of hazards) if (h.k === 'beam') cut(h.x + Math.cos(h.a) * 200, h.y + Math.sin(h.a) * 200, 220, 0.3);
     ctx.drawImage(darkC, 0, 0);
   }
@@ -672,7 +769,7 @@
     } else if (state === S.WIN) {
       overlay('YOU CONQUERED THE UNDERWORLD!', 'All ten bosses are down. You are free.', ['Time: ' + fmtTime(runTime), '', 'Press Enter to play again'], '#9dff9d');
     } else if (state === S.OVER) {
-      overlay(overTitle, boss ? 'Defeated by ' + boss.name : '', ['Press R to retry this boss (upgrades kept)', 'Press N for a brand new run']);
+      if (bossMode) overlay(overTitle, 'Boss mode (admin)', ['Press R to play again', 'Press N to leave boss mode'], overTitle.startsWith('THE HERO') ? '#9dff9d' : '#ff6b7a'); else overlay(overTitle, boss ? 'Defeated by ' + boss.name : '', ['Press R to retry this boss (upgrades kept)', 'Press N for a brand new run']);
     }
     if (paused) overlay('PAUSED', 'Press P to resume', []);
   }
@@ -700,7 +797,7 @@
     if (state === S.TITLE && (e.code === 'Enter' || e.code === 'Space')) newRun();
     else if (state === S.UPGRADE && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) chooseUpgrade(+e.code.slice(5) - 1);
     else if (state === S.WIN && e.code === 'Enter') newRun();
-    else if (state === S.OVER) { if (e.code === 'KeyR') { player.hp = player.maxHp; player.inv = 1; startFight(); } if (e.code === 'KeyN') newRun(); }
+    else if (state === S.OVER) { if (bossMode) { if (e.code === 'KeyR') startBossMode(); if (e.code === 'KeyN') { bossMode = false; newRun(); } } else { if (e.code === 'KeyR') { player.hp = player.maxHp; player.inv = 1; startFight(); } if (e.code === 'KeyN') newRun(); } }
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
 
@@ -727,7 +824,9 @@
       g.append(row(player.ultra ? 'Ultra Gun: ON' : 'Get Ultra Gun', () => { player.ultra = !player.ultra; toastMsg(player.ultra ? 'ULTRA GUN equipped' : 'Ultra gun off'); }, player.ultra), row(admin.onehit ? 'One-hit kills: ON' : 'One-hit kills', () => { admin.onehit = !admin.onehit; }, admin.onehit));
       g = sec('Free upgrades');
       for (const u of UPGRADES) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
-      g.append(row('ALL upgrades x3', () => { for (let k = 0; k < 3; k++) for (const u of UPGRADES) u.apply(player); player.hp = player.maxHp; }));
+      g = sec('Free underworld upgrades');
+      for (const u of UPGRADES2) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
+      g.append(row('ALL upgrades x3', () => { for (let k = 0; k < 3; k++) for (const u of UPGRADES.concat(UPGRADES2)) u.apply(player); player.hp = player.maxHp; }));
       g = sec('Broken stuff');
       g.append(row(admin.god ? 'God mode: ON' : 'God mode', () => { admin.god = !admin.god; }, admin.god), row(admin.infDash ? 'Infinite dash: ON' : 'Infinite dash', () => { admin.infDash = !admin.infDash; }, admin.infDash),
         row(admin.speedMul > 1 ? 'Super speed: ON' : 'Super speed', () => { admin.speedMul = admin.speedMul > 1 ? 1 : 2; }, admin.speedMul > 1), row(admin.freeze ? 'Freeze bosses: ON' : 'Freeze bosses', () => { admin.freeze = !admin.freeze; }, admin.freeze),
@@ -736,6 +835,8 @@
       g.append(row('Kill current boss', () => { if (state === S.FIGHT && boss && !boss.dying) { boss.hp = 0; bossDefeated(); close(); } }));
       BOSS_NAMES.forEach((n, i) => g.append(row('Fight: ' + n, () => { bossIdx = i; startFight(); close(); })));
       g.append(row('Back to the cave', () => { enterHub(false); close(); }));
+      g = sec('Fun');
+      g.append(row('PLAY AS THE BOSS (kill the hero)', () => { startBossMode(); close(); }));
       card.insertAdjacentHTML('beforeend', '<p class="msg">Changes apply instantly. Close this panel to keep playing.</p>');
     }
     btn.onclick = () => { if (admin.open) close(); else open(); };
