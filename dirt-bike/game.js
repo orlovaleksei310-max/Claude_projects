@@ -655,21 +655,24 @@
   function openShop() { st.shop = true; st.speed = 0; st.wheelie = false; $('shopmsg').textContent = ''; renderShop(); $('shop').classList.add('show'); toast('', 0.01); }
   function closeShop() { st.shop = false; $('shop').classList.remove('show'); st.speed = 6; }
   $('shopgo').onclick = closeShop; applyColor();
-  const TRICKS = [{ n: 'TABLETOP', base: 300, dur: 0.8 }, { n: 'SUPERMAN', base: 400, dur: 0.9 }, { n: '360 SPIN', base: 600, dur: 0.95 }, { n: 'WHIP', base: 350, dur: 0.7 }, { n: 'NAC NAC', base: 450, dur: 0.85 }];
+  const TRICKS = [{ n: 'TABLETOP', base: 300, dur: 0.9 }, { n: 'SUPERMAN', base: 400, dur: 1.0 }, { n: '360 SPIN', base: 600, dur: 0.95 }, { n: 'WHIP', base: 350, dur: 0.8 }, { n: 'HELICOPTER', base: 450, dur: 0.95 }, { n: 'BARREL ROLL', base: 700, dur: 1.0 }, { n: 'CLIFFHANGER', base: 400, dur: 0.9 }];
   function startTrick() { const t = TRICKS[Math.floor(Math.random() * TRICKS.length)]; st.trick = { n: t.n, base: t.base, dur: t.dur, t: 0 }; blip(500, 0.08, 'square', 0.04); }
   const ease = u => u * u * (3 - 2 * u), env = u => Math.sin(Math.PI * Math.min(1, u));
-  function poseTrick() {                                  // animates the bike and rider for the current air trick
-    const k = st.trick, u = k ? k.t / k.dur : 0, e = k ? env(u) : 0;
-    let ry = 0, rz = 0, rrx = 0, rpy = 0, rpz = 0;
+  function poseTrick() {                                  // big, readable moves: the whole bike and rider throw themselves around
+    const k = st.trick, u = k ? Math.min(1, k.t / k.dur) : 0, e = k ? env(u) : 0, e2 = Math.min(1, e * 1.6);   // e2 reaches the full pose sooner and holds it
+    let ry = 0, rz = 0, px = 0, rrx = 0, rry = 0, rrz = 0, rpy = 0, rpz = 0;
     if (k) {
-      if (k.n === 'TABLETOP') rz = 1.35 * e;
-      else if (k.n === 'SUPERMAN') { rrx = 1.25 * e; rpz = 0.55 * e; rpy = -0.15 * e; }
-      else if (k.n === '360 SPIN') ry = TAU * ease(Math.min(1, u));
-      else if (k.n === 'WHIP') { rz = 0.9 * e; ry = 0.7 * e; }
-      else if (k.n === 'NAC NAC') { rrx = 0.35 * e; rpz = 0.1 * e; rz = 0.25 * e; }
+      if (k.n === 'TABLETOP') { rz = 1.6 * e2; px = -0.12 * e2; rrz = -0.9 * e2; rpy = 0.15 * e2; }
+      else if (k.n === 'SUPERMAN') { rrx = 1.75 * e2; rpz = 0.7 * e2; rpy = 1.0 * e2; px = 0.12 * e2; }
+      else if (k.n === '360 SPIN') { ry = TAU * ease(u); rz = 0.35 * e; }
+      else if (k.n === 'WHIP') { rz = 1.2 * e2; ry = 1.0 * e2; rrz = -0.7 * e2; }
+      else if (k.n === 'HELICOPTER') { rry = 2 * TAU * ease(u); rpy = 0.35 * e2; px = -0.1 * e2; }
+      else if (k.n === 'BARREL ROLL') { rz = TAU * ease(u); rpy = 0.1 * e; }
+      else if (k.n === 'CLIFFHANGER') { px = -0.5 * e2; rpy = 0.8 * e2; rpz = 0.25 * e2; rrx = -0.4 * e2; rz = 0.35 * e2; }
     }
-    body.rotation.y = ry; body.rotation.z = rz;
-    rider.position.set(0, rpy, rpz); if (k) rider.rotation.x = -0.1 + rrx;
+    body.rotation.y = ry; body.rotation.z = rz; st.trickPx = px;
+    rider.position.set(0, rpy, rpz); rider.rotation.y = rry; rider.rotation.z = rrz; if (k) rider.rotation.x = -0.1 + rrx;
+    st.trickE = k ? e : 0;
   }
   function landTrick() {                                  // grade the trick when the wheels touch down
     const k = st.trick; if (!k) return;
@@ -785,7 +788,7 @@
     if (!st.crash) { if (st.air) pitch = st.flipping ? -st.flip : Math.max(-0.35, Math.min(0.35, -st.vy * 0.03)); else { const gh2 = groundHeight(st.s + 1, st.d) - groundHeight(st.s - 1, st.d); pitch = Math.atan2(gh2, 2); } }
     st.wp += ((st.wheelie ? 1 : 0) - st.wp) * Math.min(1, 6 * dt);
     const wa = 0.62 * st.wp; pitch += wa;
-    body.rotation.x += (pitch - body.rotation.x) * Math.min(1, st.flipping ? 1 : 12 * dt);
+    body.rotation.x += (pitch + (st.trickPx || 0) - body.rotation.x) * Math.min(1, st.flipping ? 1 : 12 * dt);
     if (st.flipping) body.rotation.x = -st.flip;
     poseTrick();
     const offY = 0.46 * (1 - Math.cos(wa)) + 0.9 * Math.sin(wa), offZ = 0.9 - (0.46 * Math.sin(wa) + 0.9 * Math.cos(wa)); body.position.z = offZ;
@@ -825,7 +828,8 @@
     }
     // chase camera
     st.camYaw += (th + (st.camOff || 0) - st.camYaw) * Math.min(1, 3.2 * dt);
-    const back = 5.8 + st.speed * 0.03, height = 2.5 + st.y * 0.5;
+    st.camT = (st.camT || 0) + ((st.trickE || 0) - (st.camT || 0)) * Math.min(1, 6 * dt);   // pull the camera back while a trick plays
+    const back = 5.8 + st.speed * 0.03 + st.camT * 2.6, height = 2.5 + st.y * 0.5 + st.camT * 0.9;
     const cx = w.x - Math.sin(st.camYaw) * back, cz = w.z + Math.cos(st.camYaw) * back;
     const sh = st.shake * 0.25 + (Math.abs(st.d) > ROAD_W / 2 + 3.2 ? 0.03 : 0);
     camera.position.set(cx + (Math.random() - 0.5) * sh, height + st.y * 0.4 + (Math.random() - 0.5) * sh, cz + (Math.random() - 0.5) * sh);
