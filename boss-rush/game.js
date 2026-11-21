@@ -18,7 +18,7 @@
 
   // ------------------------------------------------------------------ state
   let state = S.TITLE, paused = false, muted = false, time = 0, shake = 0, bossIdx = 0, runTime = 0, toast = null, best = loadBest();
-  let player, boss, minions, pBul, eBul, hazards, parts, pillars, offered = [], introT = 0, deadT = 0, overTitle = '';
+  let fightIdx = 0, player, boss, minions, pBul, eBul, hazards, parts, pillars, offered = [], introT = 0, deadT = 0, overTitle = '';
   const keys = new Set(), mouse = { x: W / 2, y: H / 2, down: false };
 
   function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { return 0; } }
@@ -61,13 +61,24 @@
     { id: 'u_pierce', name: 'Piercing Flames', desc: 'Bullets pass through enemies', apply: p => { p.pierce = true; }, ok: p => !p.pierce },
     { id: 'u_armor', name: 'Magma Armor', desc: 'Heal fully and +1 max heart', apply: p => { p.maxHp++; p.hp = p.maxHp; } }
   ];
+  const UPGRADES3 = [
+    { id: 'a_heart', name: 'Toxic Resilience', desc: '+2 max hearts and heal 2', apply: p => { p.maxHp += 2; p.hp = Math.min(p.maxHp, p.hp + 2); } },
+    { id: 'a_dmg', name: 'Corrosive Rounds', desc: '+80% shot damage', apply: p => { p.dmg *= 1.8; } },
+    { id: 'a_rate', name: 'Plague Loader', desc: 'Shoot 40% faster', apply: p => { p.fireDelay *= 0.6; } },
+    { id: 'a_speed', name: 'Slime Boots', desc: '+22% move speed', apply: p => { p.speed *= 1.22; } },
+    { id: 'a_dash', name: 'Phase Slip', desc: 'Dash recharges 45% faster', apply: p => { p.dashCd *= 0.55; } },
+    { id: 'a_multi', name: 'Spore Barrage', desc: '+2 bullets per shot (max 7)', apply: p => { p.shots = Math.min(7, p.shots + 2); }, ok: p => p.shots < 7 },
+    { id: 'a_pierce', name: 'Piercing Acid', desc: 'Bullets pass through enemies', apply: p => { p.pierce = true; }, ok: p => !p.pierce },
+    { id: 'a_armor', name: 'Hazmat Suit', desc: 'Heal fully and +2 max hearts', apply: p => { p.maxHp += 2; p.hp = p.maxHp; } },
+    { id: 'a_inv', name: 'Antidote', desc: 'Stay invincible 0.5s longer after being hit', apply: p => { p.invDur = (p.invDur || 1.15) + 0.5; }, ok: p => (p.invDur || 1.15) < 2.2 }
+  ];
   function hurt(n, from) {
     if (admin.god && !bossMode) return;
     if (player.inv > 0 || player.dashT > 0 || state !== S.FIGHT && state !== S.HUB) return;
     player.hp -= n; player.inv = player.invDur || 1.15; shake = 10; blip(120, 0.25, 'sawtooth', 0.09, 0.5); burst(player.x, player.y, 10, '#ff5a4d', 160);
     if (player.hp <= 0) { player.hp = 0; die(); }
   }
-  function die() { if (bossMode) { endBossMode(true); return; } state = S.OVER; deadT = 0; overTitle = 'YOU FELL IN THE CAVE'; blip(90, 0.8, 'sawtooth', 0.1, 0.4); }
+  function die() { if (bossMode) { endBossMode(true); return; } state = S.OVER; deadT = 0; overTitle = ['YOU FELL IN THE CAVE', 'YOU BURNED IN THE UNDERWORLD', 'YOU DISSOLVED IN THE ACID'][realmOf(fightIdx)]; blip(90, 0.8, 'sawtooth', 0.1, 0.4); }
 
   // ------------------------------------------------------------------ helpers
   function burst(x, y, n, color, sp) { for (let i = 0; i < n; i++) { const a = rnd(0, TAU), v = rnd(0.3, 1) * sp; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.3, 0.7), max: 0.7, c: color, r: rnd(2, 4) }); } }
@@ -83,7 +94,7 @@
 
   // ------------------------------------------------------------------ bosses
   let slamHinted = false;
-  const BOSSES = [mkGolem, mkBat, mkSlime, mkSpider, mkWyrm, mkHound, mkWitch, mkTitan, mkDemon, mkDragon];
+  const BOSSES = [mkGolem, mkBat, mkSlime, mkSpider, mkWyrm, mkHound, mkWitch, mkTitan, mkDemon, mkDragon, mkScorpion, mkHydra, mkAcidWraith, mkLeviathan, mkOvermind];
   function base(name, hp, r) { return { name, hp, max: hp, r, x: ARENA.x, y: ARENA.y - 130, flash: 0, st: 1.5, state: 'idle', n: 0, t: 0, ph: 1, z: 0 }; }
 
   function mkGolem() {
@@ -400,47 +411,55 @@
   }
 
   function mkDragon() {
-    const b = base('INFERNAL DRAGON', 640, 52); b.face = Math.PI / 2; b.air = 0; b.stun = 0; b.wing = 0; b.cone = null; b.tx = 0; b.ty = 0;
+    const b = base('INFERNAL DRAGON', 1000, 52); b.face = Math.PI / 2; b.air = 0; b.stun = 0; b.wing = 0; b.cone = null; b.tx = 0; b.ty = 0;
     const flying = d => d.air > 0.3;
     b.update = function (dt) {
-      const f = this.hp / this.max, ph = f > 0.6 ? 1 : f > 0.3 ? 2 : 3;
-      if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'The dragon takes to the sky!' : 'The dragon is ENRAGED!'); shake = 16; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 36, '#ff8a1a', 280); this.state = 'idle'; this.st = 1.4; this.air = 0; this.stun = 0; ring(this.x, this.y, 18, 0, 200, 9, { c: '#ff8a1a' }); }
+      const f = this.hp / this.max, ph = f > 0.7 ? 1 : f > 0.42 ? 2 : f > 0.2 ? 3 : 4;
+      if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'The dragon takes to the sky!' : ph === 3 ? 'The dragon is ENRAGED!' : 'LAST STAND! The dragon burns with fury!', 2.2); shake = 18; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 40, '#ff8a1a', 300); this.state = 'idle'; this.st = 1.1; this.air = 0; this.stun = 0; this.cone = null; this.mouth = false; ring(this.x, this.y, 20, 0, 210, 9, { c: '#ff8a1a' }); }
       if (this.stun > 0) { this.stun -= dt; return; }
       this.st -= dt; this.wing += dt;
-      const toP = angTo(this, player);
-      if (this.state === 'idle' || this.state === 'stomp' || this.state === 'tail' || this.state === 'fireballs' || this.state === 'gust') this.face += clamp(angDiff(toP, this.face), -2.4 * dt, 2.4 * dt);
+      const toP = angTo(this, player), rest = k => k * [0, 0.8, 0.6, 0.45, 0.32][ph], spd = [0, 62, 88, 112, 138][ph];
+      if (['idle', 'stomp', 'tail', 'fireballs', 'gust', 'cyclone'].includes(this.state)) this.face += clamp(angDiff(toP, this.face), -2.6 * dt, 2.6 * dt);
       if (this.state === 'idle') {
-        if (dist(this, player) > 130) toward(this, player.x, player.y, 55 + ph * 22, dt);
-        if (this.st <= 0) { const o = ['breath', 'tail', 'fireballs', 'stomp']; if (ph >= 2) o.push('fly', 'gust', 'fly'); if (ph === 3) o.push('eruption', 'breath'); this.state = pick(o); this.n = 0;
-          if (this.state === 'stomp') { this.st = 1.0; zone(this.x, this.y, 135, 1.0, 0.15, {}); }
-          else if (this.state === 'tail') { this.st = 1.0; zone(this.x, this.y, 185, 0.8, 0.4, { c: '#ff5a3d' }); }
-          else if (this.state === 'breath') { this.st = 0.85; this.face = toP; const d = Math.random() < 0.5 ? 1 : -1; this.cone = { k: 'cone', own: this, x: this.x, y: this.y, a: this.face - d * 0.7, rot: d * (ph === 3 ? 1.1 : 0.85), delay: 0.8, dur: ph === 3 ? 2.3 : 1.8, t: 0, r: 380, half: 0.3 }; hazards.push(this.cone); }
-          else if (this.state === 'fly') { this.st = 1.0; }
-          else if (this.state === 'eruption') { this.st = 0.7; }
-          else this.st = 0.6; }
+        if (dist(this, player) > 120) { toward(this, player.x, player.y, spd, dt); if (ph >= 3) { this.ft = (this.ft || 0) - dt; if (this.ft <= 0) { this.ft = 0.55; fire(this.x - Math.cos(this.face) * 40, this.y - Math.sin(this.face) * 40, 26, 2.6); } } }
+        if (this.st <= 0) {
+          const o = ['breath', 'tail', 'fireballs', 'stomp']; if (ph >= 2) o.push('fly', 'gust'); if (ph >= 3) o.push('eruption', 'cyclone', 'breath', 'fly'); if (ph === 4) o.push('eruption', 'cyclone', 'fly');
+          let nx = pick(o); if (nx === this.last) nx = pick(o); this.last = nx; this.state = nx; this.n = 0; this.bt = 0;
+          if (nx === 'stomp') { this.st = ph >= 3 ? 0.8 : 1.0; zone(this.x, this.y, 140, this.st, 0.15, {}); }
+          else if (nx === 'tail') { this.st = ph >= 3 ? 0.65 : 0.8; zone(this.x, this.y, 190, this.st, 0.4, { c: '#ff5a3d' }); }
+          else if (nx === 'breath') { this.st = 0.8; this.face = toP; const d = Math.random() < 0.5 ? 1 : -1, rot = d * [0, 0.85, 0.95, 1.1, 1.25][ph], dur = [0, 1.8, 2.0, 2.4, 2.7][ph]; this.cone = { k: 'cone', own: this, x: this.x, y: this.y, a: this.face - d * 0.7, rot, delay: 0.8, dur, t: 0, r: 390, half: 0.3 }; hazards.push(this.cone); if (ph >= 3) hazards.push({ k: 'cone', own: this, x: this.x, y: this.y, a: this.face - d * 0.7 + Math.PI, rot, delay: 0.8, dur, t: 0, r: 390, half: 0.26 }); }
+          else if (nx === 'fly') { this.st = 0.8; }
+          else if (nx === 'eruption') { this.st = 0.6; }
+          else if (nx === 'cyclone') { this.st = 3.2; this.cy = rnd(0, TAU); this.ct = 0; }
+          else this.st = 0.5;
+        }
       } else if (this.state === 'stomp') {
-        if (this.st <= 0) { wave(this.x, this.y, 195, 430, { w: 28, c: '#ffb27a' }); shake = 14; blip(60, 0.4, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = ph === 3 ? 1.0 : 1.5; }
+        if (this.st <= 0) { wave(this.x, this.y, 200, 440, { w: 28, c: '#ffb27a' }); if (ph >= 2) wave(this.x, this.y, 200, 440, { w: 26, c: '#ff6a1a', delay: 0.5 }); if (ph >= 4) ring(this.x, this.y, 16, 0, 200, 9, { c: '#ff8a1a' }); shake = 14; blip(60, 0.4, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = rest(1.6); }
       } else if (this.state === 'tail') {
-        if (this.st <= 0) { ring(this.x, this.y, 10, 0.3, 200, 8, { c: '#ff5a3d' }); this.state = 'idle'; this.st = 1.1; }
+        if (this.st <= 0) { ring(this.x, this.y, ph >= 2 ? 14 : 10, 0.3, 210, 8, { c: '#ff5a3d' }); if (ph >= 3) zone(this.x, this.y, 270, 0.7, 0.3, { c: '#ff5a3d' }); this.state = 'idle'; this.st = rest(1.4); }
       } else if (this.state === 'breath') {
-        if (this.cone) { this.face = this.cone.a; this.mouth = true; }
-        if (this.st <= -(this.cone ? this.cone.dur : 0) - 0.1 || (this.cone && this.cone.dead)) { this.cone = null; this.mouth = false; this.state = 'idle'; this.st = 1.0; }
+        if (this.cone) { this.face = this.cone.a; this.mouth = true; this.bt -= dt; if (ph >= 3 && this.bt <= 0 && this.cone.t > this.cone.delay) { this.bt = ph === 4 ? 0.4 : 0.55; ebul(this.x, this.y, toP, 230, 8, { c: '#ffd23f', home: 1.2, life: 3 }); } }
+        if (this.st <= -(this.cone ? this.cone.dur : 0) - 0.1 || (this.cone && this.cone.dead)) { this.cone = null; this.mouth = false; this.state = 'idle'; this.st = rest(1.3); }
       } else if (this.state === 'fireballs') {
-        if (this.st <= 0) { const a = angTo(this, player); fan(this.x, this.y, a, ph === 3 ? 9 : 7, 1.2, 240, 8, { c: '#ffd23f' }); for (let i = -1; i <= 1; i += 2) ebul(this.x, this.y, a + i * 0.45, 170, 9, { c: '#ff9a3a', home: ph === 3 ? 1.7 : 1.3, life: 4 }); blip(220, 0.12, 'sawtooth', 0.05); this.n++; this.st = 0.55; if (this.n >= 3) { this.state = 'idle'; this.st = 1.1; } }
+        if (this.st <= 0) { const a = angTo(this, player); fan(this.x, this.y, a, 5 + ph * 2, 1.25, 245 + ph * 10, 8, { c: '#ffd23f' }); for (let i = -1; i <= 1; i += 2) ebul(this.x, this.y, a + i * 0.45, 175, 9, { c: '#ff9a3a', home: 1.1 + ph * 0.25, life: 4 }); blip(220, 0.12, 'sawtooth', 0.05); this.n++; this.st = 0.5 - ph * 0.04; if (this.n >= 2 + ph) { this.state = 'idle'; this.st = rest(1.3); } }
       } else if (this.state === 'gust') {
-        if (this.st <= 0) { ring(this.x, this.y, 16, this.n * 0.35, 130, 12, { c: '#ff8a1a' }, 4); this.n++; this.st = 0.7; blip(100, 0.2, 'triangle', 0.06); if (this.n >= 3) { this.state = 'idle'; this.st = 1.1; } }
+        if (this.st <= 0) { ring(this.x, this.y, 18, this.n * 0.35, 135 + ph * 8, 12, { c: '#ff8a1a' }, 4); this.n++; this.st = 0.62; blip(100, 0.2, 'triangle', 0.06); if (this.n >= 3 + (ph >= 3 ? 1 : 0)) { this.state = 'idle'; this.st = rest(1.3); } }
+      } else if (this.state === 'cyclone') {
+        toward(this, player.x, player.y, 60, dt); this.ct -= dt; this.cy += dt * 2.3;
+        if (this.ct <= 0) { this.ct = 0.1; const arms = ph === 4 ? 4 : 3; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.cy + i * TAU / arms, 215, 7, { c: '#ff8a1a', life: 3.2 }); }
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.4); }
       } else if (this.state === 'fly') {
-        this.air = clamp(this.air + dt * 1.2, 0, 1);
-        if (this.st <= 0) { this.state = 'hover'; this.st = ph === 3 ? 3.0 : 2.4; this.n = 0; this.mt = 0; }
+        this.air = clamp(this.air + dt * 1.3, 0, 1);
+        if (this.st <= 0) { this.state = 'hover'; this.st = [0, 0, 2.4, 2.8, 3.2][ph]; this.n = 0; this.mt = 0; }
       } else if (this.state === 'hover') {
-        this.mt -= dt; if (this.mt <= 0) { meteor(player.x + rnd(-130, 130), player.y + rnd(-130, 130), 0.9, 52); if (this.n % 2 === 0) meteor(player.x, player.y, 0.9, 50); this.n++; this.mt = ph === 3 ? 0.28 : 0.42; }
-        toward(this, player.x, player.y, 90, dt);
-        if (this.st <= 0) { this.state = 'dive'; this.st = 1.0; this.tx = player.x; this.ty = player.y; this.fx = this.x; this.fy = this.y; zone(this.tx, this.ty, 105, 1.0, 0.2, { c: '#ff3d3d' }); }
+        this.mt -= dt; if (this.mt <= 0) { meteor(player.x + rnd(-140, 140), player.y + rnd(-140, 140), 0.85, 54); if (this.n % 2 === 0) meteor(player.x, player.y, 0.85, 52); if (ph >= 3 && this.n % 3 === 0) fan(this.x, this.y, toP, 5, 0.9, 230, 8, { c: '#ffd23f' }); this.n++; this.mt = [0, 0, 0.36, 0.28, 0.2][ph]; }
+        toward(this, player.x, player.y, 100, dt);
+        if (this.st <= 0) { this.state = 'dive'; this.st = ph >= 3 ? 0.85 : 1.0; this.dv = this.st; this.tx = player.x; this.ty = player.y; this.fx = this.x; this.fy = this.y; zone(this.tx, this.ty, 110, this.st, 0.2, { c: '#ff3d3d' }); }
       } else if (this.state === 'dive') {
-        const u = clamp(1 - this.st / 1.0, 0, 1); this.x = this.fx + (this.tx - this.fx) * u * u; this.y = this.fy + (this.ty - this.fy) * u * u; this.air = clamp(1 - u * u * 1.1, 0, 1);
-        if (this.st <= 0) { this.air = 0; this.x = this.tx; this.y = this.ty; shake = 20; blip(50, 0.5, 'sawtooth', 0.12, 0.4); wave(this.x, this.y, 230, 440, { w: 30, c: '#ffb27a' }); ring(this.x, this.y, 14, 0, 190, 9, { c: '#ff8a1a' }); fire(this.x, this.y, 50, 4); this.state = 'idle'; this.st = 1.0; this.stun = ph === 3 ? 1.1 : 1.8; toastMsg('The dragon is stunned - hit it!', 1.4); }
+        const u = clamp(1 - this.st / this.dv, 0, 1); this.x = this.fx + (this.tx - this.fx) * u * u; this.y = this.fy + (this.ty - this.fy) * u * u; this.air = clamp(1 - u * u * 1.1, 0, 1);
+        if (this.st <= 0) { this.air = 0; this.x = this.tx; this.y = this.ty; shake = 22; blip(50, 0.5, 'sawtooth', 0.12, 0.4); wave(this.x, this.y, 240, 450, { w: 30, c: '#ffb27a' }); if (ph >= 3) wave(this.x, this.y, 240, 450, { w: 26, c: '#ff6a1a', delay: 0.45 }); ring(this.x, this.y, ph >= 3 ? 20 : 14, 0, 195, 9, { c: '#ff8a1a' }); fire(this.x, this.y, 52, 4); if (ph === 4) for (let i = 0; i < 5; i++) meteor(player.x + rnd(-150, 150), player.y + rnd(-150, 150), 0.8 + i * 0.1, 50); this.state = 'idle'; this.st = rest(1.3); this.stun = [0, 0, 1.5, 1.1, 0.8][ph]; toastMsg('The dragon is stunned - hit it!', 1.2); }
       } else if (this.state === 'eruption') {
-        if (this.st <= 0) { const a = toP; for (let i = 1; i <= 8; i++) meteor(this.x + Math.cos(a) * i * 75, this.y + Math.sin(a) * i * 75, 0.5 + i * 0.12, 48); for (let k = -1; k <= 1; k += 2) for (let i = 2; i <= 6; i += 2) meteor(this.x + Math.cos(a + k * 0.5) * i * 75, this.y + Math.sin(a + k * 0.5) * i * 75, 0.7 + i * 0.12, 44); this.state = 'idle'; this.st = 2.2; }
+        if (this.st <= 0) { const a = toP; for (let i = 1; i <= 8; i++) meteor(this.x + Math.cos(a) * i * 75, this.y + Math.sin(a) * i * 75, 0.5 + i * 0.1, 48); for (let k = -1; k <= 1; k += 2) for (let i = 2; i <= 6; i += 2) meteor(this.x + Math.cos(a + k * 0.5) * i * 75, this.y + Math.sin(a + k * 0.5) * i * 75, 0.7 + i * 0.1, 44); if (ph >= 3) for (let i = 0; i < 6; i++) meteor(player.x + Math.cos(i * 1.047) * 130, player.y + Math.sin(i * 1.047) * 130, 1.0, 44); this.state = 'idle'; this.st = rest(2.4); }
       }
       inArena(this);
     };
@@ -477,6 +496,216 @@
     return b;
   }
 
+
+  // ------------------------------------------------------------------ acid realm bosses (bosses 11-15, toughest of all)
+  const AC = '#9dff3a', AC2 = '#d8ff7a', ACD = '#1f4a14';
+  const pool = (x, y, r, dur) => hazards.push({ k: 'fire', acid: true, x, y, r, t: 0, dur });
+  const glob = (x, y, delay, r) => zone(x, y, r || 52, delay, 0.15, { c: AC, tc: 'rgba(157,255,58,.16)', onEnd: z => { pool(z.x, z.y, (r || 52) * 0.8, 3.5); shake = 4; } });
+  const acidZone = (x, y, r, delay, dur) => zone(x, y, r, delay, dur, { c: AC, tc: 'rgba(157,255,58,.16)' });
+  const AB = o => Object.assign({ c: AC }, o);
+  const addBeam = (x, y, a, rot, delay, dur, len) => { beam(x, y, a, rot, delay, dur); hazards[hazards.length - 1].len = len; };
+  const followBeams = o => { for (const h of hazards) if (h.k === 'beam') { h.x = o.x; h.y = o.y; } };
+
+  function mkAcidling(x, y) {
+    return { x, y, r: 11, hp: 4, max: 4, flash: 0, name: 'acidling', w: rnd(0, 6), sh: rnd(0.8, 1.6),
+      update(dt) { this.w += dt * 3; const d = dist(this, player), a = angTo(this, player), k = d > 200 ? 1 : d < 120 ? -1 : 0; this.x += (Math.cos(a) * k + Math.cos(a + 1.57) * Math.sin(this.w) * 0.9) * 120 * dt; this.y += (Math.sin(a) * k + Math.sin(a + 1.57) * Math.sin(this.w) * 0.9) * 120 * dt; inArena(this); this.sh -= dt; if (this.sh <= 0) { ebul(this.x, this.y, a, 200, 7, AB()); this.sh = rnd(1.4, 2.0); } },
+      draw() { const f = this.flash > 0, wob = Math.sin(time * 8 + this.w) * 1.5; ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(this.x, this.y + 11, 11, 4, 0, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#3f8a24'; ctx.beginPath(); ctx.ellipse(this.x, this.y, 12 + wob, 11 - wob, 0, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#7fd13a'; ctx.beginPath(); ctx.ellipse(this.x - 3, this.y - 3, 6, 4, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#ffe94a'; ctx.fillRect(this.x - 5, this.y - 1, 3, 3); ctx.fillRect(this.x + 2, this.y - 1, 3, 3); } };
+  }
+
+  function mkScorpion() {
+    const b = base('ACID SCORPION', 380, 42); b.face = Math.PI / 2; b.ca = 0;
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The scorpion\'s shell cracks - it is furious!'); shake = 12; ring(this.x, this.y, 16, 0, 200, 8, AB()); }
+      this.st -= dt; const toP = angTo(this, player);
+      if (['idle', 'sting', 'smash', 'rain'].includes(this.state)) this.face += clamp(angDiff(toP, this.face), -3 * dt, 3 * dt);
+      if (this.state === 'idle') {
+        const d = dist(this, player); if (d > 150) toward(this, player.x, player.y, 120 + ph * 30, dt); else if (d < 100) toward(this, player.x, player.y, -90, dt);
+        if (this.st <= 0) { this.state = pick(['sting', 'sting', 'charge', 'smash', 'rain']); this.n = 0; this.st = 0.5;
+          if (this.state === 'charge') { this.st = 0.7; this.ca = toP; }
+          else if (this.state === 'smash') { this.st = 0.9; this.sx = this.x + Math.cos(this.face) * 95; this.sy = this.y + Math.sin(this.face) * 95; acidZone(this.sx, this.sy, 100, 0.9, 0.2); if (ph === 2) { this.sx2 = this.x + Math.cos(this.face + 0.9) * 110; this.sy2 = this.y + Math.sin(this.face + 0.9) * 110; acidZone(this.sx2, this.sy2, 80, 0.9, 0.2); } } }
+      } else if (this.state === 'sting') {
+        if (this.st <= 0) { fan(this.x, this.y, toP, ph === 2 ? 7 : 5, 0.9, 215, 8, AB()); glob(player.x, player.y, 0.9, 54); blip(240, 0.1, 'sawtooth', 0.05); this.n++; this.st = 0.55; if (this.n >= (ph === 2 ? 4 : 3)) { this.state = 'idle'; this.st = 1.1; } }
+      } else if (this.state === 'smash') {
+        if (this.st <= 0) { wave(this.sx, this.sy, 220, 300, { w: 24, c: AC }); ring(this.sx, this.sy, 10, 0, 190, 8, AB()); shake = 10; if (ph === 2) { wave(this.sx2, this.sy2, 220, 260, { w: 22, c: AC }); } this.state = 'idle'; this.st = 1.2; }
+      } else if (this.state === 'charge') {
+        if (this.st > 0) this.ca = toP; else { this.x += Math.cos(this.ca) * 650 * dt; this.y += Math.sin(this.ca) * 650 * dt; this.pt = (this.pt || 0) + dt; if (this.pt > 0.09) { this.pt = 0; pool(this.x, this.y, 24, 2.6); }
+          if (this.st < -0.55 || inArena(this)) { this.n++; if (this.n < (ph === 2 ? 3 : 2)) { this.st = 0.45; this.ca = angTo(this, player); } else { this.state = 'idle'; this.st = 1.1; } } }
+      } else if (this.state === 'rain') {
+        if (this.st <= 0) { const cnt = ph === 2 ? 10 : 7; for (let i = 0; i < cnt; i++) glob(player.x + (i ? rnd(-190, 190) : 0), player.y + (i ? rnd(-190, 190) : 0), 0.8 + i * 0.12, 54); this.state = 'idle'; this.st = 1.8; }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y, f = this.flash > 0, dk = f ? '#fff' : '#1f4a14', md = f ? '#fff' : '#3f8a24', lt = f ? '#fff' : '#7fd13a';
+      if (this.state === 'charge' && this.st > 0) { ctx.strokeStyle = 'rgba(157,255,58,.45)'; ctx.lineWidth = 34; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(this.ca) * 540, y + Math.sin(this.ca) * 540); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 36, 54, 14, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.face); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = dk; ctx.lineWidth = 5; for (let i = 0; i < 4; i++) for (const s of [-1, 1]) { const w = Math.sin(time * 9 + i * 1.3 + (s > 0 ? 1.5 : 0)) * 6; ctx.beginPath(); ctx.moveTo(10 - i * 14, s * 16); ctx.lineTo(16 - i * 14 + w, s * 36); ctx.lineTo(8 - i * 14 + w, s * 48); ctx.stroke(); }
+      const tp = []; for (let i = 0; i <= 7; i++) { const u = i / 7; tp.push([-30 - Math.sin(u * 2.6) * 42 + u * 38, Math.sin(time * 3 + u * 3) * 6]); }
+      for (const [lw, col] of [[14, dk], [7, md]]) { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); tp.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke(); }
+      const sp = tp[7]; ctx.fillStyle = AC; ctx.beginPath(); ctx.moveTo(sp[0] + 3, sp[1] - 7); ctx.lineTo(sp[0] + 26, sp[1]); ctx.lineTo(sp[0] + 3, sp[1] + 7); ctx.fill();
+      ctx.fillStyle = dk; ctx.beginPath(); ctx.ellipse(0, 0, 40, 30, 0, 0, TAU); ctx.fill(); ctx.fillStyle = md; ctx.beginPath(); ctx.ellipse(2, 0, 34, 24, 0, 0, TAU); ctx.fill(); ctx.fillStyle = lt; ctx.beginPath(); ctx.ellipse(8, 0, 18, 12, 0, 0, TAU); ctx.fill();
+      for (const s of [-1, 1]) { ctx.strokeStyle = md; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(30, s * 14); ctx.lineTo(56, s * 26); ctx.stroke(); ctx.fillStyle = dk; ctx.beginPath(); ctx.moveTo(52, s * 20); ctx.lineTo(86, s * 12); ctx.lineTo(66, s * 28); ctx.fill(); ctx.beginPath(); ctx.moveTo(52, s * 32); ctx.lineTo(86, s * 42); ctx.lineTo(66, s * 26); ctx.fill(); }
+      ctx.fillStyle = '#ffe94a'; ctx.beginPath(); ctx.arc(34, -8, 3.5, 0, TAU); ctx.arc(34, 8, 3.5, 0, TAU); ctx.fill();
+      ctx.restore();
+    };
+    return b;
+  }
+
+  function mkHydra() {
+    const b = base('VENOM HYDRA', 430, 40); b.rot = 0; b.hd = [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }]; b.open = [0, 0, 0];
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('Two more heads burst out!'); shake = 12; ring(this.x, this.y, 18, 0, 190, 8, AB()); }
+      this.st -= dt; this.rot += dt * (this.state === 'sweep' ? 0.1 : 0.7);
+      for (let i = 0; i < 3; i++) { const a = this.rot + i * TAU / 3; this.hd[i].x = this.x + Math.cos(a) * (80 + Math.sin(time * 2 + i) * 8); this.hd[i].y = this.y + Math.sin(a) * (80 + Math.sin(time * 2 + i) * 8); this.open[i] = Math.max(0, this.open[i] - dt); }
+      if (this.state === 'idle') {
+        if (dist(this, player) > 100) toward(this, player.x, player.y, 55 + ph * 18, dt);
+        if (this.st <= 0) { this.state = pick(['spit', 'spit', 'sweep', 'slam', 'pools']); this.n = 0; this.st = 0.5; if (this.state === 'slam') { this.st = 0.9; acidZone(this.x, this.y, 155, 0.9, 0.2); } }
+      } else if (this.state === 'spit') {
+        if (this.st <= 0) { const i = this.n % 3, h = this.hd[i]; fan(h.x, h.y, angTo(h, player), ph === 2 ? 7 : 5, 0.9, 215, 8, AB()); this.open[i] = 0.3; if (ph === 2) { const h2 = this.hd[(i + 1) % 3]; ebul(h2.x, h2.y, angTo(h2, player), 170, 9, AB({ c: AC2, home: 1.5, life: 4 })); this.open[(i + 1) % 3] = 0.3; } blip(230, 0.1, 'sawtooth', 0.05); this.n++; this.st = 0.42; if (this.n >= (ph === 2 ? 9 : 6)) { this.state = 'idle'; this.st = 1.2; } }
+      } else if (this.state === 'sweep') {
+        if (this.n === 0 && this.st <= 0) { const d = Math.random() < 0.5 ? 1 : -1, a0 = rnd(0, TAU), arms = ph === 2 ? 3 : 2; for (let i = 0; i < arms; i++) addBeam(this.x, this.y, a0 + i * TAU / arms, d * (ph === 2 ? 0.95 : 0.8), 0.7, 3.0, 340); this.n = 1; this.st = 3.8; blip(200, 0.3, 'sawtooth', 0.06); }
+        else if (this.n === 1 && this.st <= 0) { this.state = 'idle'; this.st = 1.0; }
+        else if (this.n === 1) followBeams(this);
+      } else if (this.state === 'slam') {
+        if (this.st <= 0) { wave(this.x, this.y, 210, 440, { w: 28, c: AC }); for (const h of this.hd) pool(h.x, h.y, 34, 3.5); if (ph === 2) ring(this.x, this.y, 16, 0, 170, 9, AB()); shake = 12; blip(60, 0.4, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = 1.3; }
+      } else if (this.state === 'pools') {
+        if (this.st <= 0) { for (let i = 0; i < 3; i++) for (let k = 0; k < (ph === 2 ? 2 : 1); k++) glob(player.x + (i || k ? rnd(-130, 130) : 0), player.y + (i || k ? rnd(-130, 130) : 0), 0.8 + i * 0.22 + k * 0.4, 56); for (const h of this.hd) fan(h.x, h.y, angTo(h, player), 3, 0.5, 210, 8, AB()); this.state = 'idle'; this.st = 1.7; }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y, f = this.flash > 0, dk = f ? '#fff' : '#1f4a14', md = f ? '#fff' : '#3f8a24', lt = f ? '#fff' : '#7fd13a';
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 40, 60, 16, 0, 0, TAU); ctx.fill();
+      ctx.lineCap = 'round'; this.hd.forEach((h, i) => { ctx.strokeStyle = dk; ctx.lineWidth = 20; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(h.x, h.y); ctx.stroke(); ctx.strokeStyle = md; ctx.lineWidth = 11; ctx.stroke(); });
+      ctx.fillStyle = dk; ctx.beginPath(); ctx.arc(x, y, 42, 0, TAU); ctx.fill(); ctx.fillStyle = md; ctx.beginPath(); ctx.arc(x - 3, y - 4, 35, 0, TAU); ctx.fill(); ctx.fillStyle = lt; for (let i = 0; i < 7; i++) { ctx.beginPath(); ctx.arc(x + Math.cos(i * 0.9) * 20, y + Math.sin(i * 1.3) * 18, 4, 0, TAU); ctx.fill(); }
+      this.hd.forEach((h, i) => { const a = angTo(h, player), op = this.open[i] > 0 ? 0.55 : 0.12; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(a); ctx.fillStyle = dk; ctx.beginPath(); ctx.ellipse(0, 0, 22, 16, 0, 0, TAU); ctx.fill(); ctx.fillStyle = md; ctx.beginPath(); ctx.ellipse(-2, 0, 18, 12, 0, 0, TAU); ctx.fill();
+        for (const s of [-1, 1]) { ctx.fillStyle = dk; ctx.beginPath(); ctx.moveTo(10, s * 3); ctx.lineTo(34, s * (4 + op * 20)); ctx.lineTo(10, s * 11); ctx.fill(); ctx.fillStyle = '#f4ffd0'; ctx.beginPath(); ctx.moveTo(18, s * (4 + op * 8)); ctx.lineTo(24, s * (8 + op * 14)); ctx.lineTo(26, s * (4 + op * 8)); ctx.fill(); ctx.fillStyle = '#ffe94a'; ctx.beginPath(); ctx.arc(4, s * 8, 3.2, 0, TAU); ctx.fill(); }
+        if (this.open[i] > 0) { ctx.fillStyle = AC; ctx.beginPath(); ctx.arc(30, 0, 6, 0, TAU); ctx.fill(); } ctx.restore(); });
+    };
+    return b;
+  }
+
+  function mkAcidWraith() {
+    const b = base('TOXIC WRAITH', 400, 30); b.ang = 0; b.ca = 0;
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The wraith dissolves into a toxic cloud!'); shake = 10; ring(this.x, this.y, 20, 0, 190, 8, AB()); }
+      this.st -= dt; this.ang += dt; const toP = angTo(this, player);
+      if (this.state === 'idle') {
+        toward(this, player.x + Math.cos(this.ang * 0.9) * 230, player.y + Math.sin(this.ang * 0.9) * 230, 110 + ph * 30, dt); inArena(this);
+        if (this.st <= 0) { const o = ['volley', 'blink', 'nova', 'summon', 'trail']; if (ph === 2) o.push('blink', 'nova', 'trail'); this.state = pick(o); this.n = 0; this.st = 0.5; if (this.state === 'summon' && minions.length >= 4) this.state = 'volley'; if (this.state === 'trail') { this.st = 0.6; this.ca = toP; } }
+      } else if (this.state === 'volley') {
+        if (this.st <= 0) { for (let i = -1; i <= 1; i++) ebul(this.x, this.y, toP + i * 0.5, 170, 9, AB({ c: AC2, home: ph === 2 ? 1.9 : 1.4, life: 4.2 })); if (ph === 2) fan(this.x, this.y, toP, 5, 1.0, 225, 7, AB()); this.n++; this.st = 0.75; blip(260, 0.12, 'sawtooth', 0.05); if (this.n >= (ph === 2 ? 3 : 2)) { this.state = 'idle'; this.st = 1.1; } }
+      } else if (this.state === 'blink') {
+        if (this.st <= 0) { burst(this.x, this.y, 16, AC, 200); glob(this.x, this.y, 0.6, 56); let a, k = 0; do { a = rnd(0, TAU); this.x = ARENA.x + Math.cos(a) * 200; this.y = ARENA.y + Math.sin(a) * 200; k++; } while (dist(this, player) < 150 && k < 10); burst(this.x, this.y, 16, AC, 200); ring(this.x, this.y, ph === 2 ? 18 : 12, rnd(0, 1), 195, 7, AB()); glob(player.x, player.y, 0.9, 54); this.n++; if (this.n < (ph === 2 ? 2 : 1)) this.st = 0.55; else { this.state = 'idle'; this.st = 0.9; } }
+      } else if (this.state === 'nova') {
+        if (this.st <= 0) { ring(this.x, this.y, 22, toP + this.n * 0.4, 150, 9, AB(), 5); this.n++; this.st = 0.5; blip(110, 0.2, 'triangle', 0.06); if (this.n >= (ph === 2 ? 4 : 3)) { this.state = 'idle'; this.st = 1.2; } }
+      } else if (this.state === 'summon') {
+        if (this.st <= 0) { for (let i = 0; i < (ph === 2 ? 3 : 2); i++) minions.push(mkAcidling(this.x + rnd(-30, 30), this.y + rnd(-30, 30))); burst(this.x, this.y, 12, AC, 150); this.state = 'idle'; this.st = 1.5; }
+      } else if (this.state === 'trail') {
+        if (this.st > 0) this.ca = toP; else { this.x += Math.cos(this.ca) * 430 * dt; this.y += Math.sin(this.ca) * 430 * dt; this.pt = (this.pt || 0) + dt; if (this.pt > 0.1) { this.pt = 0; pool(this.x, this.y, 26, 3); } if (this.st < -0.7 || inArena(this)) { this.state = 'idle'; this.st = 1.0; fan(this.x, this.y, angTo(this, player), 7, 1.1, 220, 8, AB()); } }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y + Math.sin(time * 3) * 4, f = this.flash > 0;
+      if (this.state === 'trail' && this.st > 0) { ctx.strokeStyle = 'rgba(157,255,58,.4)'; ctx.lineWidth = 28; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(this.ca) * 520, y + Math.sin(this.ca) * 520); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(this.x, this.y + 44, 22, 6, 0, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.85; ctx.fillStyle = f ? '#fff' : '#17361a'; ctx.beginPath(); ctx.moveTo(x, y - 34); ctx.quadraticCurveTo(x + 34, y - 4, x + 30, y + 40); for (let i = 0; i < 5; i++) ctx.lineTo(x + 30 - (i + 0.5) * 12 - 0, y + 40 + (i % 2 ? -6 : 8) + Math.sin(time * 6 + i) * 3); ctx.lineTo(x - 30, y + 40); ctx.quadraticCurveTo(x - 34, y - 4, x, y - 34); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#2c6b2a'; ctx.beginPath(); ctx.moveTo(x, y - 28); ctx.quadraticCurveTo(x + 20, y - 2, x + 16, y + 30); ctx.lineTo(x - 16, y + 30); ctx.quadraticCurveTo(x - 20, y - 2, x, y - 28); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#050f06'; ctx.beginPath(); ctx.ellipse(x, y - 12, 12, 14, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = AC; ctx.beginPath(); ctx.arc(x - 5, y - 13, 3.2, 0, TAU); ctx.arc(x + 5, y - 13, 3.2, 0, TAU); ctx.fill();
+      for (let i = 0; i < 3; i++) { const a = time * 2 + i * 2.1; ctx.fillStyle = 'rgba(157,255,58,.6)'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 36, y + Math.sin(a) * 22 + 6, 4, 0, TAU); ctx.fill(); }
+    };
+    return b;
+  }
+
+  function mkLeviathan() {
+    const b = base('BILE LEVIATHAN', 470, 44); b.air = 0; b.tr = []; b.face = Math.PI / 2; b.tx = 0; b.ty = 0;
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The leviathan thrashes - it burrows faster!'); shake = 12; ring(this.x, this.y, 16, 0, 190, 8, AB()); }
+      this.st -= dt; const toP = angTo(this, player), l = this.tr[0];
+      if (!l || Math.hypot(l.x - this.x, l.y - this.y) > 9) { this.tr.unshift({ x: this.x, y: this.y }); if (this.tr.length > 30) this.tr.pop(); }
+      if (this.state === 'idle' || this.state === 'spit' || this.state === 'rain') this.face += clamp(angDiff(toP, this.face), -2.5 * dt, 2.5 * dt);
+      if (this.state === 'idle') {
+        if (dist(this, player) > 120) toward(this, player.x, player.y, 85 + ph * 20, dt);
+        if (this.st <= 0) { this.state = pick(ph === 2 ? ['spit', 'rain', 'burrow', 'burrow', 'burrow'] : ['spit', 'spit', 'rain', 'burrow', 'burrow']); this.n = 0; this.st = 0.5; }
+      } else if (this.state === 'spit') {
+        if (this.st <= 0) { fan(this.x, this.y, toP, 7, 1.2, 225, 9, AB()); for (let i = -1; i <= 1; i += 2) ebul(this.x, this.y, toP + i * 0.5, 170, 9, AB({ c: AC2, home: 1.3, life: 4 })); blip(180, 0.12, 'sawtooth', 0.05); this.n++; this.st = 0.6; if (this.n >= (ph === 2 ? 4 : 3)) { this.state = 'idle'; this.st = 1.1; } }
+      } else if (this.state === 'rain') {
+        if (this.st <= 0) { const cnt = ph === 2 ? 10 : 7; for (let i = 0; i < cnt; i++) glob(player.x + (i ? rnd(-180, 180) : 0), player.y + (i ? rnd(-180, 180) : 0), 0.8 + i * 0.13, 54); this.state = 'idle'; this.st = 1.7; }
+      } else if (this.state === 'burrow') {
+        this.air = clamp(this.air + dt * 3, 0, 1); if (this.st <= 0) { this.state = 'track'; this.st = this.n ? 0.9 : 1.4; burst(this.x, this.y, 14, '#4a7a2a', 160); }
+      } else if (this.state === 'track') {
+        toward(this, player.x, player.y, 230, dt); this.face = toP; inArena(this); if (Math.random() < 0.5) parts.push({ x: this.x + rnd(-14, 14), y: this.y + rnd(-8, 8), vx: rnd(-30, 30), vy: rnd(-40, -10), life: 0.5, max: 0.5, c: '#4a7a2a', r: 4 });
+        if (this.st <= 0) { this.state = 'erupt'; this.st = 0.9; this.tx = player.x; this.ty = player.y; acidZone(this.tx, this.ty, 120, 0.9, 0.2); }
+      } else if (this.state === 'erupt') {
+        if (this.st <= 0) { this.x = this.tx; this.y = this.ty; this.tr.length = 0; this.air = 0; shake = 20; blip(50, 0.5, 'sawtooth', 0.12, 0.4); wave(this.x, this.y, 235, 440, { w: 30, c: AC }); ring(this.x, this.y, ph === 2 ? 18 : 12, 0, 190, 9, AB()); pool(this.x, this.y, 50, 4); this.n++; if (ph === 2 && this.n < 2) { this.state = 'burrow'; this.st = 0.55; this.air = 0; } else { this.state = 'idle'; this.st = 1.4; } }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y, f = this.flash > 0;
+      if (this.air > 0.3) { ctx.globalAlpha = 0.55; ctx.fillStyle = '#2a4a1a'; for (let i = 0; i < 7; i++) { const a = time * 5 + i * 0.9; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 22, y + Math.sin(a) * 14, 8 + (i % 3) * 3, 0, TAU); ctx.fill(); } ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(157,255,58,.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(x, y, 38 + Math.sin(time * 10) * 4, 22, 0, 0, TAU); ctx.stroke(); return; }
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 40, 56, 15, 0, 0, TAU); ctx.fill();
+      for (let i = 13; i >= 1; i--) { const q = this.tr[i * 2]; if (!q) continue; const r = 40 - i * 1.9; ctx.fillStyle = f ? '#fff' : i % 2 ? '#2f6a1c' : '#3f8a24'; ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#6fc032'; ctx.beginPath(); ctx.arc(q.x - r * 0.25, q.y - r * 0.3, r * 0.4, 0, TAU); ctx.fill(); }
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.face);
+      ctx.fillStyle = f ? '#fff' : '#2f6a1c'; ctx.beginPath(); ctx.arc(0, 0, 44, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#3f8a24'; ctx.beginPath(); ctx.arc(-6, -4, 36, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#240a2c'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 38, -0.95, 0.95); ctx.closePath(); ctx.fill(); ctx.fillStyle = AC; ctx.beginPath(); ctx.arc(26, 0, 7 + Math.sin(time * 8) * 1.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#f4ffd0'; for (let i = 0; i < 9; i++) { const a = -0.9 + i * 0.225; ctx.beginPath(); ctx.moveTo(Math.cos(a - 0.08) * 40, Math.sin(a - 0.08) * 40); ctx.lineTo(Math.cos(a) * 26, Math.sin(a) * 26); ctx.lineTo(Math.cos(a + 0.08) * 40, Math.sin(a + 0.08) * 40); ctx.fill(); }
+      ctx.fillStyle = '#ffe94a'; ctx.beginPath(); ctx.arc(-10, -26, 4, 0, TAU); ctx.arc(-10, 26, 4, 0, TAU); ctx.fill(); ctx.restore();
+    };
+    return b;
+  }
+
+  function mkOvermind() {
+    const b = base('ACID OVERMIND', 1300, 58); b.cy = 0; b.ct = 0;
+    b.update = function (dt) {
+      const f = this.hp / this.max, ph = f > 0.66 ? 1 : f > 0.33 ? 2 : 3;
+      if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'The Overmind swells with toxins!' : 'MELTDOWN! The Overmind goes critical!', 2.2); shake = 18; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 40, AC, 300); this.state = 'idle'; this.st = 1.2; ring(this.x, this.y, 24, 0, 200, 9, AB()); }
+      this.st -= dt; const toP = angTo(this, player), rest = k => k * [0, 1, 0.75, 0.55][ph];
+      if (this.state === 'idle') {
+        const d = dist(this, player); if (d > 200) toward(this, player.x, player.y, 40 + ph * 18, dt); else if (d < 140) toward(this, player.x, player.y, -50, dt);
+        if (this.st <= 0) { const o = ['spiral', 'rain', 'nova', 'spawn']; if (ph >= 2) o.push('tendrils', 'slam', 'orbs', 'spiral'); if (ph === 3) o.push('meltdown', 'tendrils', 'slam', 'meltdown'); let nx = pick(o); if (nx === this.last) nx = pick(o); this.last = nx; if (nx === 'spawn' && minions.length >= 4) nx = 'nova'; this.state = nx; this.n = 0; this.cy = rnd(0, TAU); this.ct = 0; this.st = 0.5;
+          if (nx === 'spiral') this.st = 2.8; else if (nx === 'meltdown') this.st = 4.0; else if (nx === 'slam') { this.st = 0.95; acidZone(this.x, this.y, 215, 0.95, 0.2); } else if (nx === 'tendrils') this.st = 0.6; }
+      } else if (this.state === 'spiral') {
+        this.ct -= dt; this.cy += dt * 2.0; if (this.ct <= 0) { this.ct = 0.09; const arms = ph + 1; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.cy + i * TAU / arms, 200, 8, AB({ life: 3.4 })); }
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.5); }
+      } else if (this.state === 'rain') {
+        if (this.st <= 0) { const cnt = 8 + ph * 3; for (let i = 0; i < cnt; i++) { const a = rnd(0, TAU), d = rnd(0, ARENA.r - 50); glob(ARENA.x + Math.cos(a) * d, ARENA.y + Math.sin(a) * d, 0.9 + i * 0.1, 52); } glob(player.x, player.y, 0.9, 52); glob(player.x + rnd(-80, 80), player.y + rnd(-80, 80), 1.3, 52); this.state = 'idle'; this.st = rest(2.2); }
+      } else if (this.state === 'nova') {
+        if (this.st <= 0) { ring(this.x, this.y, 26, toP + this.n * 0.5, 150, 10, AB(), 5); this.n++; this.st = 0.55; blip(110, 0.2, 'triangle', 0.06); if (this.n >= 2 + ph) { this.state = 'idle'; this.st = rest(1.4); } }
+      } else if (this.state === 'spawn') {
+        if (this.st <= 0) { for (let i = 0; i < 3; i++) minions.push(mkAcidling(this.x + rnd(-50, 50), this.y + rnd(-50, 50))); ring(this.x, this.y, 16, 0, 170, 8, AB()); burst(this.x, this.y, 16, AC, 160); this.state = 'idle'; this.st = rest(1.6); }
+      } else if (this.state === 'tendrils') {
+        if (this.n === 0 && this.st <= 0) { const arms = ph === 3 ? 5 : 4, d = Math.random() < 0.5 ? 1 : -1, a0 = rnd(0, TAU); for (let i = 0; i < arms; i++) addBeam(this.x, this.y, a0 + i * TAU / arms, d * 0.75, 0.7, 3.2, 350); this.n = 1; this.st = 4.0; blip(200, 0.3, 'sawtooth', 0.06); }
+        else if (this.n === 1 && this.st <= 0) { this.state = 'idle'; this.st = rest(1.3); }
+        else if (this.n === 1) followBeams(this);
+      } else if (this.state === 'slam') {
+        if (this.st <= 0) { wave(this.x, this.y, 215, 460, { w: 30, c: AC }); if (ph === 3) wave(this.x, this.y, 215, 460, { w: 26, c: AC2, delay: 0.5 }); for (let i = 0; i < 6; i++) pool(this.x + Math.cos(i * 1.047) * 165, this.y + Math.sin(i * 1.047) * 165, 36, 3.5); shake = 16; blip(55, 0.45, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = rest(1.5); }
+      } else if (this.state === 'orbs') {
+        if (this.st <= 0) { for (let i = 0; i < 6; i++) ebul(this.x, this.y, i * TAU / 6 + this.n * 0.5, 125, 10, AB({ c: AC2, home: 1.6, life: 5 })); this.n++; this.st = 0.8; if (this.n >= 2) { this.state = 'idle'; this.st = rest(1.6); } }
+      } else if (this.state === 'meltdown') {
+        toward(this, player.x, player.y, 60, dt); this.ct -= dt; this.cy += dt * 2.6; this.mt = (this.mt || 0) - dt;
+        if (this.ct <= 0) { this.ct = 0.12; for (let i = 0; i < 2; i++) ebul(this.x, this.y, this.cy + i * Math.PI, 205, 8, AB({ life: 3 })); }
+        if (this.mt <= 0) { this.mt = 0.45; glob(player.x + rnd(-110, 110), player.y + rnd(-110, 110), 0.8, 52); }
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.6); }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y + Math.sin(time * 2) * 5, f = this.flash > 0, p3 = this.ph === 3;
+      const core = f ? '#fff' : p3 ? '#5a1f88' : '#1f5a18', mid = f ? '#fff' : p3 ? '#8a3bc4' : '#3f9a2a', lt = f ? '#fff' : p3 ? '#c78cf2' : '#8fe050';
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(this.x, this.y + 58, 74, 18, 0, 0, TAU); ctx.fill();
+      ctx.lineCap = 'round'; for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + time * 0.4, w1 = Math.sin(time * 2 + i) * 0.5, w2 = Math.sin(time * 3 + i) * 0.4; ctx.strokeStyle = core; ctx.lineWidth = 15; ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + Math.cos(a + w1) * 62, y + Math.sin(a + w1) * 62, x + Math.cos(a + w2) * 98, y + Math.sin(a + w2) * 98); ctx.stroke(); ctx.lineWidth = 7; ctx.strokeStyle = mid; ctx.stroke(); }
+      ctx.fillStyle = core; ctx.beginPath(); ctx.arc(x, y, 62, 0, TAU); ctx.fill(); ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(x - 5, y - 8, 52, 0, TAU); ctx.fill(); ctx.globalAlpha = 0.5; ctx.fillStyle = lt; ctx.beginPath(); ctx.arc(x - 16, y - 20, 26, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+      for (let i = 0; i < 6; i++) { const bx = x + Math.cos(i * 1.7 + time * 0.5) * 36, by = y + 14 + Math.sin(i * 2.3 + time * 0.7) * 22; ctx.strokeStyle = lt; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bx, by, 5 + (i % 3) * 2, 0, TAU); ctx.stroke(); }
+      const a = angTo(this, player); ctx.fillStyle = '#f4ffd0'; ctx.beginPath(); ctx.ellipse(x, y - 4, 22, 18, 0, 0, TAU); ctx.fill(); ctx.fillStyle = p3 ? '#ff3dc8' : '#ffe94a'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 6, y - 4 + Math.sin(a) * 5, 11, 0, TAU); ctx.fill(); ctx.fillStyle = '#0a1a08'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 9, y - 4 + Math.sin(a) * 7, 5, 0, TAU); ctx.fill();
+      for (const s of [-1, 1]) { ctx.fillStyle = '#f4ffd0'; ctx.beginPath(); ctx.arc(x + s * 38, y - 18, 8, 0, TAU); ctx.fill(); ctx.fillStyle = '#0a1a08'; ctx.beginPath(); ctx.arc(x + s * 38 + Math.cos(a) * 3, y - 18 + Math.sin(a) * 3, 4, 0, TAU); ctx.fill(); }
+      for (let i = 0; i < 3; i++) { const o = time * 1.5 + i * TAU / 3; ctx.fillStyle = AC2; ctx.beginPath(); ctx.arc(x + Math.cos(o) * 88, y + Math.sin(o) * 88 * 0.8, 8, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + Math.cos(o) * 88 - 2, y + Math.sin(o) * 70 - 2, 3, 0, TAU); ctx.fill(); }
+    };
+    return b;
+  }
 
   // ------------------------------------------------------------------ admin mode: YOU are the boss, the hero is an AI that dodges well
   let bossMode = false;
@@ -559,15 +788,15 @@
     state = S.HUB; resetWorld(); pillars = mkPillars('hub');
     if (first) { player.x = 140; player.y = 400; } else { player.x = 150; player.y = 380; player.hp = Math.min(player.maxHp, player.hp + 2); }
     player.inv = 0.5; player.dashT = 0; hub.t = 0;
-    toastMsg(first ? 'You wake up deep in a cave...' : bossIdx === 5 ? 'The LAVA PORTAL has opened! The underworld awaits...' : 'You rest by the fire. Next: ' + BOSS_NAMES[bossIdx], first ? 3 : bossIdx === 5 ? 4 : 2.4);
-    if (bossIdx === 5) shake = 14;
+    toastMsg(first ? 'You wake up deep in a cave...' : bossIdx === 5 ? 'The LAVA PORTAL has opened! The underworld awaits...' : bossIdx === 10 ? 'The ACID PORTAL has opened! One last realm awaits...' : 'You rest by the fire. Next: ' + BOSS_NAMES[bossIdx], first ? 3 : bossIdx === 5 || bossIdx === 10 ? 4 : 2.4);
+    if (bossIdx === 5 || bossIdx === 10) shake = 14;
   }
-  const BOSS_NAMES = ['Rock Golem', 'Bat Queen', 'Slime King', 'Spider Matriarch', 'Crystal Wyrm', 'Hellhound', 'Ash Witch', 'Obsidian Titan', 'Demon Lord', 'Infernal Dragon'];
+  const BOSS_NAMES = ['Rock Golem', 'Bat Queen', 'Slime King', 'Spider Matriarch', 'Crystal Wyrm', 'Hellhound', 'Ash Witch', 'Obsidian Titan', 'Demon Lord', 'Infernal Dragon', 'Acid Scorpion', 'Venom Hydra', 'Toxic Wraith', 'Bile Leviathan', 'Acid Overmind'];
   const hub = { t: 0, portal: { x: 850, y: 355, r: 40 }, fire: { x: 470, y: 360 } };
   function startFight() {
     bossMode = false;
     toast = null;
-    state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); introT = 2.2;
+    fightIdx = bossIdx; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); introT = 2.2;
     player.x = ARENA.x; player.y = ARENA.y + ARENA.r - 50; player.inv = 1; player.dashT = 0;
     blip(120, 0.6, 'sawtooth', 0.08, 0.6);
   }
@@ -576,7 +805,7 @@
     eBul.length = 0; hazards.length = 0; for (const m of minions) burst(m.x, m.y, 8, '#fff', 120); minions.length = 0;
     bossIdx++; saveBest(bossIdx); boss.dead = true; deadT = 0; state = S.FIGHT; boss.dying = true;
   }
-  function offerUpgrades() { const pool = (bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
+  function offerUpgrades() { const pool = (bossIdx >= 11 ? UPGRADES3 : bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
   function chooseUpgrade(i) { const u = offered[i]; if (!u) return; u.apply(player); blip(660, 0.15, 'square', 0.06); blip(990, 0.2, 'square', 0.05); if (bossIdx >= BOSSES.length) { state = S.WIN; saveBest(bossIdx); } else enterHub(false); }
 
   // ------------------------------------------------------------------ update
@@ -681,30 +910,36 @@
 
   // ------------------------------------------------------------------ drawing
   function noiseDots(g, n, cols, w, h, rmax) { for (let i = 0; i < n; i++) { g.fillStyle = pick(cols); g.beginPath(); g.arc(Math.random() * w, Math.random() * h, 1 + Math.random() * rmax, 0, TAU); g.fill(); } }
-  function makeBG(kind, under) {
+  const PALS = [
+    { bg: '#120f0e', n1: ['#1c1714', '#0d0b0a', '#241d19'], rock: '#2d2722', sh: '#000', shb: 30, n2: ['#352e28', '#27211d', '#3d352e', '#221c18'], crack: null, spike: ['#3a322b', '#2c2621', '#463d34'], gem: ['#7fe3ff', '#c77dff', '#ff9dd2'] },
+    { bg: '#0f0504', n1: ['#1f0b08', '#0a0302', '#2a100b'], rock: '#3a1812', sh: '#ff4a10', shb: 36, n2: ['#44201a', '#2f130f', '#512620', '#26100c'], crack: ['rgba(255,110,30,.55)', '#ff6a1a'], spike: ['#3a1a14', '#2a120e', '#4a2018'], gem: ['#ff6a1a', '#ffb347', '#ff3d3d'] },
+    { bg: '#040d06', n1: ['#0a1c0d', '#030a04', '#102a14'], rock: '#16301a', sh: '#5dff2a', shb: 36, n2: ['#1c4222', '#12301a', '#235228', '#0e2412'], crack: ['rgba(140,255,60,.55)', '#7dff3a'], spike: ['#173a1c', '#0f2a14', '#1f4a24'], gem: ['#9dff3a', '#e6ff5a', '#3affb0'] }
+  ];
+  function makeBG(kind, realm) {
+    const under = realm > 0, P = PALS[realm | 0];
     const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
-    g.fillStyle = under ? '#0f0504' : '#120f0e'; g.fillRect(0, 0, W, H); noiseDots(g, 900, under ? ['#1f0b08', '#0a0302', '#2a100b'] : ['#1c1714', '#0d0b0a', '#241d19'], W, H, 7);
+    g.fillStyle = P.bg; g.fillRect(0, 0, W, H); noiseDots(g, 900, P.n1, W, H, 7);
     g.save(); g.beginPath();
     if (kind === 'arena') { for (let i = 0; i <= 90; i++) { const a = i / 90 * TAU, r = ARENA.r + 10 + Math.sin(a * 7) * 7 + Math.sin(a * 13 + 1) * 5; const x = ARENA.x + Math.cos(a) * r, y = ARENA.y + Math.sin(a) * r; if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); } }
     else { const b = HUB_BOX; for (let i = 0; i <= 80; i++) { const t = i / 80, a = t * TAU; let x = (b.x1 + b.x2) / 2 + Math.cos(a) * 1.06 * (b.x2 - b.x1) / 2 * 1.0, y = (b.y1 + b.y2) / 2 + Math.sin(a) * 1.1 * (b.y2 - b.y1) / 2; const n = Math.sin(a * 9) * 7 + Math.sin(a * 5 + 2) * 6; x += Math.cos(a) * n; y += Math.sin(a) * n; x = clamp(x, 30, W - 30); y = clamp(y, 110, H - 30); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); } }
-    g.closePath(); g.shadowColor = under ? '#ff4a10' : '#000'; g.shadowBlur = under ? 36 : 30; g.fillStyle = under ? '#3a1812' : '#2d2722'; g.fill(); g.shadowBlur = 0; g.clip();
-    noiseDots(g, 1600, under ? ['#44201a', '#2f130f', '#512620', '#26100c'] : ['#352e28', '#27211d', '#3d352e', '#221c18'], W, H, 4);
-    if (under) { g.strokeStyle = 'rgba(255,110,30,.55)'; g.shadowColor = '#ff6a1a'; g.shadowBlur = 10; g.lineWidth = 2.5; for (let i = 0; i < 16; i++) { let x = Math.random() * W, y = Math.random() * H; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += rnd(-34, 34); y += rnd(-34, 34); g.lineTo(x, y); } g.stroke(); } g.shadowBlur = 0; }
+    g.closePath(); g.shadowColor = P.sh; g.shadowBlur = P.shb; g.fillStyle = P.rock; g.fill(); g.shadowBlur = 0; g.clip();
+    noiseDots(g, 1600, P.n2, W, H, 4);
+    if (under) { g.strokeStyle = P.crack[0]; g.shadowColor = P.crack[1]; g.shadowBlur = 10; g.lineWidth = 2.5; for (let i = 0; i < 16; i++) { let x = Math.random() * W, y = Math.random() * H; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += rnd(-34, 34); y += rnd(-34, 34); g.lineTo(x, y); } g.stroke(); } g.shadowBlur = 0; }
     g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 2; for (let i = 0; i < 26; i++) { let x = Math.random() * W, y = Math.random() * H; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += rnd(-40, 40); y += rnd(-40, 40); g.lineTo(x, y); } g.stroke(); }
     if (kind === 'arena') { g.strokeStyle = 'rgba(160,140,120,.14)'; g.lineWidth = 3; for (const rr of [70, 140, 210]) { g.beginPath(); g.arc(ARENA.x, ARENA.y, rr, 0, TAU); g.stroke(); } }
     g.restore();
     // stalagmites and crystals in the walls
     const rim = kind === 'arena' ? i => { const a = i / 40 * TAU; return [ARENA.x + Math.cos(a) * (ARENA.r + 14), ARENA.y + Math.sin(a) * (ARENA.r + 14), a + Math.PI]; } : i => { const t = i / 40; const x = 40 + t * (W - 80), top = i % 2 === 0; return [x, top ? 140 : 575, top ? Math.PI / 2 : -Math.PI / 2]; };
     for (let i = 0; i < 40; i++) {
-      const [x, y, a] = rim(i), len = rnd(14, 34), w = rnd(7, 13); g.fillStyle = pick(under ? ['#3a1a14', '#2a120e', '#4a2018'] : ['#3a322b', '#2c2621', '#463d34']);
+      const [x, y, a] = rim(i), len = rnd(14, 34), w = rnd(7, 13); g.fillStyle = pick(P.spike);
       g.beginPath(); g.moveTo(x - Math.sin(a) * w, y + Math.cos(a) * w); g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); g.lineTo(x + Math.sin(a) * w, y - Math.cos(a) * w); g.closePath(); g.fill();
     }
-    const cols = under ? ['#ff6a1a', '#ffb347', '#ff3d3d'] : ['#7fe3ff', '#c77dff', '#ff9dd2']; g.lineJoin = 'round';
+    const cols = P.gem; g.lineJoin = 'round';
     for (let i = 0; i < 9; i++) { const [x, y] = rim(Math.floor(Math.random() * 40)), c1 = pick(cols); g.shadowColor = c1; g.shadowBlur = 16; g.fillStyle = c1; g.beginPath(); const k = rnd(10, 18); g.moveTo(x, y - k); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill(); }
     g.shadowBlur = 0; return c;
   }
-  let bgHub, bgArena, bgHubU, bgArenaU;
-  const hubUnder = () => bossIdx >= 6, arenaUnder = () => bossMode || bossIdx >= 5, lavaPortal = () => bossIdx >= 5;
+  let bgHub, bgArena, bgHubU, bgArenaU, bgHubA, bgArenaA;
+  const realmOf = i => i >= 10 ? 2 : i >= 5 ? 1 : 0, hubRealm = () => bossIdx >= 11 ? 2 : bossIdx >= 6 ? 1 : 0, portalRealm = () => realmOf(bossIdx), arenaRealm = () => bossMode ? 1 : realmOf(fightIdx);
 
   const lights = () => state === S.HUB ? [{ x: 150, y: 190, r: 150, c: 1 }, { x: 470, y: 360, r: 230, c: 1 }, { x: 830, y: 540, r: 140, c: 1 }, { x: hub.portal.x, y: hub.portal.y, r: 170, c: 0 }] : [{ x: ARENA.x - 220, y: ARENA.y - 180, r: 120, c: 1 }, { x: ARENA.x + 220, y: ARENA.y - 180, r: 120, c: 1 }, { x: ARENA.x - 220, y: ARENA.y + 190, r: 120, c: 1 }, { x: ARENA.x + 220, y: ARENA.y + 190, r: 120, c: 1 }];
 
@@ -730,7 +965,7 @@
   }
 
   function drawHub() {
-    ctx.drawImage(hubUnder() ? bgHubU : bgHub, 0, 0);
+    ctx.drawImage([bgHub, bgHubU, bgHubA][hubRealm()], 0, 0);
     drawTorch(150, 170); drawTorch(830, 528);
     // fire
     const f = hub.fire, fl = 1 + Math.sin(time * 12) * 0.12;
@@ -739,10 +974,10 @@
     ctx.fillStyle = '#ff7a1a'; ctx.beginPath(); ctx.moveTo(f.x - 16, f.y + 8); ctx.quadraticCurveTo(f.x - 8, f.y - 30 * fl, f.x, f.y - 44 * fl); ctx.quadraticCurveTo(f.x + 8, f.y - 24 * fl, f.x + 16, f.y + 8); ctx.fill();
     ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.moveTo(f.x - 8, f.y + 8); ctx.quadraticCurveTo(f.x - 3, f.y - 14 * fl, f.x, f.y - 24 * fl); ctx.quadraticCurveTo(f.x + 4, f.y - 12 * fl, f.x + 8, f.y + 8); ctx.fill();
     // portal
-    const p = hub.portal; ctx.save(); ctx.translate(p.x, p.y); ctx.shadowColor = lavaPortal() ? '#ff6a1a' : '#c77dff'; ctx.shadowBlur = 30;
-    for (let i = 0; i < 4; i++) { ctx.strokeStyle = (lavaPortal() ? ['#ffd23f', '#ff7a1a', '#ff3d3d', '#fff'] : ['#7fe3ff', '#c77dff', '#ff9dd2', '#fff'])[i]; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, 0, 22 + i * 7 + Math.sin(time * 3 + i) * 3, 40 + i * 6, time * (i % 2 ? 1 : -1) * 0.6, 0, TAU * 0.78); ctx.stroke(); }
-    ctx.fillStyle = lavaPortal() ? 'rgba(80,12,0,.9)' : 'rgba(30,10,60,.85)'; ctx.beginPath(); ctx.ellipse(0, 0, 24, 40, 0, 0, TAU); ctx.fill(); ctx.restore();
-    ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 14px ' + FONT; ctx.textAlign = 'center'; ctx.fillText((lavaPortal() ? 'UNDERWORLD ' + (bossIdx - 4) : 'BOSS ' + (bossIdx + 1)) + ': ' + BOSS_NAMES[bossIdx].toUpperCase(), p.x - 20, p.y - 70); ctx.fillText(lavaPortal() ? 'enter the lava portal' : 'enter the portal', p.x - 20, p.y - 54);
+    const p = hub.portal; ctx.save(); ctx.translate(p.x, p.y); const pr = portalRealm(); ctx.shadowColor = ['#c77dff', '#ff6a1a', '#9dff3a'][pr]; ctx.shadowBlur = 30;
+    for (let i = 0; i < 4; i++) { ctx.strokeStyle = [['#7fe3ff', '#c77dff', '#ff9dd2', '#fff'], ['#ffd23f', '#ff7a1a', '#ff3d3d', '#fff'], ['#d8ff7a', '#9dff3a', '#3affb0', '#fff']][pr][i]; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, 0, 22 + i * 7 + Math.sin(time * 3 + i) * 3, 40 + i * 6, time * (i % 2 ? 1 : -1) * 0.6, 0, TAU * 0.78); ctx.stroke(); }
+    ctx.fillStyle = ['rgba(30,10,60,.85)', 'rgba(80,12,0,.9)', 'rgba(8,50,10,.9)'][pr]; ctx.beginPath(); ctx.ellipse(0, 0, 24, 40, 0, 0, TAU); ctx.fill(); ctx.restore();
+    ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 14px ' + FONT; ctx.textAlign = 'center'; ctx.fillText((pr === 2 ? 'ACID REALM ' + (bossIdx - 9) : pr === 1 ? 'UNDERWORLD ' + (bossIdx - 4) : 'BOSS ' + (bossIdx + 1)) + ': ' + BOSS_NAMES[bossIdx].toUpperCase(), p.x - 20, p.y - 70); ctx.fillText(['enter the portal', 'enter the lava portal', 'enter the acid portal'][pr], p.x - 20, p.y - 54);
     for (const s of pillars) drawPillar(s);
     drawBullets(); drawPlayer();
   }
@@ -767,12 +1002,12 @@
 
   function drawHazards() {
     for (const h of hazards) {
-      if (h.k === 'zone') { const on = h.t >= h.delay; ctx.fillStyle = on ? h.c.replace(')', ',.55)').replace('rgb', 'rgba') : 'rgba(255,60,50,.14)'; if (on) ctx.fillStyle = h.c; ctx.globalAlpha = on ? 0.6 : 0.5; ctx.beginPath(); ctx.arc(h.x, h.y, on ? h.r : h.r * (h.t / Math.max(0.01, h.delay)), 0, TAU); ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = h.c; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+      if (h.k === 'zone') { const on = h.t >= h.delay; ctx.fillStyle = on ? h.c.replace(')', ',.55)').replace('rgb', 'rgba') : (h.tc || 'rgba(255,60,50,.14)'); if (on) ctx.fillStyle = h.c; ctx.globalAlpha = on ? 0.6 : 0.5; ctx.beginPath(); ctx.arc(h.x, h.y, on ? h.r : h.r * (h.t / Math.max(0.01, h.delay)), 0, TAU); ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = h.c; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
       else if (h.k === 'cone') { const on = h.t > h.delay; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a); ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, h.r, -h.half, h.half); ctx.closePath(); if (on) { const g = ctx.createLinearGradient(0, 0, h.r, 0); g.addColorStop(0, 'rgba(255,245,160,.95)'); g.addColorStop(0.5, 'rgba(255,120,30,.8)'); g.addColorStop(1, 'rgba(200,40,10,.25)'); ctx.fillStyle = g; ctx.fill(); } else { ctx.fillStyle = 'rgba(255,80,40,.12)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,80,40,.6)'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.stroke(); ctx.setLineDash([]); } ctx.restore(); }
-      else if (h.k === 'fire') { const fl = 1 + Math.sin(time * 14 + h.x) * 0.08, al = clamp((h.dur - h.t) / 0.6, 0, 1); ctx.globalAlpha = al; const g = ctx.createRadialGradient(h.x, h.y, 2, h.x, h.y, h.r * fl); g.addColorStop(0, '#ffe08a'); g.addColorStop(0.5, '#ff7a1a'); g.addColorStop(1, 'rgba(200,40,10,.25)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, h.r * fl, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+      else if (h.k === 'fire') { const fl = 1 + Math.sin(time * 14 + h.x) * 0.08, al = clamp((h.dur - h.t) / 0.6, 0, 1); ctx.globalAlpha = al; const g = ctx.createRadialGradient(h.x, h.y, 2, h.x, h.y, h.r * fl); g.addColorStop(0, h.acid ? '#e8ffa0' : '#ffe08a'); g.addColorStop(0.5, h.acid ? '#6fd22a' : '#ff7a1a'); g.addColorStop(1, h.acid ? 'rgba(20,110,20,.3)' : 'rgba(200,40,10,.25)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, h.r * fl, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
       else if (h.k === 'web') { ctx.fillStyle = 'rgba(232,240,255,.22)'; ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgba(232,240,255,.7)'; ctx.lineWidth = 1.5; for (let i = 0; i < 8; i++) { ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x + Math.cos(i * 0.785) * h.r, h.y + Math.sin(i * 0.785) * h.r); ctx.stroke(); } for (const rr of [0.35, 0.7, 1]) { ctx.beginPath(); ctx.arc(h.x, h.y, h.r * rr, 0, TAU); ctx.stroke(); } }
       else if (h.k === 'wave') { if (h.delay > 0) continue; ctx.strokeStyle = h.c || '#ffb27a'; ctx.lineWidth = h.w; ctx.globalAlpha = 0.7 * (1 - h.r / h.maxR * 0.6); ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; }
-      else if (h.k === 'beam') { const on = h.t > h.delay; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a); const bc = arenaUnder() ? '#ff7a1a' : '#7fe3ff'; if (on) { ctx.globalAlpha = 0.25; ctx.fillStyle = bc; ctx.fillRect(0, -16, h.len, 32); ctx.globalAlpha = 1; ctx.fillRect(0, -9, h.len, 18); ctx.fillStyle = '#fff'; ctx.fillRect(0, -3, h.len, 6); } else { ctx.fillStyle = arenaUnder() ? 'rgba(255,122,26,.4)' : 'rgba(127,227,255,.35)'; ctx.fillRect(0, -2, h.len, 4); } ctx.restore(); }
+      else if (h.k === 'beam') { const on = h.t > h.delay; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a); const R = arenaRealm(), bc = R === 2 ? '#9dff3a' : R === 1 ? '#ff7a1a' : '#7fe3ff'; if (on) { ctx.globalAlpha = 0.25; ctx.fillStyle = bc; ctx.fillRect(0, -16, h.len, 32); ctx.globalAlpha = 1; ctx.fillRect(0, -9, h.len, 18); ctx.fillStyle = '#fff'; ctx.fillRect(0, -3, h.len, 6); } else { ctx.fillStyle = R === 2 ? 'rgba(157,255,58,.4)' : R === 1 ? 'rgba(255,122,26,.4)' : 'rgba(127,227,255,.35)'; ctx.fillRect(0, -2, h.len, 4); } ctx.restore(); }
     }
   }
 
@@ -790,7 +1025,7 @@
   const fmtTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
 
   function drawFight() {
-    ctx.drawImage(arenaUnder() ? bgArenaU : bgArena, 0, 0);
+    ctx.drawImage([bgArena, bgArenaU, bgArenaA][arenaRealm()], 0, 0);
     drawHazards();
     for (const s of pillars) drawPillar(s);
     for (const m of minions) m.draw();
@@ -805,7 +1040,7 @@
   }
 
   function drawDark() {
-    dark.globalCompositeOperation = 'source-over'; dark.fillStyle = (state === S.HUB ? hubUnder() : state !== S.TITLE && arenaUnder()) ? 'rgba(22,3,0,.55)' : state === S.HUB || state === S.TITLE ? 'rgba(4,3,10,.62)' : 'rgba(4,3,10,.58)'; dark.fillRect(0, 0, W, H);
+    dark.globalCompositeOperation = 'source-over'; const RR = state === S.HUB ? hubRealm() : state === S.TITLE ? 0 : arenaRealm(); dark.fillStyle = RR === 2 ? 'rgba(2,16,5,.55)' : RR === 1 ? 'rgba(22,3,0,.55)' : state === S.HUB || state === S.TITLE ? 'rgba(4,3,10,.62)' : 'rgba(4,3,10,.58)'; dark.fillRect(0, 0, W, H);
     dark.globalCompositeOperation = 'destination-out';
     if (!bigCut) { bigCut = document.createElement('canvas'); bigCut.width = bigCut.height = 256; const g = bigCut.getContext('2d'), gr = g.createRadialGradient(128, 128, 12, 128, 128, 128); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); }
     const cut = (x, y, r, a) => { dark.globalAlpha = a; dark.drawImage(bigCut, x - r, y - r, r * 2, r * 2); dark.globalAlpha = 1; };
@@ -826,7 +1061,7 @@
     if (state === S.TITLE) {
       ctx.drawImage(bgHub, 0, 0); drawTorch(150, 170); drawTorch(830, 528); ctx.restore();
       player.x = 300; player.y = 400; drawDark();
-      overlay('BOSS RUSH', 'You wake up in a cave. Ten bosses stand between you and freedom.', ['WASD / arrows: move   Mouse: aim and shoot', 'Space / Shift: dash (you cannot be hit while dashing)', 'Beat the five cave bosses to open the lava portal to the underworld.', '', 'Click or press Enter to start' + (best ? '     Best: ' + best + '/' + BOSSES.length + ' bosses' : '')]);
+      overlay('BOSS RUSH', 'You wake up in a cave. Fifteen bosses stand between you and freedom.', ['WASD / arrows: move   Mouse: aim and shoot', 'Space / Shift: dash (you cannot be hit while dashing)', 'Beat the cave bosses to open the lava portal, then the underworld to open the acid portal.', '', 'Click or press Enter to start' + (best ? '     Best: ' + best + '/' + BOSSES.length + ' bosses' : '')]);
       return;
     }
     if (state === S.HUB) drawHub(); else drawFight();
@@ -837,7 +1072,7 @@
       overlay('BOSS DEFEATED', 'Choose an upgrade', []);
       offered.forEach((u, i) => { const x = 140 + i * 260, y = 320; ctx.fillStyle = 'rgba(40,32,26,.95)'; ctx.fillRect(x, y, 220, 170); ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 3; ctx.strokeRect(x, y, 220, 170); ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 18px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('[' + (i + 1) + '] ' + u.name, x + 110, y + 40); ctx.fillStyle = '#d9cfc4'; ctx.font = '14px ' + FONT; wrap(u.desc, x + 110, y + 80, 190, 20); });
     } else if (state === S.WIN) {
-      overlay('YOU CONQUERED THE UNDERWORLD!', 'All ten bosses are down. You are free.', ['Time: ' + fmtTime(runTime), '', 'Press Enter to play again'], '#9dff9d');
+      overlay('YOU CONQUERED THE ACID REALM!', 'All fifteen bosses are down. You are free.', ['Time: ' + fmtTime(runTime), '', 'Press Enter to play again'], '#9dff9d');
     } else if (state === S.OVER) {
       if (bossMode) overlay(overTitle, 'Boss mode (admin)', ['Press R to play again', 'Press N to leave boss mode'], overTitle.startsWith('THE HERO') ? '#9dff9d' : '#ff6b7a'); else overlay(overTitle, boss ? 'Defeated by ' + boss.name : '', ['Press R to retry this boss (upgrades kept)', 'Press N for a brand new run']);
     }
@@ -896,7 +1131,9 @@
       for (const u of UPGRADES) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
       g = sec('Free underworld upgrades');
       for (const u of UPGRADES2) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
-      g.append(row('ALL upgrades x3', () => { for (let k = 0; k < 3; k++) for (const u of UPGRADES.concat(UPGRADES2)) u.apply(player); player.hp = player.maxHp; }));
+      g = sec('Free acid upgrades');
+      for (const u of UPGRADES3) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
+      g.append(row('ALL upgrades x3', () => { for (let k = 0; k < 3; k++) for (const u of UPGRADES.concat(UPGRADES2, UPGRADES3)) u.apply(player); player.hp = player.maxHp; }));
       g = sec('Broken stuff');
       g.append(row(admin.god ? 'God mode: ON' : 'God mode', () => { admin.god = !admin.god; }, admin.god), row(admin.infDash ? 'Infinite dash: ON' : 'Infinite dash', () => { admin.infDash = !admin.infDash; }, admin.infDash),
         row(admin.speedMul > 1 ? 'Super speed: ON' : 'Super speed', () => { admin.speedMul = admin.speedMul > 1 ? 1 : 2; }, admin.speedMul > 1), row(admin.freeze ? 'Freeze bosses: ON' : 'Freeze bosses', () => { admin.freeze = !admin.freeze; }, admin.freeze),
@@ -914,7 +1151,7 @@
   })();
 
   // ------------------------------------------------------------------ loop
-  player = newPlayer(); pBul = []; eBul = []; hazards = []; parts = []; minions = []; pillars = []; bgHub = makeBG('hub'); bgArena = makeBG('arena'); bgHubU = makeBG('hub', true); bgArenaU = makeBG('arena', true);
+  player = newPlayer(); pBul = []; eBul = []; hazards = []; parts = []; minions = []; pillars = []; bgHub = makeBG('hub'); bgArena = makeBG('arena'); bgHubU = makeBG('hub', 1); bgArenaU = makeBG('arena', 1); bgHubA = makeBG('hub', 2); bgArenaA = makeBG('arena', 2);
   let last = performance.now();
   function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(frame); }
   requestAnimationFrame(frame);
