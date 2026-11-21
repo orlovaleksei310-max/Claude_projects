@@ -116,8 +116,53 @@
     for (const o of obstacles) { if (o.s < a || o.s > b) continue; const p = worldPos(o.s, o.d), q = P(p.x, p.z); c.fillStyle = o.kind === 'crash' ? '#ff5252' : o.kind === 'ice' ? '#7fd8ff' : '#b5834a'; c.beginPath(); c.arc(q[0], q[1], 3.2, 0, 6.2832); c.fill(); }
     c.restore();
     c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 3, 0, 6.2832); c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,.6)'; c.stroke();
-    const bw = P(bikeW.x, bikeW.z); c.save(); c.translate(bw[0], bw[1]); c.rotate(st.yaw); c.fillStyle = '#ff7a1a'; c.strokeStyle = '#fff'; c.lineWidth = 2;
+    const bw = P(bikeW.x, bikeW.z); c.save(); c.translate(bw[0], bw[1]); c.rotate(st.yaw); c.fillStyle = '#' + colorHex().toString(16).padStart(6, '0'); c.strokeStyle = '#fff'; c.lineWidth = 2;
     c.beginPath(); c.moveTo(0, -11); c.lineTo(8, 8); c.lineTo(0, 4); c.lineTo(-8, 8); c.closePath(); c.fill(); c.stroke(); c.restore();
+  }
+
+  // ---------- towns: now and then in forest, desert and snow; riding in stops you at the bike shop ----------
+  const TOWN_PERIOD = 450, TOWN_HALF = 36, townCache = new Map();
+  function townAt(k) {
+    if (townCache.has(k)) return townCache.get(k);
+    let res = null;
+    if (k >= 1) {
+      const r = rng(k * 977 + 5);
+      if (r() < 0.6) {
+        const ts = k * TOWN_PERIOD + 150 + r() * 150, b0 = biomeIdAt(biomeIdxOfS(ts - 45)), b1 = biomeIdAt(biomeIdxOfS(ts + 45));
+        if (b0 === b1 && (b0 === 'forest' || b0 === 'desert' || b0 === 'snow')) res = ts;
+      }
+    }
+    townCache.set(k, res); return res;
+  }
+  const townNear = s => { const t = townAt(Math.floor(Math.max(0, s) / TOWN_PERIOD)); return t !== null && Math.abs(s - t) < TOWN_HALF ? t : null; };
+  const signTex = txt => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
+    g.fillStyle = '#243447'; g.fillRect(0, 0, 512, 128); g.strokeStyle = '#ffd23f'; g.lineWidth = 8; g.strokeRect(6, 6, 500, 116);
+    g.fillStyle = '#fff'; g.font = 'bold 64px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 256, 68);
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+  };
+  const townG = { house: new THREE.BoxGeometry(6, 3.6, 6), roof: new THREE.ConeGeometry(4.9, 2.2, 4), door: new THREE.BoxGeometry(1, 2, 0.1), shop: new THREE.BoxGeometry(8, 4.6, 11), shopRoof: new THREE.BoxGeometry(9, 0.5, 12), pole: new THREE.CylinderGeometry(0.2, 0.2, 7, 8), board: new THREE.BoxGeometry(ROAD_W + 4, 1.8, 0.3), sign: new THREE.PlaneGeometry(ROAD_W + 3.4, 1.5), shopSign: new THREE.PlaneGeometry(8, 2) };
+  const townM = { walls: [mat(0xe8d9b8), mat(0xd9a77c), mat(0xb9c9d6), mat(0xe6c9c9), mat(0xcfd8b4)], roofRed: mat(0x9b3d2e), roofSnow: mat(0xf4f8fc), door: mat(0x5a3a22), shop: mat(0xf2f2f2), shopRoof: mat(0xd94a3a), pole: mat(0x4a4f58), board: mat(0x243447), townSign: new THREE.MeshBasicMaterial({ map: signTex('TOWN AHEAD') }), shopSign: new THREE.MeshBasicMaterial({ map: signTex('BIKE SHOP') }) };
+  function addTown(group, r, s0, ts, bid) {
+    const roofM = bid === 'snow' ? townM.roofSnow : townM.roofRed;
+    for (const side of [-1, 1]) for (const off of [7, 22]) {
+      const s = s0 + off + r() * 3; if (Math.abs(s - ts) < 10 && side === 1) continue;
+      const w = worldPos(s, side * (ROAD_W / 2 + 9 + r() * 3));
+      const h = new THREE.Mesh(townG.house, townM.walls[Math.floor(r() * 5)]); h.position.set(w.x, 1.8, w.z); h.rotation.y = -w.th; group.add(h);
+      const rf = new THREE.Mesh(townG.roof, roofM); rf.position.set(w.x, 4.7, w.z); rf.rotation.y = -w.th + Math.PI / 4; group.add(rf);
+    }
+    if (ts >= s0 && ts < s0 + CELL) {                      // the bike shop, right beside the stopping point (local x = across the road, z = along it)
+      const w = worldPos(ts, ROAD_W / 2 + 11);
+      const b = new THREE.Mesh(townG.shop, townM.shop); b.position.set(w.x, 2.3, w.z); b.rotation.y = -w.th; group.add(b);
+      const rf = new THREE.Mesh(townG.shopRoof, townM.shopRoof); rf.position.set(w.x, 4.85, w.z); rf.rotation.y = -w.th; group.add(rf);
+      const q = worldPos(ts, ROAD_W / 2 + 6.9), sg = new THREE.Mesh(townG.shopSign, townM.shopSign); sg.position.set(q.x, 3.4, q.z); sg.rotation.y = -q.th - Math.PI / 2; group.add(sg);
+    }
+    const gs = ts - 33;
+    if (gs >= s0 && gs < s0 + CELL) {                      // a sign over the road as you enter
+      for (const side of [-1, 1]) { const w = worldPos(gs, side * (ROAD_W / 2 + 1.4)); const p = new THREE.Mesh(townG.pole, townM.pole); p.position.set(w.x, 3.5, w.z); group.add(p); }
+      const w = worldPos(gs, 0), bd = new THREE.Mesh(townG.board, townM.board); bd.position.set(w.x, 6.6, w.z); bd.rotation.y = -w.th; group.add(bd);
+      const sg = new THREE.Mesh(townG.sign, townM.townSign); sg.rotation.y = -w.th; sg.position.set(w.x - Math.sin(w.th) * 0.17, 6.6, w.z + Math.cos(w.th) * 0.17); group.add(sg);
+    }
   }
 
   // ---------- scenery and obstacles, generated per 30 m cell from a seeded random ----------
@@ -246,7 +291,9 @@
     const at = (dmin, dspan) => { const side = r() < 0.5 ? -1 : 1, d = side * (ROAD_W / 2 + dmin + r() * dspan), s = s0 + r() * CELL; return worldPos(s, d); };
     const put = (geom, m, w, y, sc) => { const o = new THREE.Mesh(geom, m); o.position.set(w.x, y, w.z); if (sc) o.scale.setScalar(sc); group.add(o); return o; };
     const pine = (w, sc, lower, upper, trunk) => { put(geo.trunk, trunk, w, 1.1 * sc, sc); put(geo.cone, lower, w, 4.2 * sc, sc); put(bGeo.cone2, upper, w, 6.4 * sc, sc * 0.9); };
-    if (bid === 'grass') {
+    const tsHere = townNear(s0 + CELL / 2), inTown = tsHere !== null;
+    if (inTown) addTown(group, r, s0, tsHere, bid);
+    else if (bid === 'grass') {
       for (let i = 0; i < 4; i++) { const w = at(5, 40), sc = 0.8 + r() * 0.9; put(geo.trunk, mats.trunk, w, 1.1 * sc, sc); put(bGeo.canopy, r() < 0.5 ? bMat.leaf : bMat.leaf2, w, 3.6 * sc, sc); }
       for (let i = 0; i < 4; i++) { const w = at(4, 40), b = put(geo.bush, mats.bush, w, 0.5); b.scale.set(1 + r(), 0.8, 1 + r()); }
       for (let i = 0; i < 2; i++) { const w = at(5, 40), m = put(geo.rock, mats.rock, w, 0.5, 0.8 + r() * 2); m.rotation.set(r() * 3, r() * 3, 0); }
@@ -276,7 +323,7 @@
         const hd = put(bGeo.lampHead, bMat.lampLight, { x: w.x - side * Math.cos(w.th) * 0.5, z: w.z - side * Math.sin(w.th) * 0.5 }, 7.0); hd.rotation.y = -w.th;
       }
     }
-    if (k >= 4) {                                         // nothing on the first 120 m
+    if (k >= 4 && !inTown) {                              // nothing on the first 120 m
       const roll = r(), df = hardness(s0), rampP = 0.2 - 0.07 * df, obsP = rampP + 0.55 + 0.3 * df;
       if (roll < rampP) {                                  // a ramp
         const d = (r() - 0.5) * 4, s = s0 + 6 + r() * 10, w = worldPos(s, d), m = new THREE.Mesh(rampGeo, mat(0xc99a5b));
@@ -433,12 +480,14 @@
   $('start').addEventListener('click', begin);
   function restart() {
     $('dead').classList.remove('show');
-    Object.assign(st, { dead: false, offT: 0, pts: 0, ptsAcc: 0, level: 0, wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
+    $('shop').classList.remove('show');
+    Object.assign(st, { shop: false, lastTown: null, dead: false, offT: 0, pts: 0, ptsAcc: 0, level: 0, wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
     st.camYaw = 0; toast('GO!', 1);
   }
   window.addEventListener('keydown', e => {
     keys[e.code] = true;
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+    if (st.shop) { if (e.code === 'Enter' || e.code === 'Escape') closeShop(); return; }
     if (!st.started) { if (e.code === 'Enter' || e.code === 'Space') begin(); return; }
     if (e.code === 'KeyR') restart();
     if (e.code === 'KeyM') { muted = !muted; toast(muted ? 'ENGINE MUTED' : 'ENGINE ON', 1); }
@@ -460,6 +509,32 @@
     if (st.wTime >= 1.5) toast('WHEELIE ' + Math.round(st.wTime * 25) + ' pts', 1.2);
   }
   const OFF_LIMIT = 10, TAU = Math.PI * 2;
+  // ---------- bike shop: repaint the bike for 4000 points a colour ----------
+  const COLORS = [{ n: 'Orange', h: 0xff6a13 }, { n: 'Red', h: 0xe02424 }, { n: 'Blue', h: 0x1f78e0 }, { n: 'Green', h: 0x22a84a }, { n: 'Purple', h: 0x8a3ee0 }, { n: 'Pink', h: 0xff5fa8 }, { n: 'Yellow', h: 0xffd21f }, { n: 'White', h: 0xf2f2f2 }, { n: 'Black', h: 0x2a2c33 }];
+  const COLOR_PRICE = 4000;
+  let garage = { owned: ['Orange'], cur: 'Orange' };
+  try { const g = JSON.parse(localStorage.getItem('dirtbike-colors') || 'null'); if (g && Array.isArray(g.owned) && COLORS.some(c => c.n === g.cur)) garage = g; } catch (e) { /* storage blocked */ }
+  const colorHex = () => (COLORS.find(c => c.n === garage.cur) || COLORS[0]).h;
+  function applyColor() { M.orange.color.setHex(colorHex()); }
+  function saveGarage() { try { localStorage.setItem('dirtbike-colors', JSON.stringify(garage)); } catch (e) { /* ignore */ } }
+  function renderShop() {
+    $('shoppts').textContent = Math.floor(st.pts);
+    const box = $('swatches'); box.innerHTML = '';
+    for (const c of COLORS) {
+      const owned = garage.owned.includes(c.n), cur = garage.cur === c.n, b = document.createElement('button');
+      b.className = 'sw' + (cur ? ' cur' : '');
+      b.innerHTML = '<i style="background:#' + c.h.toString(16).padStart(6, '0') + '"></i><span>' + c.n + '</span><em>' + (cur ? 'EQUIPPED' : owned ? 'OWNED' : COLOR_PRICE + ' pts') + '</em>';
+      b.onclick = () => {
+        if (!owned) { if (st.pts < COLOR_PRICE) { $('shopmsg').textContent = 'Not enough points: ' + c.n + ' costs ' + COLOR_PRICE; blip(150, 0.2, 'sawtooth', 0.06); return; } st.pts -= COLOR_PRICE; garage.owned.push(c.n); $('shopmsg').textContent = 'Bought ' + c.n + '!'; }
+        else $('shopmsg').textContent = 'Equipped ' + c.n;
+        garage.cur = c.n; applyColor(); saveGarage(); blip(700, 0.1, 'square', 0.05); renderShop();
+      };
+      box.appendChild(b);
+    }
+  }
+  function openShop() { st.shop = true; st.speed = 0; st.wheelie = false; $('shopmsg').textContent = ''; renderShop(); $('shop').classList.add('show'); toast('', 0.01); }
+  function closeShop() { st.shop = false; $('shop').classList.remove('show'); st.speed = 6; }
+  $('shopgo').onclick = closeShop; applyColor();
   const TRICKS = [{ n: 'TABLETOP', base: 300, dur: 0.8 }, { n: 'SUPERMAN', base: 400, dur: 0.9 }, { n: '360 SPIN', base: 600, dur: 0.95 }, { n: 'WHIP', base: 350, dur: 0.7 }, { n: 'NAC NAC', base: 450, dur: 0.85 }];
   function startTrick() { const t = TRICKS[Math.floor(Math.random() * TRICKS.length)]; st.trick = { n: t.n, base: t.base, dur: t.dur, t: 0 }; blip(500, 0.08, 'square', 0.04); }
   const ease = u => u * u * (3 - 2 * u), env = u => Math.sin(Math.PI * Math.min(1, u));
@@ -492,7 +567,8 @@
     toast(why, 1.4); flash(0.6); st.shake = 0.6; blip(110, 0.4, 'sawtooth', 0.09);
   }
   function step(dt) {
-    if (st.dead) { st.speed = 0; return; }
+    if (st.dead || st.shop) { st.speed = 0; return; }
+    { const ts = townNear(st.s); if (ts !== null && st.s >= ts && st.s < ts + 12 && st.lastTown !== ts && !st.air && st.crash <= 0) { st.lastTown = ts; openShop(); return; } }
     const up = keys.KeyW || keys.ArrowUp, down = keys.KeyS || keys.ArrowDown;
     const steer = ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft) ? 1 : 0);
     const boosting = !!keys.ShiftLeft || !!keys.ShiftRight;
@@ -652,6 +728,6 @@
   }
   window.addEventListener('beforeunload', () => { try { localStorage.setItem('dirtbike-best', String(st.best)); } catch (e) { /* ignore */ } });
   extend(400); updateRoad(0); updateCells(0);
-  if (location.hash === '#debug') window.__db = { order, biomeIdAt, st, keys, step, begin, crash, obstacles: () => obstacles, ramps: () => ramps, worldPos, restart };
+  if (location.hash === '#debug') window.__db = { order, biomeIdAt, st, keys, step, begin, crash, obstacles: () => obstacles, ramps: () => ramps, worldPos, restart, townAt, openShop, garage: () => garage };
   frame();
 })();

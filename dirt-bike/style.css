@@ -34,8 +34,19 @@ td { padding: 4px 12px; color: #d7deea; } td:first-child { white-space: nowrap; 
 #nitro { border: 1px solid rgba(255, 255, 255, .7); }
 #toast { font-size: 26px; }
 #map { position: fixed; right: 22px; top: 18px; pointer-events: none; filter: drop-shadow(0 2px 8px rgba(0,0,0,.45)); }
-#offwarn { position: fixed; left: 0; right: 0; top: 40%; text-align: center; font-size: 30px; font-weight: 800; color: #ff6b5e; text-shadow: 0 3px 10px rgba(0,0,0,.7); opacity: 0; transition: opacity .2s; pointer-events: none; letter-spacing: 2px; }
+#offwarn { position: fixed; left: 0; right: 0; top: 34%; text-align: center; font-size: 16px; font-weight: 800; color: #ff6b5e; text-shadow: 0 3px 10px rgba(0,0,0,.7); opacity: 0; transition: opacity .2s; pointer-events: none; letter-spacing: 2px; }
 #offwarn.show { opacity: 1; }
 #dead { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(60, 0, 0, .55); font-size: 84px; font-weight: 900; letter-spacing: 10px; color: #fff; opacity: 0; pointer-events: none; transition: opacity .4s; z-index: 5; }
 #dead.show { opacity: 1; }
 #dead small { font-size: 22px; letter-spacing: 3px; font-weight: 600; margin-top: 10px; color: #ffd0cc; }
+#shop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(10, 14, 24, .6); z-index: 8; }
+#shop.show { display: flex; }
+.shoppanel { width: 560px; max-width: 94vw; padding: 24px 28px; background: rgba(18, 22, 34, .95); border: 3px solid #ffd23f; border-radius: 14px; text-align: center; }
+.shoppanel h2 { margin: 0 0 6px; font-size: 34px; letter-spacing: 4px; color: #ffd23f; }
+.shoppanel p { margin: 0 0 14px; color: #d7deea; } .shoppanel b { color: #ffe066; }
+#swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.sw { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.2); border-radius: 10px; color: #fff; font: inherit; cursor: pointer; }
+.sw:hover { background: rgba(255,255,255,.15); } .sw.cur { border-color: #5dff9a; }
+.sw i { width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; } .sw span { font-weight: 700; } .sw em { font-style: normal; font-size: 12px; color: #ffe066; letter-spacing: 1px; }
+#shopmsg { min-height: 22px; color: #ffd0a0 !important; }
+#shopgo { padding: 10px 24px; font: inherit; font-size: 18px; font-weight: 700; background: #5dff9a; color: #0b2b18; border: 0; border-radius: 10px; cursor: pointer; }
