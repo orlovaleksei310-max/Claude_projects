@@ -26,3 +26,5 @@ td { padding: 4px 12px; color: #d7deea; } td:first-child { white-space: nowrap; 
 #banner.show { opacity: 1; transform: scale(1); }
 #banner small { display: block; margin-top: 6px; font-size: 22px; font-weight: 600; letter-spacing: 3px; color: #ffe27a; }
 #level { margin-top: 2px; font-size: 14px; letter-spacing: 3px; color: #ffb347; font-weight: 700; }
+#pts { margin-top: 2px; font-size: 14px; letter-spacing: 2px; color: #ffe066; font-weight: 700; }
+#pts b { font-size: 18px; }
