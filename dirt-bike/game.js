@@ -143,19 +143,62 @@
   };
   const townG = { house: new THREE.BoxGeometry(6, 3.6, 6), roof: new THREE.ConeGeometry(4.9, 2.2, 4), door: new THREE.BoxGeometry(1, 2, 0.1), shop: new THREE.BoxGeometry(8, 4.6, 11), shopRoof: new THREE.BoxGeometry(9, 0.5, 12), pole: new THREE.CylinderGeometry(0.2, 0.2, 7, 8), board: new THREE.BoxGeometry(ROAD_W + 4, 1.8, 0.3), sign: new THREE.PlaneGeometry(ROAD_W + 3.4, 1.5), shopSign: new THREE.PlaneGeometry(8, 2) };
   const townM = { walls: [mat(0xe8d9b8), mat(0xd9a77c), mat(0xb9c9d6), mat(0xe6c9c9), mat(0xcfd8b4)], roofRed: mat(0x9b3d2e), roofSnow: mat(0xf4f8fc), door: mat(0x5a3a22), shop: mat(0xf2f2f2), shopRoof: mat(0xd94a3a), pole: mat(0x4a4f58), board: mat(0x243447), townSign: new THREE.MeshBasicMaterial({ map: signTex('TOWN AHEAD') }), shopSign: new THREE.MeshBasicMaterial({ map: signTex('BIKE SHOP') }) };
-  function addTown(group, r, s0, ts, bid) {
-    const roofM = bid === 'snow' ? townM.roofSnow : townM.roofRed;
+  // ---- biome villages: log cabins in the forest, adobe houses in the desert, snowy chalets in the snow ----
+  const tcv = (fn) => { const c = document.createElement('canvas'); c.width = c.height = 128; fn(c.getContext('2d'), 128); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; };
+  const logTex = (base, dark) => tcv((g, n) => { g.fillStyle = base; g.fillRect(0, 0, n, n); for (let i = 0; i < 8; i++) { g.fillStyle = dark; g.fillRect(0, i * 16, n, 3); g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(0, i * 16 + 4, n, 4); g.fillStyle = 'rgba(0,0,0,.12)'; for (let k = 0; k < 4; k++) g.fillRect(Math.random() * n, i * 16 + 6, 8 + Math.random() * 24, 2); } });
+  const adobeTex = tcv((g, n) => { g.fillStyle = '#dcbc8c'; g.fillRect(0, 0, n, n); for (let i = 0; i < 500; i++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(150,110,60,.16)' : 'rgba(255,238,205,.18)'; g.fillRect(Math.random() * n, Math.random() * n, 2 + Math.random() * 8, 2 + Math.random() * 5); } });
+  const TM = {
+    cabin: new THREE.MeshLambertMaterial({ map: logTex('#7b5230', '#4a2f19') }), chalet: new THREE.MeshLambertMaterial({ map: logTex('#c9a074', '#8a6a44') }), adobe: new THREE.MeshLambertMaterial({ map: adobeTex }),
+    roofF: mat(0x4f6b45), roofSnowBase: mat(0x6b4a32), snow: mat(0xfdfeff), flat: mat(0xe8cd9c), wood: mat(0x5a3a22), stone: mat(0x7b7f86), glow: new THREE.MeshBasicMaterial({ color: 0xffd98a }), glass: new THREE.MeshBasicMaterial({ color: 0x2f7f8a }),
+    doorWood: mat(0x6a3f22), doorBlue: mat(0x2a7f8f), awnA: mat(0xd9503f), awnB: mat(0xf4ecd8), smoke: new THREE.MeshLambertMaterial({ color: 0xe8ecef, transparent: true, opacity: 0.75 }), shopRoof: mat(0xb3382c)
+  };
+  const gables = {}; const gableGeo = (w, h, len) => { const key = [w, h, len].join(); if (!gables[key]) { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(0, h); sh.closePath(); const g = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false }); g.translate(0, 0, -len / 2); gables[key] = g; } return gables[key]; };
+  function makeHouse(bid, side, big, r) {                 // local x = across the road, z = along it; the front faces the road
+    const g = new THREE.Group(), W = big ? 8 : 5.6 + r() * 1.4, D = big ? 11 : 6 + r() * 2, H = big ? 4.4 : 3.2 + r() * 0.5, fx = -side, face = fx * W / 2;
+    const add = (geom, m, x, y, z, ry, rz) => { const o = new THREE.Mesh(geom, m); o.position.set(x, y, z); if (ry) o.rotation.y = ry; if (rz) o.rotation.z = rz; g.add(o); return o; };
+    const wall = bid === 'desert' ? TM.adobe : bid === 'snow' ? TM.chalet : TM.cabin;
+    add(boxG(W, H, D), wall, 0, H / 2, 0);
+    // door and two windows on the road-facing wall
+    add(boxG(0.14, 2.1, 1.15), bid === 'desert' ? TM.doorBlue : TM.doorWood, face + fx * 0.05, 1.05, 0);
+    for (const z of [-D * 0.3, D * 0.3]) {
+      add(boxG(0.1, 1.15, 1.45), TM.wood, face + fx * 0.03, H * 0.58, z);
+      add(new THREE.PlaneGeometry(1.15, 0.85), bid === 'desert' ? TM.glass : TM.glow, face + fx * 0.09, H * 0.58, z, fx * Math.PI / 2);
+    }
+    if (bid === 'forest') {
+      add(gableGeo(W + 1.5, 2.3, D + 1.3), TM.roofF, 0, H, 0); add(boxG(0.8, 2.6, 0.8), TM.stone, -fx * W * 0.25, H + 1.4, D * 0.18);
+      add(boxG(1.8, 0.25, 2.2), TM.wood, face + fx * 0.9, 0.12, 0);   // porch step
+    } else if (bid === 'snow') {
+      add(gableGeo(W + 1.5, 2.3, D + 1.3), TM.roofSnowBase, 0, H, 0); add(gableGeo(W + 1.9, 2.4, D + 1.6), TM.snow, 0, H + 0.2, 0);
+      add(boxG(0.8, 2.6, 0.8), TM.stone, -fx * W * 0.25, H + 1.5, D * 0.18);
+      [[0, 3.2, 0.5], [0.15, 3.9, 0.7], [0.35, 4.7, 0.9]].forEach(([x, y, rr]) => add(sphG(rr, 8, 6), TM.smoke, -fx * W * 0.25 + x, H + y, D * 0.18));
+      add(sphG(1, 10, 6), TM.snow, face + fx * 0.8, 0.25, D * 0.35).scale.set(1.2, 0.45, 1.6);
+    } else {                                               // desert adobe: flat roof, beams, awning
+      add(boxG(W + 0.4, 0.4, D + 0.4), TM.flat, 0, H + 0.2, 0);
+      if (!big && r() < 0.6) add(boxG(W * 0.55, 1.4, D * 0.5), TM.adobe, -fx * W * 0.1, H + 1.1, 0);
+      for (const z of [-D * 0.35, 0, D * 0.35]) add(cylG(0.1, 0.1, 1.2, 6), TM.wood, face + fx * 0.3, H - 0.35, z).rotation.z = Math.PI / 2;
+      add(boxG(1.5, 0.1, 2.6), TM.awnA, face + fx * 0.75, 2.55, 0); add(boxG(1.5, 0.1, 0.65), TM.awnB, face + fx * 0.75, 2.56, -0.65); add(boxG(1.5, 0.1, 0.65), TM.awnB, face + fx * 0.75, 2.56, 0.65);
+    }
+    return g;
+  }
+  function addTown(group, r, s0, ts, bid, at, vc, rk) {
     for (const side of [-1, 1]) for (const off of [7, 22]) {
       const s = s0 + off + r() * 3; if (Math.abs(s - ts) < 10 && side === 1) continue;
-      const w = worldPos(s, side * (ROAD_W / 2 + 9 + r() * 3));
-      const h = new THREE.Mesh(townG.house, townM.walls[Math.floor(r() * 5)]); h.position.set(w.x, 1.8, w.z); h.rotation.y = -w.th; group.add(h);
-      const rf = new THREE.Mesh(townG.roof, roofM); rf.position.set(w.x, 4.7, w.z); rf.rotation.y = -w.th + Math.PI / 4; group.add(rf);
+      const w = worldPos(s, side * (ROAD_W / 2 + 9 + r() * 3)), h = makeHouse(bid, side, false, r);
+      h.position.set(w.x, 0, w.z); h.rotation.y = -w.th; group.add(h);
+      if (bid === 'desert' && r() < 0.6) vc(GEO.palm, worldPos(s + 5, side * (ROAD_W / 2 + 6.5)), 0.9 + r() * 0.3);
+      if (bid === 'snow' && r() < 0.5) vc(GEO.snowman, worldPos(s + 4.5, side * (ROAD_W / 2 + 6)), 1, Math.PI * (side > 0 ? 0.5 : -0.5));
     }
-    if (ts >= s0 && ts < s0 + CELL) {                      // the bike shop, right beside the stopping point (local x = across the road, z = along it)
-      const w = worldPos(ts, ROAD_W / 2 + 11);
-      const b = new THREE.Mesh(townG.shop, townM.shop); b.position.set(w.x, 2.3, w.z); b.rotation.y = -w.th; group.add(b);
-      const rf = new THREE.Mesh(townG.shopRoof, townM.shopRoof); rf.position.set(w.x, 4.85, w.z); rf.rotation.y = -w.th; group.add(rf);
-      const q = worldPos(ts, ROAD_W / 2 + 6.9), sg = new THREE.Mesh(townG.shopSign, townM.shopSign); sg.position.set(q.x, 3.4, q.z); sg.rotation.y = -q.th - Math.PI / 2; group.add(sg);
+    if (bid !== 'desert') for (const side of [-1, 1]) for (const o of [5, 15, 25]) {   // wooden fences along the road
+      const w = worldPos(s0 + o, side * (ROAD_W / 2 + 5)), f = new THREE.Mesh(GEO.fence, vcM); f.position.set(w.x, 0, w.z); f.rotation.y = -w.th; group.add(f);
+    }
+    for (const side of [-1, 1]) { const w = worldPos(s0 + (side > 0 ? 10 : 20), side * (ROAD_W / 2 + 3.4)); vc(GEO.lantern, w, 1, 0); }
+    if (bid === 'desert') { for (let i = 0; i < 3; i++) vc(GEO.shrub, at(4, 25), 0.8); for (let i = 0; i < 2; i++) rk(rockMats.sand, at(16, 30), 1 + r()); }
+    else for (let i = 0; i < 6; i++) vc(bid === 'snow' ? (r() < 0.5 ? GEO.pineSnowA : GEO.pineSnowB) : (r() < 0.5 ? GEO.pineA : GEO.pineB), at(19, 40), 0.9 + r() * 0.9);
+    if (ts >= s0 && ts < s0 + CELL) {                      // the bike shop, right beside the stopping point
+      const w = worldPos(ts, ROAD_W / 2 + 11), h = makeHouse(bid, 1, true, r); h.position.set(w.x, 0, w.z); h.rotation.y = -w.th; group.add(h);
+      const roof = h.children[h.children.length - 1]; void roof;
+      const sg = new THREE.Mesh(townG.shopSign, townM.shopSign); sg.position.set(-4.12, 3.75, 0); sg.rotation.y = -Math.PI / 2; h.add(sg);
+      const bk = new THREE.Mesh(GEO.crate, vcM); bk.position.set(-5.2, 0, -3.5); h.add(bk);
     }
     const gs = ts - 33;
     if (gs >= s0 && gs < s0 + CELL) {                      // a sign over the road as you enter
@@ -235,54 +278,125 @@
     fallen: mat(0x5a4328), mud: new THREE.MeshLambertMaterial({ color: 0x4f3622 }), ice: new THREE.MeshLambertMaterial({ color: 0x9fe0ff, transparent: true, opacity: 0.85 }), tumble: mat(0xa88a55), snowman: mat(0xffffff), carrot: mat(0xff7a1a), coal: mat(0x111111),
     cars: [0xd23a3a, 0x2f6fd0, 0xe0c13a, 0x3aa86a].map(c => mat(c)), glass: mat(0x1b2733), tire: mat(0x151515)
   };
+  // ---------- nicer models: every prop is built once from coloured parts, merged into ONE mesh ----------
+  const Mx = (x, y, z, rx, ry, rz, sx, sy, sz) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx || 0, ry || 0, rz || 0)), new THREE.Vector3(sx === undefined ? 1 : sx, sy === undefined ? 1 : sy, sz === undefined ? 1 : sz));
+  const Pt = (g, c, x, y, z, o) => { o = o || {}; return { g, c, m: Mx(x || 0, y || 0, z || 0, o.rx, o.ry, o.rz, o.sx, o.sy, o.sz) }; };
+  const cylG = (rt, rb, h, n, open) => new THREE.CylinderGeometry(rt, rb, h, n || 9, 1, !!open), coneG = (r, h, n) => new THREE.ConeGeometry(r, h, n || 11), sphG = (r, a, b) => new THREE.SphereGeometry(r, a || 12, b || 9), boxG = (x, y, z) => new THREE.BoxGeometry(x, y, z);
+  function merge(parts) {
+    const P = [], N = [], C = [], col = new THREE.Color();
+    for (const p of parts) {
+      const g = p.g.index ? p.g.toNonIndexed() : p.g.clone(); g.applyMatrix4(p.m);
+      const pos = g.attributes.position.array, nor = g.attributes.normal.array; col.setHex(p.c);
+      for (let i = 0; i < pos.length; i++) { P.push(pos[i]); N.push(nor[i]); }
+      for (let i = 0; i < pos.length / 3; i++) C.push(col.r, col.g, col.b);
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); out.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+    return out;
+  }
+  const vcM = new THREE.MeshLambertMaterial({ vertexColors: true }), vcF = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const hash3 = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
+  function rockGeo(seed, hex, sq) {                      // a lumpy, faceted boulder, lighter on top
+    const g = new THREE.IcosahedronGeometry(1, 1).toNonIndexed(), p = g.attributes.position, c = new Float32Array(p.count * 3), base = new THREE.Color(hex), t = new THREE.Color();
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), j = 0.72 + 0.5 * hash3(x + seed, y * 3 + seed, z + seed * 2);
+      p.setXYZ(i, x * j, y * j * (sq || 0.72), z * j);
+      t.copy(base).multiplyScalar(0.78 + 0.32 * (y * 0.5 + 0.5) + 0.06 * hash3(z, x, seed)); c[i * 3] = t.r; c[i * 3 + 1] = t.g; c[i * 3 + 2] = t.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.computeVertexNormals(); g.translate(0, 0.55, 0); return g;
+  }
+  const rocks = {}; const rockSet = (hex, sq) => rocks[hex] || (rocks[hex] = [1, 2, 3, 4].map(i => rockGeo(i * 5.3, hex, sq)));
+  const pickRock = (hex, r, sq) => { const a = rockSet(hex, sq); return a[Math.floor(r() * a.length)]; };
+  const M_ = {};
+  M_.pine = (c1, c2, snow) => {
+    const parts = [Pt(cylG(0.22, 0.34, 1.8, 8), 0x5a3f28, 0, 0.9, 0)];
+    [[1.8, 2.4, 1.9], [1.45, 2.2, 3.2], [1.1, 2.0, 4.5], [0.7, 1.7, 5.8]].forEach(([r, h, y], i) => {
+      parts.push(Pt(coneG(r, h, 12), i % 2 ? c2 : c1, 0, y, 0));
+      if (snow) parts.push(Pt(coneG(r * 0.78, h * 0.62, 12), 0xf7fbff, 0, y + h * 0.2, 0));
+    });
+    return merge(parts);
+  };
+  M_.oak = (c1, c2) => merge([Pt(cylG(0.26, 0.4, 2.6, 8), 0x6b4a2b, 0, 1.3, 0), Pt(cylG(0.12, 0.18, 1.3, 6), 0x6b4a2b, 0.45, 2.7, 0, { rz: -0.8 }), Pt(sphG(1.7), c1, 0, 3.7, 0), Pt(sphG(1.25), c2, 1.1, 3.2, 0.3), Pt(sphG(1.3), c2, -1.0, 3.3, -0.4), Pt(sphG(1.0), c1, 0.1, 4.7, -0.2)]);
+  M_.bush = (c1, c2) => merge([Pt(sphG(0.75), c1, 0, 0.5, 0), Pt(sphG(0.55), c2, 0.6, 0.38, 0.2), Pt(sphG(0.5), c2, -0.55, 0.36, -0.15)]);
+  M_.flowers = () => { const p = [Pt(sphG(0.6, 10, 6), 0x4d8f3e, 0, 0.12, 0, { sy: 0.35 })]; [0xff6b9d, 0xffd23f, 0xffffff, 0xc77dff, 0xff6b9d].forEach((c, i) => { const a = i * 1.7; p.push(Pt(sphG(0.13, 7, 5), c, Math.cos(a) * 0.35, 0.3, Math.sin(a) * 0.35)); }); return merge(p); };
+  M_.saguaro = (arms) => {
+    const p = [Pt(cylG(0.34, 0.4, 3.6, 10), 0x4b9a52, 0, 1.8, 0), Pt(sphG(0.34, 10, 6), 0x4b9a52, 0, 3.6, 0)];
+    for (const sx of arms) { const hgt = 1.4 + hash3(sx, arms.length, 2) * 0.8; p.push(Pt(cylG(0.2, 0.2, 0.75, 8), 0x4b9a52, sx * 0.6, 1.75, 0, { rz: Math.PI / 2 }), Pt(cylG(0.2, 0.2, hgt, 8), 0x4b9a52, sx * 0.95, 1.75 + hgt / 2, 0), Pt(sphG(0.2, 8, 5), 0x4b9a52, sx * 0.95, 1.75 + hgt, 0)); }
+    return merge(p);
+  };
+  M_.barrel = () => merge([Pt(sphG(0.6, 12, 8), 0x5da060, 0, 0.5, 0, { sy: 0.85 }), Pt(sphG(0.13, 6, 5), 0xff6b9d, 0, 1.0, 0)]);
+  M_.shrub = (c) => merge([Pt(sphG(0.7, 8, 5), c, 0, 0.3, 0, { sy: 0.45 }), Pt(sphG(0.5, 8, 5), c, 0.55, 0.25, 0.2, { sy: 0.4 }), Pt(sphG(0.45, 8, 5), 0xb69a62, -0.5, 0.22, -0.2, { sy: 0.4 })]);
+  M_.dune = (c) => merge([Pt(sphG(1, 16, 8), c, 0, 0, 0, { sy: 0.35 })]);
+  M_.mesa = () => merge([[1, 0.3, 0xb5683a], [0.95, 0.22, 0xd49a63], [0.9, 0.26, 0xa85a30], [0.86, 0.22, 0xe0a870], [0.8, 0.28, 0xb5683a]].reduce((acc, [w, h, c]) => { const y0 = acc.y; acc.y += h; acc.p.push(Pt(boxG(w, h, w), c, 0, y0 + h / 2, 0)); return acc; }, { y: 0, p: [] }).p);
+  M_.mound = () => merge([Pt(sphG(1, 14, 7), 0xffffff, 0, 0, 0, { sy: 0.5 })]);
+  M_.palm = () => {
+    const p = []; let x = 0, y = 0;
+    for (let i = 0; i < 5; i++) { p.push(Pt(cylG(0.15 + (4 - i) * 0.012, 0.2 + (4 - i) * 0.014, 1.2, 7), 0x9b7248, x, y + 0.6, 0, { rz: -0.1 })); x += 0.08; y += 1.2; }
+    for (let i = 0; i < 8; i++) { const g = coneG(0.4, 2.7, 4); g.translate(0, 1.35, 0); p.push({ g, c: i % 2 ? 0x4c8a3a : 0x5a9a43, m: new THREE.Matrix4().makeTranslation(x, y, 0).multiply(new THREE.Matrix4().makeRotationY(i * 0.785)).multiply(new THREE.Matrix4().makeRotationZ(1.25)).multiply(new THREE.Matrix4().makeScale(1, 1, 0.3)) }); }
+    p.push(Pt(sphG(0.2, 7, 5), 0x5a3a1e, x + 0.15, y - 0.2, 0.1), Pt(sphG(0.2, 7, 5), 0x5a3a1e, x - 0.1, y - 0.25, -0.15));
+    return merge(p);
+  };
+  M_.log = (len, rad, bark, end, stubs) => {                  // axis along x, so it lies across the road
+    const p = [Pt(cylG(rad, rad, len, 12, true), bark, 0, rad, 0, { rz: Math.PI / 2 })];
+    for (const sx of [-1, 1]) { p.push(Pt(new THREE.CircleGeometry(rad * 0.98, 14), end, sx * (len / 2 + 0.005), rad, 0, { ry: sx * Math.PI / 2 }), Pt(new THREE.CircleGeometry(rad * 0.55, 12), 0xb88a52, sx * (len / 2 + 0.012), rad, 0, { ry: sx * Math.PI / 2 }), Pt(new THREE.CircleGeometry(rad * 0.18, 8), 0x8a5f33, sx * (len / 2 + 0.02), rad, 0, { ry: sx * Math.PI / 2 })); }
+    if (stubs) for (let i = 0; i < 4; i++) p.push(Pt(cylG(0.07, 0.11, 0.7, 6), bark, -len / 2 + 0.8 + i * (len / 5), rad * 1.4, (i % 2 ? 1 : -1) * rad * 0.7, { rx: (i % 2 ? 1 : -1) * 0.9 }));
+    return merge(p);
+  };
+  M_.stump = () => merge([Pt(cylG(0.5, 0.68, 0.75, 12, true), 0x5a3f28, 0, 0.375, 0), Pt(new THREE.CircleGeometry(0.5, 14), 0xd2a86a, 0, 0.752, 0, { rx: -Math.PI / 2 }), Pt(new THREE.CircleGeometry(0.34, 12), 0xb88a52, 0, 0.756, 0, { rx: -Math.PI / 2 }), Pt(new THREE.CircleGeometry(0.16, 10), 0x8a5f33, 0, 0.76, 0, { rx: -Math.PI / 2 }), Pt(boxG(0.18, 0.3, 0.5), 0x5a3f28, 0.55, 0.12, 0.2, { ry: 0.6 }), Pt(boxG(0.18, 0.3, 0.5), 0x5a3f28, -0.5, 0.12, -0.2, { ry: -0.5 })]);
+  M_.snowman = () => merge([Pt(sphG(0.65, 12, 9), 0xffffff, 0, 0.6, 0), Pt(sphG(0.48, 12, 9), 0xffffff, 0, 1.5, 0), Pt(sphG(0.34, 12, 9), 0xffffff, 0, 2.1, 0), Pt(coneG(0.07, 0.4, 6), 0xff7a1a, 0, 2.1, 0.38, { rx: Math.PI / 2 }), Pt(sphG(0.045, 5, 4), 0x111111, -0.12, 2.22, 0.3), Pt(sphG(0.045, 5, 4), 0x111111, 0.12, 2.22, 0.3), Pt(cylG(0.3, 0.3, 0.08, 12), 0x222222, 0, 2.42, 0), Pt(cylG(0.2, 0.2, 0.3, 12), 0x222222, 0, 2.6, 0), Pt(cylG(0.52, 0.52, 0.12, 12), 0xd23a3a, 0, 1.28, 0), Pt(cylG(0.03, 0.03, 0.9, 5), 0x5a3f28, 0.75, 1.55, 0, { rz: 0.9 }), Pt(cylG(0.03, 0.03, 0.9, 5), 0x5a3f28, -0.75, 1.55, 0, { rz: -0.9 }), Pt(sphG(0.05, 5, 4), 0x111111, 0, 1.6, 0.46), Pt(sphG(0.05, 5, 4), 0x111111, 0, 1.4, 0.47)]);
+  M_.car = (c) => merge([Pt(boxG(4.2, 0.62, 2.0), c, 0, 0.62, 0), Pt(boxG(2.1, 0.6, 1.8), 0x1b2733, -0.2, 1.22, 0), Pt(boxG(1.7, 0.1, 1.82), c, -0.25, 1.56, 0), Pt(boxG(0.06, 0.18, 0.5), 0xfff2b0, 2.1, 0.75, 0.65), Pt(boxG(0.06, 0.18, 0.5), 0xfff2b0, 2.1, 0.75, -0.65), Pt(boxG(0.06, 0.18, 0.5), 0xd22222, -2.1, 0.75, 0.65), Pt(boxG(0.06, 0.18, 0.5), 0xd22222, -2.1, 0.75, -0.65), Pt(boxG(0.2, 0.2, 2.05), 0x2a2d33, 2.05, 0.38, 0), Pt(boxG(0.2, 0.2, 2.05), 0x2a2d33, -2.05, 0.38, 0)].concat([-1.35, 1.35].flatMap(x => [-1.0, 1.0].flatMap(z => [Pt(cylG(0.4, 0.4, 0.3, 14), 0x15151a, x, 0.4, z, { rx: Math.PI / 2 }), Pt(cylG(0.2, 0.2, 0.32, 10), 0x9aa0a8, x, 0.4, z, { rx: Math.PI / 2 })]))));
+  M_.barrier = () => { const p = [Pt(boxG(0.14, 0.9, 0.7), 0x555a62, -2.0, 0.45, 0), Pt(boxG(0.14, 0.9, 0.7), 0x555a62, 2.0, 0.45, 0)]; for (let i = 0; i < 6; i++) p.push(Pt(boxG(0.8, 0.28, 0.2), i % 2 ? 0xe9e9e9 : 0xd94a3a, -2 + 0.4 + i * 0.8, 0.88, 0), Pt(boxG(0.8, 0.28, 0.2), i % 2 ? 0xd94a3a : 0xe9e9e9, -2 + 0.4 + i * 0.8, 0.55, 0)); p.push(Pt(sphG(0.1, 6, 4), 0xffa21a, -2.0, 1.0, 0), Pt(sphG(0.1, 6, 4), 0xffa21a, 2.0, 1.0, 0)); return merge(p); };
+  M_.crate = () => { const p = [Pt(boxG(1.2, 1.2, 1.2), 0xc08a47, 0, 0.6, 0)]; for (const x of [-0.6, 0.6]) for (const z of [-0.6, 0.6]) p.push(Pt(boxG(0.14, 1.24, 0.14), 0x8a5a28, x, 0.6, z)); for (const y of [0.06, 1.14]) p.push(Pt(boxG(1.24, 0.12, 1.24), 0x8a5a28, 0, y, 0)); p.push(Pt(boxG(0.1, 0.1, 1.5), 0x8a5a28, 0, 0.6, 0, { rx: 0 }), Pt(boxG(1.22, 0.1, 0.1), 0x9a6a32, 0, 0.6, 0.61)); return merge(p); };
+  const GEO = {
+    pineA: M_.pine(0x2f6b3a, 0x3d7d3f), pineB: M_.pine(0x275c33, 0x35703a), pineSnowA: M_.pine(0x2d5e45, 0x386b50, true), pineSnowB: M_.pine(0x26523d, 0x2f6048, true),
+    oakA: M_.oak(0x4f9a45, 0x62ad4e), oakB: M_.oak(0x5aa74b, 0x74b857), bushA: M_.bush(0x4d7a3a, 0x5f9146), bushB: M_.bush(0x3f6b34, 0x4f8040), fernF: M_.bush(0x2f6a3a, 0x3d7d44), flowers: M_.flowers(),
+    sag1: M_.saguaro([-1, 1]), sag2: M_.saguaro([1]), sag3: M_.saguaro([-1]), barrel: M_.barrel(), shrub: M_.shrub(0xa28c55), dune: M_.dune(0xe2c48a), mesa: M_.mesa(), mound: M_.mound(), palm: M_.palm(),
+    logGrass: M_.log(4.8, 0.42, 0x7a5230, 0xd2a86a, false), logForest: M_.log(6.2, 0.6, 0x5a4328, 0xd2a86a, true), stump: M_.stump(), snowman: M_.snowman(), barrier: M_.barrier(), crate: M_.crate(),
+    cars: [0xd23a3a, 0x2f6fd0, 0xe0c13a, 0x3aa86a].map(c => M_.car(c)), fence: merge([0, 1, 2, 3, 4, 5].map(i => Pt(boxG(0.16, 1.0, 0.16), 0x7a5a3a, 0, 0.5, -5 + i * 2)).concat([Pt(boxG(0.08, 0.1, 10), 0x8a6a46, 0, 0.8, 0), Pt(boxG(0.08, 0.1, 10), 0x8a6a46, 0, 0.45, 0)])),
+    lantern: merge([Pt(cylG(0.07, 0.09, 3.2, 6), 0x2c2f36, 0, 1.6, 0), Pt(boxG(0.4, 0.06, 0.4), 0x2c2f36, 0, 3.3, 0), Pt(boxG(0.3, 0.4, 0.3), 0xffe3a0, 0, 3.08, 0)])
+  };
+  const rockMats = { grey: 0x8d8f94, sand: 0xc58a52, snow: 0xcfd6dc };
+  const roofCapGeo = new THREE.BoxGeometry(1, 0.5, 1), roofCapMat = mat(0x5a5f69), acGeo = new THREE.BoxGeometry(2, 1.2, 1.6), acMat = mat(0x9aa0a8), antGeo = new THREE.CylinderGeometry(0.08, 0.08, 4, 5);
+  const mudMat = new THREE.MeshStandardMaterial({ color: 0x3b2a1a, roughness: 0.18, metalness: 0.1 }), mudRim = new THREE.MeshLambertMaterial({ color: 0x6a4b2e }), iceMat = new THREE.MeshStandardMaterial({ color: 0xbfeaff, roughness: 0.06, metalness: 0.15, transparent: true, opacity: 0.88 }), iceRim = new THREE.MeshLambertMaterial({ color: 0xf2fbff, transparent: true, opacity: 0.9 });
+  const tumbleMat = new THREE.MeshBasicMaterial({ color: 0x8f7040, wireframe: true });
+  const patch = (a, b, ca, cb, sx, sz) => {                // a flat puddle / ice patch with a lighter rim
+    const g = new THREE.Group(), p = new THREE.Mesh(new THREE.CircleGeometry(2.1, 24), a), q = new THREE.Mesh(new THREE.RingGeometry(1.95, 2.5, 24), b);
+    p.rotation.x = q.rotation.x = -Math.PI / 2; q.position.y = -0.005; g.add(p, q); g.scale.set(sx, 1, sz); return g;
+  };
   function makeObstacle(bid, r, s, d, w) {
     const y = Math.PI / 2 - w.th;                          // turns local x along the road
-    const place = (m, h) => { m.position.set(w.x, h, w.z); return m; };
+    const model = (geom, mt, sc) => { const m = new THREE.Mesh(geom, mt || vcM); m.position.set(w.x, 0, w.z); if (sc) m.scale.setScalar(sc); return m; };
+    const flat = (g, h) => { g.position.set(w.x, h, w.z); return g; };
     const pick = r();
+    const rockOb = (hex, sc) => { const m = model(pickRock(hex, r), vcF, sc); m.rotation.y = r() * 6; return { mesh: m, obs: { s, d, rs: 0.5 + 0.35 * sc, rd: 0.5 + 0.35 * sc, kind: 'crash' } }; };
     if (bid === 'grass') {
-      if (pick < 0.6) { const m = place(new THREE.Mesh(geo.rock, mats.rock), 0.55); m.scale.setScalar(0.8 + r() * 0.5); m.rotation.set(r() * 3, r() * 3, 0); return { mesh: m, obs: { s, d, rs: 0.8, rd: 0.8, kind: 'crash' } }; }
-      const m = place(new THREE.Mesh(geo.log, mats.log), 0.42); m.rotation.z = Math.PI / 2; m.rotation.y = -w.th; return { mesh: m, obs: { s, d, rs: 0.5, rd: 2.4, kind: 'crash' } };
+      if (pick < 0.6) return rockOb(rockMats.grey, 0.9 + r() * 0.5);
+      const m = model(GEO.logGrass); m.rotation.y = -w.th; return { mesh: m, obs: { s, d, rs: 0.5, rd: 2.4, kind: 'crash' } };
     }
     if (bid === 'forest') {
-      if (pick < 0.35) { const m = place(new THREE.Mesh(oGeo.stump, mats.trunk), 0.35); return { mesh: m, obs: { s, d, rs: 0.7, rd: 0.7, kind: 'crash' } }; }
-      if (pick < 0.65) { const m = place(new THREE.Mesh(oGeo.fallen, oMat.fallen), 0.6); m.rotation.z = Math.PI / 2; m.rotation.y = -w.th; return { mesh: m, obs: { s, d, rs: 0.65, rd: 3.1, kind: 'crash' } }; }
-      const m = place(new THREE.Mesh(oGeo.disc, oMat.mud), 0.06); m.rotation.x = -Math.PI / 2; m.scale.set(1.1, 1.3, 1);
-      return { mesh: m, obs: { s, d, rs: 2.5, rd: 2.3, kind: 'mud' } };
+      if (pick < 0.35) return { mesh: model(GEO.stump), obs: { s, d, rs: 0.7, rd: 0.7, kind: 'crash' } };
+      if (pick < 0.65) { const m = model(GEO.logForest); m.rotation.y = -w.th; return { mesh: m, obs: { s, d, rs: 0.65, rd: 3.1, kind: 'crash' } }; }
+      return { mesh: flat(patch(mudMat, mudRim, 0, 0, 1.1, 1.3), 0.06), obs: { s, d, rs: 2.5, rd: 2.3, kind: 'mud' } };
     }
     if (bid === 'desert') {
       if (pick < 0.5) {
-        const g = new THREE.Group(); g.position.set(w.x, 0, w.z);
-        const c = new THREE.Mesh(bGeo.cactus, bMat.cactus); c.position.y = 1.5; g.add(c);
-        for (const sx of [-1, 1]) { const a = new THREE.Mesh(bGeo.arm, bMat.cactus); a.position.set(sx * 0.55, 1.9, 0); a.rotation.z = sx * 0.25; g.add(a); }
-        return { mesh: g, obs: { s, d, rs: 0.6, rd: 0.7, kind: 'crash' } };
+        const m = model(pick < 0.3 ? [GEO.sag1, GEO.sag2, GEO.sag3][Math.floor(r() * 3)] : GEO.barrel, null, 1); m.rotation.y = r() * 6;
+        return { mesh: m, obs: { s, d, rs: 0.6, rd: 0.7, kind: 'crash' } };
       }
-      const m = place(new THREE.Mesh(oGeo.tumble, oMat.tumble), 0.62);                 // a tumbleweed rolling across the road
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), tumbleMat), inner = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 1), tumbleMat); inner.rotation.set(1, 0.5, 0.2); m.add(inner); m.position.set(w.x, 0.62, w.z);   // a tumbleweed rolling across the road
       const v = (r() < 0.5 ? -1 : 1) * (2.2 + r() * 1.8) * (1 + hardness(s));
       const o = { s, d: Math.max(-ROAD_W / 2 + 0.6, Math.min(ROAD_W / 2 - 0.6, d)), rs: 0.65, rd: 0.65, kind: 'crash', v };
       o.mesh = m; return { mesh: m, obs: o };
     }
     if (bid === 'snow') {
-      if (pick < 0.45) { const m = place(new THREE.Mesh(oGeo.disc, oMat.ice), 0.06); m.rotation.x = -Math.PI / 2; m.scale.set(1.2, 1.3, 1); return { mesh: m, obs: { s, d, rs: 2.8, rd: 2.7, kind: 'ice' } }; }
-      if (pick < 0.8) {
-        const g = new THREE.Group(); g.position.set(w.x, 0, w.z);
-        const b1 = new THREE.Mesh(oGeo.ball, oMat.snowman); b1.position.y = 0.5; b1.scale.setScalar(1.3); g.add(b1);
-        const b2 = new THREE.Mesh(oGeo.ball, oMat.snowman); b2.position.y = 1.35; b2.scale.setScalar(0.95); g.add(b2);
-        const b3 = new THREE.Mesh(oGeo.ball, oMat.snowman); b3.position.y = 2.0; b3.scale.setScalar(0.65); g.add(b3);
-        const nose = new THREE.Mesh(oGeo.carrot, oMat.carrot); nose.position.set(0, 2.0, 0.4); nose.rotation.x = Math.PI / 2; g.add(nose);
-        return { mesh: g, obs: { s, d, rs: 0.75, rd: 0.75, kind: 'crash' } };
-      }
-      const m = place(new THREE.Mesh(geo.rock, bMat.snowRock), 0.6); m.scale.setScalar(1.0 + r() * 0.5); m.rotation.set(r() * 3, r() * 3, 0); return { mesh: m, obs: { s, d, rs: 0.9, rd: 0.9, kind: 'crash' } };
+      if (pick < 0.45) return { mesh: flat(patch(iceMat, iceRim, 0, 0, 1.2, 1.3), 0.06), obs: { s, d, rs: 2.8, rd: 2.7, kind: 'ice' } };
+      if (pick < 0.8) { const m = model(GEO.snowman); m.rotation.y = Math.PI + (r() - 0.5) * 0.6 - w.th * 0; return { mesh: m, obs: { s, d, rs: 0.75, rd: 0.75, kind: 'crash' } }; }
+      return rockOb(rockMats.snow, 1.0 + r() * 0.5);
     }
     // city
-    if (pick < 0.35) {                                     // a stopped car blocks part of the road
-      const g = new THREE.Group(); g.position.set(w.x, 0, w.z); g.rotation.y = y;
-      const body = new THREE.Mesh(oGeo.carBody, oMat.cars[Math.floor(r() * 4)]); body.position.y = 0.6; g.add(body);
-      const cab = new THREE.Mesh(oGeo.carCab, oMat.glass); cab.position.set(-0.2, 1.2, 0); g.add(cab);
-      for (const x of [-1.4, 1.4]) for (const z of [-0.95, 0.95]) { const wh = new THREE.Mesh(oGeo.carWheel, oMat.tire); wh.rotation.x = Math.PI / 2; wh.position.set(x, 0.38, z); g.add(wh); }
-      return { mesh: g, obs: { s, d, rs: 2.2, rd: 1.15, kind: 'crash' } };
-    }
-    if (pick < 0.7) { const m = new THREE.Mesh(bGeo.barrier, bMat.barrier); m.rotation.y = -w.th; m.position.set(w.x, 0.45, w.z); for (const x of [-1.6, 0, 1.6]) { const st2 = new THREE.Mesh(bGeo.stripe, bMat.barStripe); st2.position.x = x; m.add(st2); } return { mesh: m, obs: { s, d, rs: 0.5, rd: 2.4, kind: 'crash' } }; }
-    const m = place(new THREE.Mesh(bGeo.crate, bMat.crate), 0.6); m.rotation.y = r() * 3; return { mesh: m, obs: { s, d, rs: 0.7, rd: 0.7, kind: 'crash' } };
+    if (pick < 0.35) { const m = model(GEO.cars[Math.floor(r() * 4)]); m.rotation.y = y; return { mesh: m, obs: { s, d, rs: 2.2, rd: 1.15, kind: 'crash' } }; }
+    if (pick < 0.7) { const m = model(GEO.barrier); m.rotation.y = -w.th; return { mesh: m, obs: { s, d, rs: 0.5, rd: 2.4, kind: 'crash' } }; }
+    const m = model(GEO.crate); m.rotation.y = r() * 3; return { mesh: m, obs: { s, d, rs: 0.7, rd: 0.7, kind: 'crash' } };
   }
 
   function buildCell(k) {
@@ -292,30 +406,36 @@
     const put = (geom, m, w, y, sc) => { const o = new THREE.Mesh(geom, m); o.position.set(w.x, y, w.z); if (sc) o.scale.setScalar(sc); group.add(o); return o; };
     const pine = (w, sc, lower, upper, trunk) => { put(geo.trunk, trunk, w, 1.1 * sc, sc); put(geo.cone, lower, w, 4.2 * sc, sc); put(bGeo.cone2, upper, w, 6.4 * sc, sc * 0.9); };
     const tsHere = townNear(s0 + CELL / 2), inTown = tsHere !== null;
-    if (inTown) addTown(group, r, s0, tsHere, bid);
+    const vc = (g, w, sc, ry) => { const o = new THREE.Mesh(g, vcM); o.position.set(w.x, 0, w.z); if (sc) o.scale.setScalar(sc); o.rotation.y = ry === undefined ? r() * 6 : ry; group.add(o); return o; };
+    const rk = (hex, w, sc) => { const o = new THREE.Mesh(pickRock(hex, r), vcF); o.position.set(w.x, 0, w.z); o.scale.setScalar(sc); o.rotation.y = r() * 6; group.add(o); return o; };
+    if (inTown) addTown(group, r, s0, tsHere, bid, at, vc, rk);
     else if (bid === 'grass') {
-      for (let i = 0; i < 4; i++) { const w = at(5, 40), sc = 0.8 + r() * 0.9; put(geo.trunk, mats.trunk, w, 1.1 * sc, sc); put(bGeo.canopy, r() < 0.5 ? bMat.leaf : bMat.leaf2, w, 3.6 * sc, sc); }
-      for (let i = 0; i < 4; i++) { const w = at(4, 40), b = put(geo.bush, mats.bush, w, 0.5); b.scale.set(1 + r(), 0.8, 1 + r()); }
-      for (let i = 0; i < 2; i++) { const w = at(5, 40), m = put(geo.rock, mats.rock, w, 0.5, 0.8 + r() * 2); m.rotation.set(r() * 3, r() * 3, 0); }
+      for (let i = 0; i < 4; i++) vc(r() < 0.5 ? GEO.oakA : GEO.oakB, at(5, 40), 0.8 + r() * 0.9);
+      for (let i = 0; i < 4; i++) { const b = vc(r() < 0.5 ? GEO.bushA : GEO.bushB, at(4, 40)); b.scale.set(1 + r() * 0.8, 0.9, 1 + r() * 0.8); }
+      for (let i = 0; i < 3; i++) vc(GEO.flowers, at(3.5, 30), 0.9 + r() * 0.8);
+      for (let i = 0; i < 2; i++) rk(rockMats.grey, at(5, 40), 0.8 + r() * 1.6);
     } else if (bid === 'forest') {
-      for (let i = 0; i < 16; i++) { const w = at(3.5, 38), sc = 0.9 + r() * 1.3; pine(w, sc, r() < 0.5 ? mats.cone : mats.cone2, mats.cone, mats.trunk); }
-      for (let i = 0; i < 3; i++) { const w = at(4, 30), b = put(geo.bush, mats.bush, w, 0.5); b.scale.set(1 + r(), 0.8, 1 + r()); }
+      for (let i = 0; i < 16; i++) vc(r() < 0.5 ? GEO.pineA : GEO.pineB, at(3.5, 38), 0.8 + r() * 1.0);
+      for (let i = 0; i < 4; i++) { const b = vc(GEO.fernF, at(3.5, 30)); b.scale.set(1.1 + r() * 0.8, 0.8, 1.1 + r() * 0.8); }
+      for (let i = 0; i < 2; i++) rk(rockMats.grey, at(4, 35), 0.6 + r() * 1.0);
     } else if (bid === 'desert') {
-      for (let i = 0; i < 4; i++) {
-        const w = at(5, 38), sc = 0.8 + r() * 0.8; put(bGeo.cactus, bMat.cactus, w, 1.5 * sc, sc);
-        for (const sx of [-1, 1]) { const a = put(bGeo.arm, bMat.cactus, { x: w.x + sx * 0.55 * sc, z: w.z }, (1.9 + r() * 0.5) * sc, sc); a.rotation.z = sx * 0.25; }
-      }
-      for (let i = 0; i < 3; i++) { const w = at(6, 40), m = put(geo.rock, bMat.sandRock, w, 0.5, 1 + r() * 2.2); m.rotation.set(r() * 3, r() * 3, 0); }
-      for (let i = 0; i < 3; i++) { const w = at(4, 35), b = put(geo.bush, bMat.dry, w, 0.35); b.scale.set(0.8 + r() * 0.6, 0.45, 0.8 + r() * 0.6); }
-      if (r() < 0.5) { const w = at(24, 30), hh = 7 + r() * 9, m = put(bGeo.mesa, bMat.mesa, w, hh / 2); m.scale.set(8 + r() * 8, hh, 8 + r() * 8); m.rotation.y = r() * 3; }
+      for (let i = 0; i < 4; i++) vc([GEO.sag1, GEO.sag2, GEO.sag3][Math.floor(r() * 3)], at(5, 38), 0.8 + r() * 0.8);
+      for (let i = 0; i < 2; i++) vc(GEO.barrel, at(4, 30), 0.8 + r() * 0.6);
+      for (let i = 0; i < 3; i++) rk(rockMats.sand, at(6, 40), 1 + r() * 2.0);
+      for (let i = 0; i < 3; i++) { const b = vc(GEO.shrub, at(4, 35)); b.scale.set(0.9 + r() * 0.7, 0.9, 0.9 + r() * 0.7); }
+      for (let i = 0; i < 2; i++) { const d = vc(GEO.dune, at(14, 40), 1); d.scale.set(8 + r() * 8, 1.2 + r() * 2.2, 6 + r() * 6); }
+      if (r() < 0.5) { const w = at(24, 30), hh = 7 + r() * 9, m = vc(GEO.mesa, w, 1); m.scale.set(8 + r() * 8, hh, 8 + r() * 8); }
     } else if (bid === 'snow') {
-      for (let i = 0; i < 7; i++) { const w = at(5, 40), sc = 0.9 + r() * 1.1; pine(w, sc, bMat.snowCone, bMat.snowCone, bMat.snowTrunk); }
-      for (let i = 0; i < 3; i++) { const w = at(5, 40), m = put(geo.rock, bMat.snowRock, w, 0.5, 0.9 + r() * 2); m.rotation.set(r() * 3, r() * 3, 0); }
-      for (let i = 0; i < 3; i++) { const w = at(4, 38), m = put(bGeo.mound, bMat.snowMound, w, 0.1); m.scale.set(1.5 + r() * 2.5, 0.7 + r() * 0.6, 1.5 + r() * 2.5); }
+      for (let i = 0; i < 8; i++) vc(r() < 0.5 ? GEO.pineSnowA : GEO.pineSnowB, at(5, 40), 0.8 + r() * 1.0);
+      for (let i = 0; i < 3; i++) rk(rockMats.snow, at(5, 40), 0.9 + r() * 1.6);
+      for (let i = 0; i < 4; i++) { const m = vc(GEO.mound, at(4, 38), 1); m.scale.set(1.5 + r() * 2.5, 0.8 + r() * 0.8, 1.5 + r() * 2.5); }
     } else {                                              // city
       for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
         const b = buildings[Math.floor(r() * 3)], s = s0 + 5 + i * 10, w = worldPos(s, side * (ROAD_W / 2 + 8 + b.geo.parameters.width / 2 + r() * 5));
         const m = new THREE.Mesh(b.geo, b.mats[Math.floor(r() * 3)]); m.position.set(w.x, b.h / 2, w.z); m.rotation.y = -w.th; group.add(m);
+        const bw = b.geo.parameters.width, cap = new THREE.Mesh(roofCapGeo, roofCapMat); cap.scale.set(bw + 0.5, 1, bw + 0.5); cap.position.y = b.h / 2 + 0.25; m.add(cap);
+        const ac = new THREE.Mesh(acGeo, acMat); ac.position.set((r() - 0.5) * bw * 0.4, b.h / 2 + 0.9, (r() - 0.5) * bw * 0.4); m.add(ac);
+        if (b.h > 20) { const an = new THREE.Mesh(antGeo, acMat); an.position.set(bw * 0.25, b.h / 2 + 2.6, bw * 0.2); m.add(an); }
       }
       for (const side of [-1, 1]) {
         const w = worldPos(s0 + 15, side * (ROAD_W / 2 + 3.4));
