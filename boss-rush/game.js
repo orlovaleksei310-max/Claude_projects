@@ -50,7 +50,9 @@
     { id: 'heal', name: 'Campfire Stew', desc: 'Heal all hearts', apply: p => { p.hp = p.maxHp; } }
   ];
 
+  const admin = { open: false, ok: false, god: false, infDash: false, freeze: false, onehit: false, speedMul: 1 };
   function hurt(n, from) {
+    if (admin.god) return;
     if (player.inv > 0 || player.dashT > 0 || state !== S.FIGHT && state !== S.HUB) return;
     player.hp -= n; player.inv = 1.15; shake = 10; blip(120, 0.25, 'sawtooth', 0.09, 0.5); burst(player.x, player.y, 10, '#ff5a4d', 160);
     if (player.hp <= 0) { player.hp = 0; die(); }
@@ -272,9 +274,9 @@
     if (keys.has('KeyA') || keys.has('ArrowLeft')) dx--; if (keys.has('KeyD') || keys.has('ArrowRight')) dx++; if (keys.has('KeyW') || keys.has('ArrowUp')) dy--; if (keys.has('KeyS') || keys.has('ArrowDown')) dy++;
     const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
     p.inv = Math.max(0, p.inv - dt); p.dashCdT = Math.max(0, p.dashCdT - dt); p.slow = Math.max(0, p.slow - dt);
-    let sp = p.speed * (p.slow > 0 ? 0.5 : 1);
+    let sp = p.speed * admin.speedMul * (p.slow > 0 && !admin.god ? 0.5 : 1);
     if (p.dashT > 0) { p.dashT -= dt; sp = 640; dx = p.dashDir.x; dy = p.dashDir.y; if (Math.random() < 0.8) parts.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.25, max: 0.25, c: '#9deaff', r: 6 }); }
-    else if ((keys.has('Space') || keys.has('ShiftLeft') || keys.has('ShiftRight')) && p.dashCdT <= 0 && (dx || dy)) { p.dashT = 0.17; p.dashCdT = p.dashCd; p.dashDir = { x: dx, y: dy }; blip(300, 0.15, 'triangle', 0.05, 2); }
+    else if ((keys.has('Space') || keys.has('ShiftLeft') || keys.has('ShiftRight')) && p.dashCdT <= 0 && (dx || dy)) { p.dashT = 0.17; p.dashCdT = admin.infDash ? 0 : p.dashCd; p.dashDir = { x: dx, y: dy }; blip(300, 0.15, 'triangle', 0.05, 2); }
     if (dx || dy) p.step += dt * 12;
     p.x += dx * sp * dt; p.y += dy * sp * dt;
     for (const s of pillars) { const d = Math.hypot(p.x - s.x, p.y - s.y), m = s.r + p.r; if (d < m) { p.x = s.x + (p.x - s.x) / d * m; p.y = s.y + (p.y - s.y) / d * m; } }
@@ -286,8 +288,8 @@
     p.face = Math.atan2(ay, ax);
     p.fireT -= dt;
     if (aiming && p.fireT <= 0 && !(state === S.FIGHT && boss && boss.dying)) {
-      p.fireT = p.fireDelay; const n = p.shots;
-      for (let i = 0; i < n; i++) { const a = p.face + (n === 1 ? 0 : (i - (n - 1) / 2) * 0.16); pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * 560, vy: Math.sin(a) * 560, r: 5, life: 0.9 }); }
+      const ul = p.ultra; p.fireT = ul ? 0.035 : p.fireDelay; const n = ul ? 3 : p.shots;
+      for (let i = 0; i < n; i++) { const a = p.face + (n === 1 ? 0 : (i - (n - 1) / 2) * (ul ? 0.09 : 0.16)); pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * (ul ? 900 : 560), vy: Math.sin(a) * (ul ? 900 : 560), r: ul ? 8 : 5, life: 0.9, dmg: admin.onehit ? 99999 : ul ? 30 : p.dmg, pierce: !!ul, hits: [], c: ul ? '#7fffd4' : null }); }
       blip(520 + Math.random() * 60, 0.06, 'square', 0.025, 0.6);
     }
   }
@@ -302,16 +304,15 @@
   function updateFight(dt) {
     if (introT > 0) { introT -= dt; movePlayer(dt); return; }
     runTime += dt; movePlayer(dt);
-    if (boss && !boss.dying) boss.update(dt);
-    for (const m of minions) m.update(dt);
+    if (!admin.freeze) { if (boss && !boss.dying) boss.update(dt); for (const m of minions) m.update(dt); }
     // player bullets
     for (const b of pBul) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (Math.hypot(b.x - ARENA.x, b.y - ARENA.y) > ARENA.r) b.life = 0;
       for (const s of pillars) if (Math.hypot(b.x - s.x, b.y - s.y) < s.r + b.r) { b.life = 0; burst(b.x, b.y, 3, '#aaa', 60); }
       if (b.life <= 0) continue;
-      for (const m of minions) if (m.hp > 0 && hitCircle(b, m)) { m.hp -= player.dmg; m.flash = 0.08; b.life = 0; burst(b.x, b.y, 4, '#fff', 100); if (m.hp <= 0) { burst(m.x, m.y, 10, '#fff', 150); blip(200, 0.1, 'square', 0.04, 0.5); } break; }
-      if (b.life > 0 && boss && !boss.dying && hitCircle(b, boss, -4)) { boss.hp -= player.dmg; boss.flash = 0.07; b.life = 0; burst(b.x, b.y, 3, '#ffd23f', 110); blip(160, 0.05, 'square', 0.03); if (boss.hp <= 0) { boss.hp = 0; bossDefeated(); } }
+      for (const m of minions) if (m.hp > 0 && !(b.hits && b.hits.includes(m)) && hitCircle(b, m)) { m.hp -= (b.dmg || player.dmg); m.flash = 0.08; if (b.pierce) b.hits.push(m); else b.life = 0; burst(b.x, b.y, 4, '#fff', 100); if (m.hp <= 0) { burst(m.x, m.y, 10, '#fff', 150); blip(200, 0.1, 'square', 0.04, 0.5); } if (!b.pierce) break; }
+      if (b.life > 0 && boss && !boss.dying && !(b.hits && b.hits.includes(boss)) && hitCircle(b, boss, -4)) { boss.hp -= (b.dmg || player.dmg); boss.flash = 0.07; if (b.pierce) b.hits.push(boss); else b.life = 0; burst(b.x, b.y, 3, '#ffd23f', 110); blip(160, 0.05, 'square', 0.03); if (boss.hp <= 0) { boss.hp = 0; bossDefeated(); } }
     }
     pBul = pBul.filter(b => b.life > 0); minions = minions.filter(m => m.hp > 0);
     if (boss) boss.flash = Math.max(0, boss.flash - dt); for (const m of minions) m.flash = Math.max(0, m.flash - dt);
@@ -353,7 +354,7 @@
     time += dt; if (toast) { toast.life -= dt; if (toast.life <= 0) toast = null; }
     shake = Math.max(0, shake - dt * 30);
     for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94; p.life -= dt; } parts = parts.filter(p => p.life > 0);
-    if (paused) return;
+    if (paused || admin.open) return;
     if (state === S.HUB) updateHub(dt);
     else if (state === S.FIGHT) updateFight(dt);
     else if (state === S.OVER) deadT += dt;
@@ -427,7 +428,7 @@
   }
 
   function drawBullets() {
-    ctx.fillStyle = '#fff3a0'; ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = 8; for (const b of pBul) { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); } ctx.shadowBlur = 0;
+    ctx.shadowBlur = 8; for (const b of pBul) { ctx.fillStyle = b.c || '#fff3a0'; ctx.shadowColor = b.c || '#ffd23f'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); } ctx.shadowBlur = 0;
     for (const b of eBul) { ctx.shadowColor = b.c; ctx.shadowBlur = 10; ctx.fillStyle = b.c; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.45, 0, TAU); ctx.fill(); } ctx.shadowBlur = 0;
   }
 
@@ -519,6 +520,8 @@
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   window.addEventListener('blur', () => { keys.clear(); mouse.down = false; });
   window.addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') return;
+    if (admin.open) return;
     keys.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
     if (e.code === 'KeyM') muted = !muted;
@@ -529,6 +532,44 @@
     else if (state === S.OVER) { if (e.code === 'KeyR') { player.hp = player.maxHp; player.inv = 1; startFight(); } if (e.code === 'KeyN') newRun(); }
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
+
+
+  // ------------------------------------------------------------------ admin panel (password gated)
+  const ADMIN_PASSWORD = 'thisgameisgoated';
+  (function initAdmin() {
+    const btn = document.createElement('button'); btn.id = 'adminBtn'; btn.textContent = 'ADMIN'; btn.title = 'Admin';
+    const box = document.createElement('div'); box.id = 'adminBox'; document.body.append(btn, box);
+    const say = t => { const m = box.querySelector('.msg'); if (m) m.textContent = t; };
+    const close = () => { admin.open = false; box.className = ''; keys.clear(); mouse.down = false; btn.blur(); };
+    const open = () => { admin.open = true; keys.clear(); mouse.down = false; render(); box.className = 'show'; const i = box.querySelector('input'); if (i) i.focus(); };
+    const row = (label, fn, on) => { const b = document.createElement('button'); b.className = 'ab' + (on ? ' on' : ''); b.textContent = label; b.onclick = () => { fn(); render(); }; return b; };
+    const need = () => { if (!player) newPlayer(); };
+    function render() {
+      box.innerHTML = '<div class="adminCard"><button class="x">&times;</button><h2>ADMIN</h2></div>'; const card = box.firstChild; card.querySelector('.x').onclick = close;
+      if (!admin.ok) {
+        card.insertAdjacentHTML('beforeend', '<p>Enter the admin password</p><input type="password" autocomplete="off" placeholder="password"><button class="ab go">Unlock</button><p class="msg"></p>');
+        const inp = card.querySelector('input'), go = () => { if (inp.value === ADMIN_PASSWORD) { admin.ok = true; render(); } else { say('Wrong password'); inp.value = ''; } };
+        card.querySelector('.go').onclick = go; inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); if (e.key === 'Escape') close(); }); return;
+      }
+      const sec = t => { const h = document.createElement('h3'); h.textContent = t; card.appendChild(h); const d = document.createElement('div'); d.className = 'grid'; card.appendChild(d); return d; };
+      let g = sec('Weapons');
+      g.append(row(player.ultra ? 'Ultra Gun: ON' : 'Get Ultra Gun', () => { player.ultra = !player.ultra; toastMsg(player.ultra ? 'ULTRA GUN equipped' : 'Ultra gun off'); }, player.ultra), row(admin.onehit ? 'One-hit kills: ON' : 'One-hit kills', () => { admin.onehit = !admin.onehit; }, admin.onehit));
+      g = sec('Free upgrades');
+      for (const u of UPGRADES) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
+      g.append(row('ALL upgrades x3', () => { for (let k = 0; k < 3; k++) for (const u of UPGRADES) u.apply(player); player.hp = player.maxHp; }));
+      g = sec('Broken stuff');
+      g.append(row(admin.god ? 'God mode: ON' : 'God mode', () => { admin.god = !admin.god; }, admin.god), row(admin.infDash ? 'Infinite dash: ON' : 'Infinite dash', () => { admin.infDash = !admin.infDash; }, admin.infDash),
+        row(admin.speedMul > 1 ? 'Super speed: ON' : 'Super speed', () => { admin.speedMul = admin.speedMul > 1 ? 1 : 2; }, admin.speedMul > 1), row(admin.freeze ? 'Freeze bosses: ON' : 'Freeze bosses', () => { admin.freeze = !admin.freeze; }, admin.freeze),
+        row('Full heal', () => { player.hp = player.maxHp; }), row('+5 max hearts', () => { player.maxHp += 5; player.hp = player.maxHp; }), row('Clear enemy bullets', () => { eBul.length = 0; hazards.length = 0; }));
+      g = sec('Bosses');
+      g.append(row('Kill current boss', () => { if (state === S.FIGHT && boss && !boss.dying) { boss.hp = 0; bossDefeated(); close(); } }));
+      BOSS_NAMES.forEach((n, i) => g.append(row('Fight: ' + n, () => { bossIdx = i; startFight(); close(); })));
+      g.append(row('Back to the cave', () => { enterHub(false); close(); }));
+      card.insertAdjacentHTML('beforeend', '<p class="msg">Changes apply instantly. Close this panel to keep playing.</p>');
+    }
+    btn.onclick = () => { if (admin.open) close(); else open(); };
+    window.addEventListener('keydown', e => { if (admin.open && e.key === 'Escape') close(); });
+  })();
 
   // ------------------------------------------------------------------ loop
   player = newPlayer(); pBul = []; eBul = []; hazards = []; parts = []; minions = []; pillars = []; bgHub = makeBG('hub'); bgArena = makeBG('arena');
