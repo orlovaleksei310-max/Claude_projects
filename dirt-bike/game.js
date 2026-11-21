@@ -25,7 +25,10 @@
 
   // ---------- the road: a winding centre line stored every 2 m ----------
   const STEP = 2, ROAD_W = 9;
-  const curvature = s => 0.011 * Math.sin(s * 0.0049) + 0.007 * Math.sin(s * 0.0131 + 1.3) + 0.003 * Math.sin(s * 0.031 + 0.4);
+  const HARD_DIST = 6000;                                 // distance at which the game is at full difficulty
+  const hardness = s => Math.min(1, Math.max(0, s) / HARD_DIST);
+  const levelOf = s => 1 + Math.min(11, Math.floor(Math.max(0, s) / 500));
+  const curvature = s => (0.011 * Math.sin(s * 0.0049) + 0.007 * Math.sin(s * 0.0131 + 1.3) + 0.003 * Math.sin(s * 0.031 + 0.4)) * (1 + 0.9 * hardness(s));   // sharper bends later
   const pts = [{ x: 0, z: 0, th: 0 }];
   function extend(toS) {
     while (pts.length * STEP <= toS + STEP) {
@@ -180,7 +183,7 @@
         return { mesh: g, obs: { s, d, rs: 0.6, rd: 0.7, kind: 'crash' } };
       }
       const m = place(new THREE.Mesh(oGeo.tumble, oMat.tumble), 0.62);                 // a tumbleweed rolling across the road
-      const v = (r() < 0.5 ? -1 : 1) * (2.2 + r() * 1.8);
+      const v = (r() < 0.5 ? -1 : 1) * (2.2 + r() * 1.8) * (1 + hardness(s));
       const o = { s, d: Math.max(-ROAD_W / 2 + 0.6, Math.min(ROAD_W / 2 - 0.6, d)), rs: 0.65, rd: 0.65, kind: 'crash', v };
       o.mesh = m; return { mesh: m, obs: o };
     }
@@ -245,15 +248,15 @@
       }
     }
     if (k >= 4) {                                         // nothing on the first 120 m
-      const roll = r();
-      if (roll < 0.2) {                                    // a ramp
+      const roll = r(), df = hardness(s0), rampP = 0.2 - 0.07 * df, obsP = rampP + 0.55 + 0.3 * df;
+      if (roll < rampP) {                                  // a ramp
         const d = (r() - 0.5) * 4, s = s0 + 6 + r() * 10, w = worldPos(s, d), m = new THREE.Mesh(rampGeo, mat(0xc99a5b));
         m.position.set(w.x, 0, w.z); m.rotation.y = Math.PI / 2 - w.th; group.add(m);
         const edge = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 4.6), mat(0xffffff)); edge.rotation.y = Math.PI / 2 - w.th;
         const ax = Math.sin(w.th) * 7, az = -Math.cos(w.th) * 7; edge.position.set(w.x + ax, 1.72, w.z + az); group.add(edge);
         list.ramps.push({ s, d, len: 7, w: 4.6, h: 1.7 });
-      } else if (roll < 0.75) {                            // obstacles: every biome has its own kinds
-        const n = 1 + (r() < 0.35 ? 1 : 0);
+      } else if (roll < obsP) {                            // obstacles: every biome has its own kinds, and more of them the further you go
+        const n = 1 + (r() < 0.35 + 0.4 * df ? 1 : 0) + (r() < 0.6 * df ? 1 : 0) + (df > 0.6 && r() < 0.3 ? 1 : 0);
         for (let i = 0; i < n; i++) {
           const d = (r() - 0.5) * (ROAD_W - 1.5), s = s0 + 4 + r() * 22, w = worldPos(s, d);
           const o = makeObstacle(bid, r, s, d, w);
@@ -275,38 +278,78 @@
   const bike = new THREE.Group(), lean = new THREE.Group(), body = new THREE.Group();
   bike.add(lean); lean.add(body);
   const wheels = [];
+  const M = {
+    orange: std(0xff6a13, { roughness: 0.35 }), white: std(0xf4f4f4, { roughness: 0.4, emissive: 0x303030 }), black: std(0x17181c, { roughness: 0.6 }), grey: std(0x3a3d45, { roughness: 0.5, metalness: 0.4 }),
+    silver: std(0xc9ccd4, { roughness: 0.25, metalness: 0.85 }), gold: std(0xd9a93a, { roughness: 0.3, metalness: 0.8 }), tire: std(0x202226, { roughness: 0.9 }),
+    jersey: std(0x1f5fd6, { roughness: 0.7 }), jerseyAcc: std(0xf4f4f4, { roughness: 0.7 }), pants: std(0x23262e, { roughness: 0.7 }), skin: std(0xe2b48a, { roughness: 0.8 }), visor: std(0x0e1830, { roughness: 0.15, metalness: 0.6 }), red: new THREE.MeshBasicMaterial({ color: 0xff3030 })
+  };
+  const Y = new THREE.Vector3(0, 1, 0);
+  const limb = (a, b, r, m, parent) => {                  // a rounded tube between two points
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), dir = B.clone().sub(A), len = dir.length();
+    const o = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, len - 2 * r), 4, 10), m);
+    o.position.copy(A).add(B).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(Y, dir.normalize()); (parent || body).add(o); return o;
+  };
+  const tube = (a, b, r, m, parent) => {                  // a plain cylinder between two points
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), dir = B.clone().sub(A), len = dir.length();
+    const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), m);
+    o.position.copy(A).add(B).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(Y, dir.normalize()); (parent || body).add(o); return o;
+  };
+  const put = (geom, m, x, y, z, rx = 0, ry = 0, rz = 0, parent) => { const o = new THREE.Mesh(geom, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); (parent || body).add(o); return o; };
   function wheel(z) {
-    const g = new THREE.Group();
-    const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.2, 18), std(0x1c1c1f, { roughness: 0.95 }));
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.22, 10), std(0xb8b8c0, { metalness: 0.7 }));
-    const knob = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.12), mat(0x111111)); knob.position.y = 0.48;
-    g.add(tire, hub, knob); g.rotation.z = Math.PI / 2; g.position.set(0, 0.46, z);
-    const holder = new THREE.Group(); holder.add(g); wheels.push(g); return holder;
+    const spin = new THREE.Group(); spin.position.set(0, 0.46, z);
+    const tireG = new THREE.TorusGeometry(0.385, 0.085, 14, 32); tireG.rotateY(Math.PI / 2);
+    spin.add(new THREE.Mesh(tireG, M.tire));
+    for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; put(new THREE.BoxGeometry(0.19, 0.05, 0.08), M.tire, 0, Math.cos(a) * 0.47, Math.sin(a) * 0.47, a, 0, 0, spin); }   // knobbies
+    const rimG = new THREE.TorusGeometry(0.3, 0.025, 8, 28); rimG.rotateY(Math.PI / 2); spin.add(new THREE.Mesh(rimG, M.silver));
+    const hubG = new THREE.CylinderGeometry(0.075, 0.075, 0.2, 14); hubG.rotateZ(Math.PI / 2); spin.add(new THREE.Mesh(hubG, M.gold));
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI; const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.6, 5), M.silver); sp.rotation.x = a; spin.add(sp); }
+    body.add(spin); wheels.push(spin);
   }
-  const front = wheel(-0.95), rear = wheel(0.9);
-  body.add(front, rear);
-  const orange = std(0xff6a13, { roughness: 0.4 }), dark = std(0x2a2a30), metal = std(0xb8b8c0, { metalness: 0.8, roughness: 0.3 });
-  const add = (geom, m, x, y, z, rx = 0) => { const o = new THREE.Mesh(geom, m); o.position.set(x, y, z); o.rotation.x = rx; body.add(o); return o; };
-  add(new THREE.BoxGeometry(0.26, 0.4, 1.2), dark, 0, 0.78, 0.15);                 // engine block
-  add(new THREE.BoxGeometry(0.3, 0.3, 0.7), orange, 0, 1.1, -0.2);                  // tank
-  add(new THREE.BoxGeometry(0.3, 0.14, 0.85), dark, 0, 1.2, 0.5);                   // seat
-  add(new THREE.BoxGeometry(0.26, 0.1, 0.9), orange, 0, 0.98, 1.05, 0.25);          // rear fender
-  add(new THREE.CylinderGeometry(0.035, 0.035, 1.25, 6), metal, 0.1, 0.95, -0.85, -0.38);   // fork
-  add(new THREE.CylinderGeometry(0.035, 0.035, 1.25, 6), metal, -0.1, 0.95, -0.85, -0.38);
-  add(new THREE.BoxGeometry(0.3, 0.07, 0.5), orange, 0, 1.15, -1.18, -0.1);         // front fender
-  const bar = add(new THREE.CylinderGeometry(0.03, 0.03, 0.85, 6), dark, 0, 1.5, -0.62); bar.rotation.z = Math.PI / 2;
-  add(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 6), metal, 0.18, 0.5, 0.75, Math.PI / 2 - 0.05).rotation.z = 0;   // exhaust
-  add(new THREE.BoxGeometry(0.1, 0.06, 0.8), dark, 0, 0.8, 0.5, -0.2);               // swing arm
-  const skin = mat(0xe3b58c), jersey = mat(0x1d6fe0), pants = mat(0x222a3a), helm = mat(0xf2f2f2);
-  const rider = new THREE.Group(); body.add(rider);
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.62, 0.3), jersey); torso.position.set(0, 1.9, 0.0); torso.rotation.x = -0.45; rider.add(torso);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), helm); head.position.set(0, 2.32, -0.2); rider.add(head);
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.12), mat(0x111b33)); visor.position.set(0, 2.3, -0.38); rider.add(visor);
+  wheel(-0.95); wheel(0.9);
+  // frame, engine and plastics
+  limb([0, 1.3, -0.6], [0, 0.78, 0.5], 0.05, M.grey);                                         // main spine
+  limb([0, 0.95, -0.55], [0, 0.55, 0.3], 0.045, M.grey);                                      // down tube
+  put(new THREE.BoxGeometry(0.3, 0.36, 0.5), M.grey, 0, 0.68, 0.0);                           // engine block
+  put(new THREE.CylinderGeometry(0.17, 0.17, 0.44, 16), M.silver, 0, 0.78, -0.1, 0, 0, Math.PI / 2);   // cylinder head
+  for (const sx of [-1, 1]) put(new THREE.CylinderGeometry(0.13, 0.13, 0.05, 16), M.gold, sx * 0.19, 0.62, 0.15, 0, 0, Math.PI / 2);   // engine covers
+  const tank = put(new THREE.CapsuleGeometry(0.17, 0.42, 6, 14), M.orange, 0, 1.18, -0.2, Math.PI / 2 + 0.18); tank.scale.set(1, 1, 0.88);   // tank
+  const seat = put(new THREE.CapsuleGeometry(0.15, 0.78, 6, 14), M.black, 0, 1.17, 0.55, Math.PI / 2 - 0.08); seat.scale.set(1, 1, 0.45);   // seat
+  put(new THREE.BoxGeometry(0.28, 0.05, 0.95), M.orange, 0, 1.0, 1.1, 0.18);                  // rear fender
+  put(new THREE.BoxGeometry(0.12, 0.06, 0.04), M.red, 0, 1.0, 1.58);                          // tail light
+  for (const sx of [-1, 1]) put(new THREE.BoxGeometry(0.04, 0.34, 0.5), M.white, sx * 0.19, 0.96, 0.55);   // side panels
+  // front end
   for (const sx of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.75), jersey); arm.position.set(sx * 0.3, 1.78, -0.42); arm.rotation.x = 0.3; rider.add(arm);
-    const glove = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), mat(0x111111)); glove.position.set(sx * 0.4, 1.58, -0.68); rider.add(glove);
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.7, 0.2), pants); leg.position.set(sx * 0.28, 1.3, 0.2); leg.rotation.x = 0.45; rider.add(leg);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.34), mat(0x111111)); boot.position.set(sx * 0.3, 0.88, 0.18); rider.add(boot);
+    tube([sx * 0.12, 0.46, -0.95], [sx * 0.12, 0.92, -0.78], 0.04, M.silver);                // fork lower
+    tube([sx * 0.12, 0.92, -0.78], [sx * 0.12, 1.36, -0.6], 0.05, M.gold);                   // fork upper
+  }
+  put(new THREE.BoxGeometry(0.26, 0.04, 0.72), M.orange, 0, 0.98, -1.05, -0.12);               // front fender
+  put(new THREE.BoxGeometry(0.34, 0.32, 0.04), M.white, 0, 1.45, -0.8, -0.35);                 // number plate
+  tube([-0.45, 1.5, -0.62], [0.45, 1.5, -0.62], 0.022, M.black);                               // handlebar
+  for (const sx of [-1, 1]) tube([sx * 0.38, 1.5, -0.62], [sx * 0.5, 1.5, -0.62], 0.032, M.grey);   // grips
+  put(new THREE.BoxGeometry(0.16, 0.05, 0.06), M.black, 0, 1.4, -0.64);                        // clamp
+  // swing arm, shock and exhaust
+  for (const sx of [-1, 1]) limb([sx * 0.12, 0.7, 0.4], [sx * 0.12, 0.46, 0.9], 0.04, M.silver);
+  limb([0, 1.0, 0.68], [0, 0.66, 0.52], 0.04, M.gold);                                         // rear shock
+  limb([0.2, 0.6, -0.15], [0.23, 0.72, 0.4], 0.04, M.silver);                                  // exhaust pipe
+  const can = put(new THREE.CylinderGeometry(0.075, 0.075, 0.6, 14), M.silver, 0.24, 0.8, 0.78, Math.PI / 2); can.rotation.x = Math.PI / 2 - 0.12;   // silencer
+  put(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 12), M.black, 0.245, 0.835, 1.09, Math.PI / 2 - 0.12);
+  for (const sx of [-1, 1]) put(new THREE.BoxGeometry(0.1, 0.03, 0.14), M.grey, sx * 0.28, 0.5, 0.24);   // foot pegs
+  // the rider
+  const rider = new THREE.Group(); body.add(rider);
+  limb([0, 1.38, 0.42], [0, 1.98, -0.02], 0.2, M.jersey, rider);                               // torso
+  limb([0, 1.74, 0.15], [0, 1.82, 0.0], 0.215, M.jerseyAcc, rider).scale.set(1, 1, 0.6);       // white chest stripe
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 14), M.white); helmet.position.set(0, 2.25, -0.17); helmet.scale.set(1, 1.02, 1.12); rider.add(helmet);
+  const chin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.07, 0.09), M.white); chin.position.set(0, 2.13, -0.33); rider.add(chin);
+  const visorM = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.09, 0.06), M.visor); visorM.position.set(0, 2.26, -0.3); rider.add(visorM);
+  const peak = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.025, 0.2), M.orange); peak.position.set(0, 2.38, -0.36); peak.rotation.x = -0.25; rider.add(peak);
+  for (const sx of [-1, 1]) {
+    limb([sx * 0.22, 1.9, -0.06], [sx * 0.3, 1.72, -0.34], 0.07, M.jersey, rider);              // upper arm
+    limb([sx * 0.3, 1.72, -0.34], [sx * 0.44, 1.52, -0.62], 0.06, M.jersey, rider);             // forearm
+    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), M.black); glove.position.set(sx * 0.44, 1.5, -0.62); rider.add(glove);
+    limb([sx * 0.17, 1.38, 0.38], [sx * 0.24, 1.2, -0.06], 0.095, M.pants, rider);              // thigh
+    limb([sx * 0.24, 1.2, -0.06], [sx * 0.27, 0.66, 0.2], 0.08, M.pants, rider);                // shin
+    limb([sx * 0.27, 0.7, 0.2], [sx * 0.29, 0.56, 0.02], 0.075, M.black, rider);                // boot
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), M.white); knee.position.set(sx * 0.25, 1.2, -0.07); knee.scale.set(0.8, 1, 1); rider.add(knee);   // knee guard
   }
   scene.add(bike);
   const snow = (() => {
@@ -359,7 +402,7 @@
   function begin() { startAudio(); if (actx && actx.state === 'suspended') actx.resume(); st.started = true; $('start').classList.add('hidden'); }
   $('start').addEventListener('click', begin);
   function restart() {
-    Object.assign(st, { wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
+    Object.assign(st, { level: 0, wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
     st.camYaw = 0; toast('GO!', 1);
   }
   window.addEventListener('keydown', e => {
@@ -402,8 +445,9 @@
     if (st.wheelie && (down || st.air || st.speed < 4)) endWheelie();
     if (st.wheelie) st.wTime += dt;
     const offroad = Math.abs(st.d) > ROAD_W / 2 + 0.2, rough = Math.abs(st.d) > ROAD_W / 2 + 3.2;
-    let top = MAX_SPEED * (rough ? 0.62 : offroad ? 0.85 : 1) * (st.wheelie ? 0.92 : 1), acc = up ? 15 : 0;
-    if (boosting && st.nitro > 0 && up) { top = NITRO_SPEED * (rough ? 0.7 : 1); acc += 14; st.nitro = Math.max(0, st.nitro - 34 * dt); }
+    const hd = hardness(st.s);                                 // later levels are faster
+    let top = (MAX_SPEED + 7 * hd) * (rough ? 0.62 : offroad ? 0.85 : 1) * (st.wheelie ? 0.92 : 1), acc = up ? 15 : 0;
+    if (boosting && st.nitro > 0 && up) { top = (NITRO_SPEED + 8 * hd) * (rough ? 0.7 : 1); acc += 14; st.nitro = Math.max(0, st.nitro - 34 * dt); }
     else st.nitro = Math.min(100, st.nitro + 7 * dt);
     if (acc && st.speed < top) st.speed = Math.min(top, st.speed + acc * (1 - st.speed / (top + 8)) * dt * 1.6);
     if (st.speed > top) st.speed = Math.max(top, st.speed - 12 * dt);
@@ -479,7 +523,7 @@
     const offY = 0.46 * (1 - Math.cos(wa)) + 0.9 * Math.sin(wa), offZ = 0.9 - (0.46 * Math.sin(wa) + 0.9 * Math.cos(wa)); body.position.z = offZ;
     body.position.y = offY + Math.sin(time * 38) * 0.015 * Math.min(1, st.speed / 10) * (st.air ? 0 : 1) * (Math.abs(st.d) > ROAD_W / 2 + 0.2 ? 3 : 1);
     for (const g of wheels) g.rotation.x += st.speed * dt / 0.46;
-    rider.rotation.x = st.crash > 0 ? 0.2 : -Math.min(0.3, st.speed / 120);
+    rider.rotation.x = st.crash > 0 ? 0.2 : -Math.min(0.1, st.speed / 300);
     blob.position.set(w.x, 0.07, w.z); blob.scale.setScalar(Math.max(0.4, 1 - st.y * 0.2));
     // ground + road follow the bike
     ground.position.set(w.x, 0, w.z); gtex.offset.set(w.x / 17.5, -w.z / 17.5);
@@ -502,6 +546,8 @@
     const snowW = (pal.a === 'snow' ? 1 - pal.t : 0) + (pal.b === 'snow' ? pal.t : 0);
     snow.visible = snowW > 0.02; snow.material.opacity = 0.9 * snowW;
     if (snow.visible) { const p = snow.geometry.attributes.position; for (let i = 0; i < p.count; i++) { let y = p.getY(i) - (3 + (i % 5)) * dt; if (y < 0) y += 25; p.setY(i, y); p.setX(i, p.getX(i) + Math.sin(time + i) * dt * 0.8); } p.needsUpdate = true; snow.position.set(w.x, 0, w.z); }
+    const lv = levelOf(st.s);
+    if (lv !== st.level) { if (st.level && lv > st.level) { toast('LEVEL ' + lv + (lv === 12 ? ' (MAX)' : '') + ': it gets harder!', 1.8); blip(520, 0.1); blip(780, 0.14, 'square', 0.05); } st.level = lv; $('level').textContent = 'LEVEL ' + lv; }
     const bi = biomeIdxOfS(st.s);
     if (bi !== st.biomeIdx) {
       const first = st.biomeIdx === undefined; st.biomeIdx = bi;
@@ -509,7 +555,7 @@
       if (!first) { const b = $('banner'); b.innerHTML = nm + '<small>Watch out for: ' + hint + '</small>'; b.classList.add('show'); setTimeout(() => b.classList.remove('show'), 2400); blip(660, 0.12); blip(990, 0.18, 'square', 0.05); }
     }
     // chase camera
-    st.camYaw += (th - st.camYaw) * Math.min(1, 3.2 * dt);
+    st.camYaw += (th + (st.camOff || 0) - st.camYaw) * Math.min(1, 3.2 * dt);
     const back = 5.8 + st.speed * 0.03, height = 2.5 + st.y * 0.5;
     const cx = w.x - Math.sin(st.camYaw) * back, cz = w.z + Math.cos(st.camYaw) * back;
     const sh = st.shake * 0.25 + (Math.abs(st.d) > ROAD_W / 2 + 3.2 ? 0.03 : 0);
