@@ -56,6 +56,7 @@ After your first heist, stepping onto the green circle at the HQ opens a list of
 | E | Pick up loot / get in the getaway car / use the HQ shop |
 | Q | Drop the selected item |
 | M | Mute |
+| Boss Rush | [`boss-rush/`](boss-rush/) | Top-down 2D. Wake up in a cave and beat five bosses in a row (Rock Golem, Bat Queen, Slime King, Spider Matriarch, Crystal Wyrm). WASD to move, mouse to aim and shoot, Space/Shift to dash (invulnerable while dashing). Pick one of three upgrades after each boss and rest at the campfire before the next portal. |
 
 ## How to play locally
 
