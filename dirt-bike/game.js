@@ -95,6 +95,31 @@
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshLambertMaterial({ map: gtex }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
+  // ---------- minimap: the road ahead, heading-up ----------
+  const mapC = $('map'), mctx = mapC.getContext('2d'), MAP_R = 90, MAP_SZ = 200;
+  mapC.width = mapC.height = MAP_SZ * 2; mapC.style.width = mapC.style.height = MAP_SZ + 'px';
+  function drawMap(bikeW) {
+    const c = mctx, S = MAP_SZ * 2, k = S / 2 / MAP_R * 1.0, th = roadAt(st.s).th, sn = Math.sin(th), cs = Math.cos(th), cx = S / 2, cy = S * 0.68;
+    const P = (x, z) => { const dx = x - bikeW.x, dz = z - bikeW.z; return [cx + (dx * cs + dz * sn) * k, cy - (dx * sn - dz * cs) * k]; };
+    c.clearRect(0, 0, S, S);
+    c.save(); c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 3, 0, 6.2832); c.clip();
+    c.fillStyle = 'rgba(14, 22, 36, 0.62)'; c.fillRect(0, 0, S, S);
+    const line = (from, to, w, col) => {
+      c.beginPath(); let first = true;
+      for (let q = from; q <= to; q += 4) { const r = roadAt(q), p = P(r.x, r.z); if (first) { c.moveTo(p[0], p[1]); first = false; } else c.lineTo(p[0], p[1]); }
+      c.lineWidth = w; c.strokeStyle = col; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke();
+    };
+    const a = Math.max(0, st.s - 50), b = st.s + MAP_R * 1.4;
+    line(a, b, 15, '#e9edf3'); line(a, b, 11, '#4a505c');
+    c.setLineDash([8, 10]); line(a, b, 1.6, '#ffd23f'); c.setLineDash([]);
+    for (const r of ramps) { if (r.s < a || r.s > b) continue; const p = worldPos(r.s + r.len / 2, r.d), q = P(p.x, p.z); c.fillStyle = '#3ddc84'; c.fillRect(q[0] - 4, q[1] - 4, 8, 8); }
+    for (const o of obstacles) { if (o.s < a || o.s > b) continue; const p = worldPos(o.s, o.d), q = P(p.x, p.z); c.fillStyle = o.kind === 'crash' ? '#ff5252' : o.kind === 'ice' ? '#7fd8ff' : '#b5834a'; c.beginPath(); c.arc(q[0], q[1], 3.2, 0, 6.2832); c.fill(); }
+    c.restore();
+    c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 3, 0, 6.2832); c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,.6)'; c.stroke();
+    const bw = P(bikeW.x, bikeW.z); c.save(); c.translate(bw[0], bw[1]); c.rotate(st.yaw); c.fillStyle = '#ff7a1a'; c.strokeStyle = '#fff'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(0, -11); c.lineTo(8, 8); c.lineTo(0, 4); c.lineTo(-8, 8); c.closePath(); c.fill(); c.stroke(); c.restore();
+  }
+
   // ---------- scenery and obstacles, generated per 30 m cell from a seeded random ----------
   const CELL = 30;
   const rng = seed => () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
@@ -575,6 +600,7 @@
     $('distv').textContent = score;
     if (score > st.best) { st.best = score; $('bestv').textContent = st.best; if (Math.floor(time * 2) % 20 === 0) try { localStorage.setItem('dirtbike-best', String(st.best)); } catch (e) { /* ignore */ } }
     $('speed').textContent = Math.round(st.speed * 3.6);
+    drawMap(w);
     $('ptsv').textContent = Math.floor(st.pts);
     $('nitrobar').style.width = st.nitro + '%';
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').classList.remove('show'); }

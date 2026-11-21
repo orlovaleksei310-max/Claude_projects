@@ -33,3 +33,4 @@ td { padding: 4px 12px; color: #d7deea; } td:first-child { white-space: nowrap; 
 #speedo { padding: 12px 18px; background: rgba(12, 18, 30, .38); border: 1px solid rgba(255, 255, 255, .18); border-radius: 14px; backdrop-filter: blur(6px); }
 #nitro { border: 1px solid rgba(255, 255, 255, .7); }
 #toast { font-size: 26px; }
+#map { position: fixed; right: 22px; top: 18px; pointer-events: none; filter: drop-shadow(0 2px 8px rgba(0,0,0,.45)); }
