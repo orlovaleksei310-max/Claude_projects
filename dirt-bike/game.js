@@ -479,6 +479,7 @@
   function begin() { startAudio(); if (actx && actx.state === 'suspended') actx.resume(); st.started = true; $('start').classList.add('hidden'); }
   $('start').addEventListener('click', begin);
   function restart() {
+    resetGarage();
     $('dead').classList.remove('show');
     $('shop').classList.remove('show');
     Object.assign(st, { shop: false, lastTown: null, dead: false, offT: 0, pts: 0, ptsAcc: 0, level: 0, wheelie: false, wp: 0, wTime: 0, dist: 0, bonus: 0, s: 0, d: 0, y: 0, vy: 0, speed: 0, yaw: 0, lat: 0, air: false, airT: 0, flip: 0, flipping: false, crash: 0, nitro: 100, roll: 0, over: 0 });
@@ -513,10 +514,9 @@
   const COLORS = [{ n: 'Orange', h: 0xff6a13 }, { n: 'Red', h: 0xe02424 }, { n: 'Blue', h: 0x1f78e0 }, { n: 'Green', h: 0x22a84a }, { n: 'Purple', h: 0x8a3ee0 }, { n: 'Pink', h: 0xff5fa8 }, { n: 'Yellow', h: 0xffd21f }, { n: 'White', h: 0xf2f2f2 }, { n: 'Black', h: 0x2a2c33 }];
   const COLOR_PRICE = 4000;
   let garage = { owned: ['Orange'], cur: 'Orange' };
-  try { const g = JSON.parse(localStorage.getItem('dirtbike-colors') || 'null'); if (g && Array.isArray(g.owned) && COLORS.some(c => c.n === g.cur)) garage = g; } catch (e) { /* storage blocked */ }
   const colorHex = () => (COLORS.find(c => c.n === garage.cur) || COLORS[0]).h;
   function applyColor() { M.orange.color.setHex(colorHex()); }
-  function saveGarage() { try { localStorage.setItem('dirtbike-colors', JSON.stringify(garage)); } catch (e) { /* ignore */ } }
+  function resetGarage() { garage = { owned: ['Orange'], cur: 'Orange' }; applyColor(); }   // skins last one round only
   function renderShop() {
     $('shoppts').textContent = Math.floor(st.pts);
     const box = $('swatches'); box.innerHTML = '';
@@ -527,7 +527,7 @@
       b.onclick = () => {
         if (!owned) { if (st.pts < COLOR_PRICE) { $('shopmsg').textContent = 'Not enough points: ' + c.n + ' costs ' + COLOR_PRICE; blip(150, 0.2, 'sawtooth', 0.06); return; } st.pts -= COLOR_PRICE; garage.owned.push(c.n); $('shopmsg').textContent = 'Bought ' + c.n + '!'; }
         else $('shopmsg').textContent = 'Equipped ' + c.n;
-        garage.cur = c.n; applyColor(); saveGarage(); blip(700, 0.1, 'square', 0.05); renderShop();
+        garage.cur = c.n; applyColor(); blip(700, 0.1, 'square', 0.05); renderShop();
       };
       box.appendChild(b);
     }
