@@ -235,7 +235,7 @@
   }
 
   function mkWyrm() {
-    const b = base('CRYSTAL WYRM', 200, 40); b.hd = Math.PI / 2; b.spin = 0; b.fireT = 0; b.rainT = 2; b.trail = []; b.burstT = 3; b.beamT = 4; b.ringT = 3; b.wp = { x: ARENA.x, y: ARENA.y }; b.wpT = 0; b.charge = 0; b.chargeT = 6; b.segs = [];
+    const b = base('CRYSTAL WYRM', 150, 40); b.hd = Math.PI / 2; b.spin = 0; b.fireT = 0; b.rainT = 2; b.trail = []; b.burstT = 3; b.beamT = 4; b.ringT = 3; b.wp = { x: ARENA.x, y: ARENA.y }; b.wpT = 0; b.charge = 0; b.chargeT = 9; b.segs = [];
     b.update = function (dt) {
       const f = this.hp / this.max, ph = f > 0.66 ? 1 : f > 0.33 ? 2 : 3;
       if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'PHASE 2: the crystals awaken' : 'PHASE 3: the wyrm is enraged'); shake = 14; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 30, '#7fe3ff', 260); }
@@ -243,22 +243,22 @@
       this.wpT -= dt;
       if (this.charge > 0) { this.charge -= dt; this.wp = { x: player.x, y: player.y }; }
       else if (this.wpT <= 0 || Math.hypot(this.wp.x - this.x, this.wp.y - this.y) < 50) { const a = rnd(0, TAU), d = rnd(60, ARENA.r - 90); this.wp = { x: ARENA.x + Math.cos(a) * d, y: ARENA.y + Math.sin(a) * d }; this.wpT = rnd(2, 3.5); }
-      if (ph >= 2 && this.charge <= 0) { this.chargeT -= dt; if (this.chargeT <= 0) { this.charge = 1.4; this.chargeT = ph === 3 ? 5 : 7; blip(110, 0.3, 'sawtooth', 0.07); } }
-      const want = Math.atan2(this.wp.y - this.y, this.wp.x - this.x), turn = (this.charge > 0 ? 3.2 : 2.0) * dt;
+      if (ph >= 2 && this.charge <= 0) { this.chargeT -= dt; if (this.chargeT <= 0) { this.charge = 1.6; this.chargeT = ph === 3 ? 8 : 11; blip(110, 0.3, 'sawtooth', 0.07); } }
+      const want = Math.atan2(this.wp.y - this.y, this.wp.x - this.x), turn = (this.charge > 0 ? 2.6 : 1.7) * dt;
       this.hd += clamp(angDiff(want, this.hd), -turn, turn);
-      const sp = (this.charge > 0 ? 420 : 170 + ph * 25); this.x += Math.cos(this.hd) * sp * dt; this.y += Math.sin(this.hd) * sp * dt;
+      const sp = (this.charge > 0 ? 330 : 120 + ph * 15); this.x += Math.cos(this.hd) * sp * dt; this.y += Math.sin(this.hd) * sp * dt;
       if (inArena(this, this.r + 30)) { const c = Math.atan2(ARENA.y - this.y, ARENA.x - this.x); this.hd += clamp(angDiff(c, this.hd), -4 * dt, 4 * dt); this.wp = { x: ARENA.x, y: ARENA.y }; this.charge = 0; }
       // body trail by distance, so the serpent follows the head like a real snake
       const last = this.trail[0]; if (!last || Math.hypot(last.x - this.x, last.y - this.y) >= 6) { this.trail.unshift({ x: this.x, y: this.y }); if (this.trail.length > 90) this.trail.pop(); }
       this.segs = []; for (let i = 1; i <= 8; i++) { const t = this.trail[i * 6]; if (t) this.segs.push({ x: t.x, y: t.y, r: 30 - i * 2 }); }
-      for (const s of this.segs) if (Math.hypot(player.x - s.x, player.y - s.y) < s.r + player.r - 8) hurt(1);
+      for (const s of this.segs) if (Math.hypot(player.x - s.x, player.y - s.y) < s.r + player.r - 14) hurt(1);
       // ---- attacks
-      this.spin += dt * (ph === 3 ? 1.5 : 0.9); this.fireT -= dt;
-      if (this.fireT <= 0) { const arms = ph === 3 ? 4 : ph === 1 ? 3 : 2; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.spin + i * TAU / arms, ph === 3 ? 165 : 140, 7, { c: '#7fe3ff', life: 4 }); this.fireT = ph === 3 ? 0.16 : 0.2; }
-      this.burstT -= dt; if (this.burstT <= 0) { fan(this.x, this.y, angTo(this, player), ph === 3 ? 7 : 5, 0.9, 250, 8, { c: '#ff9dd2' }); blip(300, 0.12, 'sawtooth', 0.05); this.burstT = ph === 3 ? 2.2 : 3.2; }
-      if (ph >= 2) { this.rainT -= dt; if (this.rainT <= 0) { zone(player.x + rnd(-30, 30), player.y + rnd(-30, 30), 48, 0.85, 0.15, { c: '#7fe3ff' }); this.rainT = ph === 3 ? 0.6 : 0.9; } }
-      if (ph >= 2) { this.beamT -= dt; if (this.beamT <= 0) { const a = rnd(0, TAU), d = Math.random() < 0.5 ? 1 : -1; beam(this.x, this.y, a, 0.5 * d, 1.0, 2.6); if (ph === 3) beam(this.x, this.y, a + Math.PI, 0.5 * d, 1.0, 2.6); this.beamT = ph === 3 ? 7 : 8; } }
-      if (ph === 3) { this.ringT -= dt; if (this.ringT <= 0) { ring(this.x, this.y, 20, rnd(0, TAU), 150, 8, { c: '#ff9dd2' }, 3); this.ringT = 2.8; } }
+      this.spin += dt * (ph === 3 ? 1.1 : 0.7); this.fireT -= dt;
+      if (this.fireT <= 0) { const arms = ph === 3 ? 3 : 2; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.spin + i * TAU / arms, ph === 3 ? 140 : 120, 7, { c: '#7fe3ff', life: 3.5 }); this.fireT = ph === 3 ? 0.28 : 0.34; }
+      this.burstT -= dt; if (this.burstT <= 0) { fan(this.x, this.y, angTo(this, player), ph === 3 ? 5 : 3, 0.9, 230, 8, { c: '#ff9dd2' }); blip(300, 0.12, 'sawtooth', 0.05); this.burstT = ph === 3 ? 3.4 : 4.2; }
+      if (ph >= 2) { this.rainT -= dt; if (this.rainT <= 0) { zone(player.x + rnd(-30, 30), player.y + rnd(-30, 30), 48, 1.0, 0.15, { c: '#7fe3ff' }); this.rainT = ph === 3 ? 1.1 : 1.5; } }
+      if (ph >= 2) { this.beamT -= dt; if (this.beamT <= 0) { const a = rnd(0, TAU), d = Math.random() < 0.5 ? 1 : -1; beam(this.x, this.y, a, 0.5 * d, 1.0, 2.6);  this.beamT = ph === 3 ? 10 : 12; } }
+      if (ph === 3) { this.ringT -= dt; if (this.ringT <= 0) { ring(this.x, this.y, 16, rnd(0, TAU), 130, 8, { c: '#ff9dd2' }, 4); this.ringT = 4.5; } }
     };
     b.draw = function () {
       const x = this.x, y = this.y, f = this.flash > 0;
