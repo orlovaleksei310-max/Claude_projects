@@ -782,6 +782,18 @@
     if (kind === 'arena') { return [[-140, -110], [140, -110], [-140, 130], [140, 130]].map(([dx, dy]) => ({ x: ARENA.x + dx, y: ARENA.y + dy, r: 24 })); }
     return [{ x: 330, y: 250, r: 26 }, { x: 560, y: 470, r: 30 }, { x: 740, y: 230, r: 22 }];
   }
+  // ---- save slots: three separate games, progress is saved automatically every time you reach the camp
+  const SLOT_KEY = 'bossRush.slots';
+  let slots = loadSlots(), slot = -1, eraseArm = -1;
+  function loadSlots() { try { const a = JSON.parse(localStorage.getItem(SLOT_KEY)); if (Array.isArray(a)) return [0, 1, 2].map(i => a[i] || null); } catch (e) { /* ignore */ } return [null, null, null]; }
+  function writeSlots() { try { localStorage.setItem(SLOT_KEY, JSON.stringify(slots)); } catch (e) { /* ignore */ } }
+  function saveSlot() { if (slot < 0 || bossMode) return; slots[slot] = { idx: bossIdx, p: player, t: runTime }; writeSlots(); }
+  function pickSlot(i, erase) {
+    if (erase) { if (eraseArm === i) { slots[i] = null; writeSlots(); eraseArm = -1; } else eraseArm = i; return; }
+    eraseArm = -1; slot = i; const sv = slots[i];
+    if (sv && sv.idx < BOSSES.length) { bossMode = false; player = Object.assign(newPlayer(), sv.p); bossIdx = sv.idx; runTime = sv.t || 0; resetWorld(); enterHub(false); } else newRun();
+  }
+  function toTitle(clearSlot) { if (clearSlot && slot >= 0) { slots[slot] = null; writeSlots(); } bossMode = false; slot = -1; eraseArm = -1; boss = null; resetWorld(); player = newPlayer(); state = S.TITLE; }
   function newRun() { bossMode = false; player = newPlayer(); bossIdx = 0; runTime = 0; resetWorld(); enterHub(true); }
   function enterHub(first) {
     bossMode = false;
@@ -790,6 +802,7 @@
     player.inv = 0.5; player.dashT = 0; hub.t = 0;
     toastMsg(first ? 'You wake up deep in a cave...' : bossIdx === 5 ? 'The LAVA PORTAL has opened! The underworld awaits...' : bossIdx === 10 ? 'The ACID PORTAL has opened! One last realm awaits...' : 'You rest by the fire. Next: ' + BOSS_NAMES[bossIdx], first ? 3 : bossIdx === 5 || bossIdx === 10 ? 4 : 2.4);
     if (bossIdx === 5 || bossIdx === 10) shake = 14;
+    saveSlot();
   }
   const BOSS_NAMES = ['Rock Golem', 'Bat Queen', 'Slime King', 'Spider Matriarch', 'Crystal Wyrm', 'Hellhound', 'Ash Witch', 'Obsidian Titan', 'Demon Lord', 'Infernal Dragon', 'Acid Scorpion', 'Venom Hydra', 'Toxic Wraith', 'Bile Leviathan', 'Acid Overmind'];
   const hub = { t: 0, portal: { x: 850, y: 355, r: 40 }, fire: { x: 470, y: 360 } };
@@ -1034,6 +1047,7 @@
     if (introT > 0) { ctx.globalAlpha = clamp(introT, 0, 1); ctx.fillStyle = '#000'; ctx.fillRect(0, H / 2 - 50, W, 100); ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 40px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(boss.name, W / 2, H / 2 + 14); ctx.globalAlpha = 1; }
   }
 
+  const SLOT_X = 130, SLOT_Y = 330;
   function overlay(title, sub, lines, color) {
     ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(0, 0, W, H); ctx.textAlign = 'center'; ctx.fillStyle = color || '#ffe9a8'; ctx.font = 'bold 44px ' + FONT; ctx.fillText(title, W / 2, 230); ctx.fillStyle = '#d9cfc4'; ctx.font = '18px ' + FONT; ctx.fillText(sub, W / 2, 275);
     ctx.font = '16px ' + FONT; (lines || []).forEach((l, i) => ctx.fillText(l, W / 2, 330 + i * 26));
@@ -1061,7 +1075,12 @@
     if (state === S.TITLE) {
       ctx.drawImage(bgHub, 0, 0); drawTorch(150, 170); drawTorch(830, 528); ctx.restore();
       player.x = 300; player.y = 400; drawDark();
-      overlay('BOSS RUSH', 'You wake up in a cave. Fifteen bosses stand between you and freedom.', ['WASD / arrows: move   Mouse: aim and shoot', 'Space / Shift: dash (you cannot be hit while dashing)', 'Beat the cave bosses to open the lava portal, then the underworld to open the acid portal.', '', 'Click or press Enter to start' + (best ? '     Best: ' + best + '/' + BOSSES.length + ' bosses' : '')]);
+      overlay('BOSS RUSH', 'You wake up in a cave. Fifteen bosses stand between you and freedom.', []);
+      for (let i = 0; i < 3; i++) { const x = SLOT_X + i * 240, y = SLOT_Y, sv = slots[i]; ctx.fillStyle = 'rgba(40,32,26,.95)'; ctx.fillRect(x, y, 220, 120); ctx.strokeStyle = eraseArm === i ? '#ff6b7a' : '#ffb347'; ctx.lineWidth = 3; ctx.strokeRect(x, y, 220, 120); ctx.textAlign = 'center'; ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 18px ' + FONT; ctx.fillText('[' + (i + 1) + '] SAVE ' + (i + 1), x + 110, y + 30); ctx.fillStyle = '#d9cfc4'; ctx.font = '14px ' + FONT;
+        if (eraseArm === i) { ctx.fillStyle = '#ff6b7a'; ctx.fillText('Erase this save?', x + 110, y + 66); ctx.fillText('Shift+click again', x + 110, y + 88); }
+        else if (sv) { ctx.fillText('Bosses beaten: ' + sv.idx + '/' + BOSSES.length, x + 110, y + 62); ctx.fillText('Next: ' + BOSS_NAMES[sv.idx], x + 110, y + 84); ctx.fillText('Time ' + fmtTime(sv.t || 0), x + 110, y + 104); }
+        else { ctx.fillText('Empty', x + 110, y + 66); ctx.fillText('Click for new game', x + 110, y + 90); } }
+      ctx.textAlign = 'center'; ctx.fillStyle = '#d9cfc4'; ctx.font = '15px ' + FONT; ctx.fillText('Click a save (or press 1 / 2 / 3). Progress saves automatically at camp.', W / 2, 500); ctx.fillText('Shift+click (or Shift+1/2/3) twice erases a save.', W / 2, 524); ctx.fillText('WASD move - mouse aim/shoot - Space/Shift dash' + (best ? '     Best: ' + best + '/' + BOSSES.length : ''), W / 2, 556);
       return;
     }
     if (state === S.HUB) drawHub(); else drawFight();
@@ -1074,7 +1093,7 @@
     } else if (state === S.WIN) {
       overlay('YOU CONQUERED THE ACID REALM!', 'All fifteen bosses are down. You are free.', ['Time: ' + fmtTime(runTime), '', 'Press Enter to play again'], '#9dff9d');
     } else if (state === S.OVER) {
-      if (bossMode) overlay(overTitle, 'Boss mode (admin)', ['Press R to play again', 'Press N to leave boss mode'], overTitle.startsWith('THE HERO') ? '#9dff9d' : '#ff6b7a'); else overlay(overTitle, boss ? 'Defeated by ' + boss.name : '', ['Press R to retry this boss (upgrades kept)', 'Press N for a brand new run']);
+      if (bossMode) overlay(overTitle, 'Boss mode (admin)', ['Press R to play again', 'Press N to leave boss mode'], overTitle.startsWith('THE HERO') ? '#9dff9d' : '#ff6b7a'); else overlay(overTitle, boss ? 'Defeated by ' + boss.name : '', ['Press R to retry this boss (upgrades kept)', 'Press N for the save screen']);
     }
     if (paused) overlay('PAUSED', 'Press P to resume', []);
   }
@@ -1085,9 +1104,9 @@
   canvas.addEventListener('mousemove', e => { const p = toCanvas(e); mouse.x = p.x; mouse.y = p.y; });
   canvas.addEventListener('mousedown', e => {
     const p = toCanvas(e); mouse.x = p.x; mouse.y = p.y; mouse.down = true; blip(1, 0.01, 'sine', 0.0001);
-    if (state === S.TITLE) { newRun(); return; }
+    if (state === S.TITLE) { for (let i = 0; i < 3; i++) if (p.x > SLOT_X + i * 240 && p.x < SLOT_X + i * 240 + 220 && p.y > SLOT_Y && p.y < SLOT_Y + 120) pickSlot(i, e.shiftKey); return; }
     if (state === S.UPGRADE) offered.forEach((u, i) => { const x = 140 + i * 260; if (p.x > x && p.x < x + 220 && p.y > 320 && p.y < 490) chooseUpgrade(i); });
-    if (state === S.WIN) newRun();
+    if (state === S.WIN) toTitle(true);
   });
   window.addEventListener('mouseup', () => { mouse.down = false; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -1099,10 +1118,10 @@
     if (e.repeat) return;
     if (e.code === 'KeyM') muted = !muted;
     if (e.code === 'KeyP' && (state === S.HUB || state === S.FIGHT)) paused = !paused;
-    if (state === S.TITLE && (e.code === 'Enter' || e.code === 'Space')) newRun();
+    if (state === S.TITLE) { if (['Digit1', 'Digit2', 'Digit3'].includes(e.code)) pickSlot(+e.code.slice(5) - 1, e.shiftKey); else if (e.code === 'Enter' || e.code === 'Space') { const k = slots.findIndex(x => x); pickSlot(k < 0 ? 0 : k); } }
     else if (state === S.UPGRADE && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) chooseUpgrade(+e.code.slice(5) - 1);
-    else if (state === S.WIN && e.code === 'Enter') newRun();
-    else if (state === S.OVER) { if (bossMode) { if (e.code === 'KeyR') startBossMode(); if (e.code === 'KeyN') { bossMode = false; newRun(); } } else { if (e.code === 'KeyR') { player.hp = player.maxHp; player.inv = 1; startFight(); } if (e.code === 'KeyN') newRun(); } }
+    else if (state === S.WIN && e.code === 'Enter') toTitle(true);
+    else if (state === S.OVER) { if (bossMode) { if (e.code === 'KeyR') startBossMode(); if (e.code === 'KeyN') { toTitle(false); } } else { if (e.code === 'KeyR') { player.hp = player.maxHp; player.inv = 1; startFight(); } if (e.code === 'KeyN') toTitle(false); } }
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
 
@@ -1156,5 +1175,5 @@
   function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(frame); }
   requestAnimationFrame(frame);
 
-  if (location.hash === '#debug') window.__br = { st: () => ({ state, bossIdx, hp: player.hp, boss: boss && { hp: boss.hp, st: boss.state } }), player: () => player, boss: () => boss, step: dt => update(dt), startBoss: i => { if (!player) player = newPlayer(); bossIdx = i; startFight(); }, enterHub, newRun, keys, mouse, hazards: () => hazards, minions: () => minions, offered: () => offered, choose: chooseUpgrade, begin: () => { introT = 0; } };
+  if (location.hash === '#debug') window.__br = { slots: () => slots, pick: pickSlot, title: toTitle, st: () => ({ state, bossIdx, hp: player.hp, boss: boss && { hp: boss.hp, st: boss.state } }), player: () => player, boss: () => boss, step: dt => update(dt), startBoss: i => { if (!player) player = newPlayer(); bossIdx = i; startFight(); }, enterHub, newRun, keys, mouse, hazards: () => hazards, minions: () => minions, offered: () => offered, choose: chooseUpgrade, begin: () => { introT = 0; } };
 })();
