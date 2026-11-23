@@ -72,13 +72,24 @@
     { id: 'a_armor', name: 'Hazmat Suit', desc: 'Heal fully and +2 max hearts', apply: p => { p.maxHp += 2; p.hp = p.maxHp; } },
     { id: 'a_inv', name: 'Antidote', desc: 'Stay invincible 0.5s longer after being hit', apply: p => { p.invDur = (p.invDur || 1.15) + 0.5; }, ok: p => (p.invDur || 1.15) < 2.2 }
   ];
+  const UPGRADES4 = [
+    { id: 'd_heart', name: 'Lucid Heart', desc: '+3 max hearts and heal 3', apply: p => { p.maxHp += 3; p.hp = Math.min(p.maxHp, p.hp + 3); } },
+    { id: 'd_dmg', name: 'Nightmare Fuel', desc: '+100% shot damage', apply: p => { p.dmg *= 2; } },
+    { id: 'd_dmg2', name: 'Waking Strike', desc: '+60% damage and +15% fire rate', apply: p => { p.dmg *= 1.6; p.fireDelay *= 0.85; } },
+    { id: 'd_rate', name: 'Insomnia', desc: 'Shoot 45% faster', apply: p => { p.fireDelay *= 0.55; } },
+    { id: 'd_speed', name: 'Sleepwalker', desc: '+25% move speed', apply: p => { p.speed *= 1.25; } },
+    { id: 'd_dash', name: 'Dream Step', desc: 'Dash recharges 50% faster', apply: p => { p.dashCd *= 0.5; } },
+    { id: 'd_multi', name: 'Star Shower', desc: '+2 bullets per shot (max 9)', apply: p => { p.shots = Math.min(9, p.shots + 2); }, ok: p => p.shots < 9 },
+    { id: 'd_pillow', name: 'Pillow Fort', desc: 'Heal fully and +1 max heart', apply: p => { p.maxHp += 1; p.hp = p.maxHp; } },
+    { id: 'd_lull', name: 'Lullaby', desc: 'Stay invincible 0.6s longer after being hit', apply: p => { p.invDur = (p.invDur || 1.15) + 0.6; }, ok: p => (p.invDur || 1.15) < 3 }
+  ];
   function hurt(n, from) {
     if (admin.god && !bossMode) return;
     if (player.inv > 0 || player.dashT > 0 || state !== S.FIGHT && state !== S.HUB) return;
     player.hp -= n; player.inv = player.invDur || 1.15; shake = 10; blip(120, 0.25, 'sawtooth', 0.09, 0.5); burst(player.x, player.y, 10, '#ff5a4d', 160);
     if (player.hp <= 0) { player.hp = 0; die(); }
   }
-  function die() { if (bossMode) { endBossMode(true); return; } state = S.OVER; deadT = 0; overTitle = ['YOU FELL IN THE CAVE', 'YOU BURNED IN THE UNDERWORLD', 'YOU DISSOLVED IN THE ACID'][realmOf(fightIdx)]; blip(90, 0.8, 'sawtooth', 0.1, 0.4); }
+  function die() { if (bossMode) { endBossMode(true); return; } state = S.OVER; deadT = 0; overTitle = ['YOU FELL IN THE CAVE', 'YOU BURNED IN THE UNDERWORLD', 'YOU DISSOLVED IN THE ACID', 'YOU WERE LOST IN A NIGHTMARE'][realmOf(fightIdx)]; blip(90, 0.8, 'sawtooth', 0.1, 0.4); }
 
   // ------------------------------------------------------------------ helpers
   function burst(x, y, n, color, sp) { for (let i = 0; i < n; i++) { const a = rnd(0, TAU), v = rnd(0.3, 1) * sp; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.3, 0.7), max: 0.7, c: color, r: rnd(2, 4) }); } }
@@ -94,7 +105,7 @@
 
   // ------------------------------------------------------------------ bosses
   let slamHinted = false;
-  const BOSSES = [mkGolem, mkBat, mkSlime, mkSpider, mkWyrm, mkHound, mkWitch, mkTitan, mkDemon, mkDragon, mkScorpion, mkHydra, mkAcidWraith, mkLeviathan, mkOvermind];
+  const BOSSES = [mkGolem, mkBat, mkSlime, mkSpider, mkWyrm, mkHound, mkWitch, mkTitan, mkDemon, mkDragon, mkScorpion, mkHydra, mkAcidWraith, mkLeviathan, mkOvermind, mkSandman, mkNightmare, mkJester, mkMoth, mkDreamEater];
   function base(name, hp, r) { return { name, hp, max: hp, r, x: ARENA.x, y: ARENA.y - 130, flash: 0, st: 1.5, state: 'idle', n: 0, t: 0, ph: 1, z: 0 }; }
 
   function mkGolem() {
@@ -707,6 +718,197 @@
     return b;
   }
 
+  // ------------------------------------------------------------------ dreamland bosses (bosses 16-20)
+  const DR1 = '#ff9dd2', DR2 = '#c77dff', DR3 = '#7fe3ff', DR4 = '#ffe9a8';
+  const dpool = (x, y, r, dur) => hazards.push({ k: 'fire', dream: true, x, y, r, t: 0, dur });
+  const star = (x, y, delay, r) => zone(x, y, r || 54, delay, 0.15, { c: DR2, tc: 'rgba(199,125,255,.16)', onEnd: z => { dpool(z.x, z.y, (r || 54) * 0.75, 3); shake = 4; } });
+  const dzone = (x, y, r, delay, dur) => zone(x, y, r, delay, dur, { c: DR2, tc: 'rgba(199,125,255,.16)' });
+  const DB = o => Object.assign({ c: DR1 }, o);
+  const arenaPt = (a, d) => ({ x: ARENA.x + Math.cos(a) * d, y: ARENA.y + Math.sin(a) * d });
+
+  function mkSandman() {
+    const b = base('THE SANDMAN', 420, 34); b.ang = 0; b.spin = 0;
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The Sandman whips up a sandstorm!'); shake = 12; ring(this.x, this.y, 20, 0, 190, 8, DB()); }
+      this.st -= dt; this.ang += dt; const toP = angTo(this, player);
+      if (this.state === 'idle') {
+        toward(this, player.x + Math.cos(this.ang * 0.7) * 240, player.y + Math.sin(this.ang * 0.7) * 240, 95 + ph * 25, dt);
+        if (this.st <= 0) { this.state = pick(ph === 2 ? ['dust', 'nap', 'lullaby', 'storm', 'storm'] : ['dust', 'dust', 'nap', 'lullaby']); this.n = 0; this.st = 0.5; if (this.state === 'lullaby') this.st = 2.6; if (this.state === 'storm') this.st = 0.6; }
+      } else if (this.state === 'dust') {
+        if (this.st <= 0) { fan(this.x, this.y, toP, ph === 2 ? 9 : 7, 1.3, 170, 9, DB({ c: DR4 })); ring(this.x, this.y, 14, this.n * 0.3, 120, 8, DB({ c: DR3 }), 3); this.n++; this.st = 0.7; blip(180, 0.15, 'triangle', 0.05); if (this.n >= (ph === 2 ? 4 : 3)) { this.state = 'idle'; this.st = 1.2; } }
+      } else if (this.state === 'nap') {
+        if (this.st <= 0) { for (let i = 0; i < (ph === 2 ? 8 : 6); i++) star(player.x + (i ? rnd(-170, 170) : 0), player.y + (i ? rnd(-170, 170) : 0), 0.9 + i * 0.14, 62); this.state = 'idle'; this.st = 1.8; }
+      } else if (this.state === 'lullaby') {
+        this.spin += dt * 1.8; this.n -= dt; if (this.n <= 0) { this.n = 0.1; for (let i = 0; i < 2; i++) ebul(this.x, this.y, this.spin + i * Math.PI, 150, 8, DB({ c: i ? DR3 : DR1, life: 4 })); }
+        if (this.st <= 0) { this.state = 'idle'; this.st = 1.3; }
+      } else if (this.state === 'storm') {
+        if (this.st <= 0 && !this.bm) { const d = Math.random() < 0.5 ? 1 : -1, a0 = rnd(0, TAU); for (let i = 0; i < 2; i++) addBeam(this.x, this.y, a0 + i * Math.PI, d * 0.8, 0.7, 2.8, 330); this.bm = true; this.st = 3.6; }
+        else if (this.bm && this.st <= 0) { this.bm = false; this.state = 'idle'; this.st = 1.2; } else if (this.bm) followBeams(this);
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y + Math.sin(time * 2.5) * 4, f = this.flash > 0;
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(this.x, this.y + 46, 30, 8, 0, 0, TAU); ctx.fill();
+      for (let i = 0; i < 7; i++) { const a = time * 2 + i * 0.9; ctx.fillStyle = 'rgba(255,233,168,.5)'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * (40 + i * 3), y + 10 + Math.sin(a) * 18, 3, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = f ? '#fff' : '#1d1a4a'; ctx.beginPath(); ctx.moveTo(x, y - 20); ctx.lineTo(x + 34, y + 44); ctx.lineTo(x - 34, y + 44); ctx.closePath(); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#2c2870'; ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(x + 20, y + 40); ctx.lineTo(x - 20, y + 40); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = DR4; for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(x + Math.sin(i * 2.1) * 14, y + 8 + i * 6, 1.8, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = f ? '#fff' : '#f2e6ff'; ctx.beginPath(); ctx.arc(x, y - 22, 15, 0, TAU); ctx.fill(); ctx.strokeStyle = '#1d1a4a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x - 5, y - 23, 3, 0.2, Math.PI - 0.2); ctx.arc(x + 5, y - 23, 3, 0.2, Math.PI - 0.2); ctx.stroke();
+      ctx.fillStyle = f ? '#fff' : '#3a3490'; ctx.beginPath(); ctx.moveTo(x - 16, y - 28); ctx.quadraticCurveTo(x, y - 62, x + 30, y - 40); ctx.lineTo(x + 16, y - 28); ctx.fill(); ctx.fillStyle = DR4; ctx.beginPath(); ctx.arc(x + 30, y - 40, 5, 0, TAU); ctx.fill();
+    };
+    return b;
+  }
+
+  function mkNightmare() {
+    const b = base('NIGHTMARE STALLION', 460, 40); b.face = Math.PI / 2; b.ca = 0;
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The stallion rears up in terror!'); shake = 12; ring(this.x, this.y, 18, 0, 190, 8, DB({ c: DR2 })); }
+      this.st -= dt; const toP = angTo(this, player);
+      if (this.state !== 'charge') this.face += clamp(angDiff(toP, this.face), -3 * dt, 3 * dt);
+      if (this.state === 'idle') {
+        const d = dist(this, player); if (d > 190) toward(this, player.x, player.y, 140 + ph * 30, dt); else if (d < 120) toward(this, player.x, player.y, -100, dt);
+        if (this.st <= 0) { this.state = pick(['charge', 'charge', 'stomp', 'neigh']); this.n = 0; this.st = 0.5; if (this.state === 'charge') { this.st = 0.75; this.ca = toP; } else if (this.state === 'stomp') { this.st = 0.9; dzone(this.x, this.y, 150, 0.9, 0.2); } }
+      } else if (this.state === 'charge') {
+        if (this.st > 0) { this.ca = toP; this.face = this.ca; } else { this.face = this.ca; this.x += Math.cos(this.ca) * 680 * dt; this.y += Math.sin(this.ca) * 680 * dt; this.pt = (this.pt || 0) + dt; if (this.pt > 0.08) { this.pt = 0; dpool(this.x, this.y, 22, 2.6); }
+          if (this.st < -0.6 || inArena(this)) { fan(this.x, this.y, angTo(this, player), ph === 2 ? 7 : 5, 1.0, 220, 8, DB({ c: DR2 })); this.n++; if (this.n < (ph === 2 ? 3 : 2)) { this.st = 0.5; } else { this.state = 'idle'; this.st = 1.2; } } }
+      } else if (this.state === 'stomp') {
+        if (this.st <= 0) { wave(this.x, this.y, 220, 430, { w: 26, c: DR2 }); if (ph === 2) wave(this.x, this.y, 220, 430, { w: 24, c: DR1, delay: 0.45 }); shake = 12; blip(70, 0.35, 'sawtooth', 0.1, 0.4); this.state = 'idle'; this.st = 1.2; }
+      } else if (this.state === 'neigh') {
+        if (this.st <= 0) { ring(this.x, this.y, 24, toP + this.n * 0.5, 160, 9, DB({ c: DR2 }), 5); this.n++; this.st = 0.55; if (this.n >= (ph === 2 ? 4 : 3)) { this.state = 'idle'; this.st = 1.3; } }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y, f = this.flash > 0, run = this.state === 'charge' && this.st <= 0;
+      if (this.state === 'charge' && this.st > 0) { ctx.strokeStyle = 'rgba(199,125,255,.4)'; ctx.lineWidth = 38; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(this.ca) * 560, y + Math.sin(this.ca) * 560); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x, y + 34, 56, 13, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.face); ctx.lineCap = 'round';
+      ctx.strokeStyle = f ? '#fff' : '#120c26'; ctx.lineWidth = 8; for (const [lx, s] of [[24, -1], [24, 1], [-24, -1], [-24, 1]]) { const w = Math.sin(time * (run ? 22 : 7) + lx + s * 1.6) * (run ? 16 : 6); ctx.beginPath(); ctx.moveTo(lx, s * 10); ctx.lineTo(lx + w, s * 30); ctx.stroke(); }
+      ctx.fillStyle = f ? '#fff' : '#241a3a'; ctx.beginPath(); ctx.ellipse(0, 0, 48, 22, 0, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#33264f'; ctx.beginPath(); ctx.ellipse(4, -3, 40, 15, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#241a3a'; ctx.beginPath(); ctx.moveTo(34, -10); ctx.lineTo(62, -8); ctx.lineTo(64, 8); ctx.lineTo(34, 12); ctx.fill(); ctx.beginPath(); ctx.ellipse(66, 0, 16, 10, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#ff3d6e'; ctx.beginPath(); ctx.arc(66, -5, 3, 0, TAU); ctx.arc(66, 5, 3, 0, TAU); ctx.fill();
+      for (let i = 0; i < 8; i++) { const t = i / 7, fl = Math.sin(time * 9 + i) * 5; ctx.fillStyle = i % 2 ? DR2 : DR1; ctx.beginPath(); ctx.moveTo(30 - t * 56, -16); ctx.lineTo(24 - t * 56 + fl, -34 - fl); ctx.lineTo(18 - t * 56, -14); ctx.fill(); }
+      for (let i = 0; i < 5; i++) { const fl = Math.sin(time * 10 + i) * 6; ctx.fillStyle = i % 2 ? DR3 : DR2; ctx.beginPath(); ctx.moveTo(-44, 0); ctx.lineTo(-70 - i * 6, (i - 2) * 9 + fl); ctx.lineTo(-48, (i - 2) * 4 + 4); ctx.fill(); }
+      ctx.restore();
+    };
+    return b;
+  }
+
+  function mkJester() {
+    const b = base('MAD JESTER', 480, 30); b.ang = 0; b.spin = 0;
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The jester goes completely mad!'); shake = 12; ring(this.x, this.y, 20, 0, 190, 8, DB({ c: DR4 })); }
+      this.st -= dt; this.ang += dt * (1.2 + ph * 0.4); const toP = angTo(this, player);
+      if (this.state === 'idle') {
+        toward(this, ARENA.x + Math.cos(this.ang) * 170, ARENA.y + Math.sin(this.ang * 2) * 120, 170 + ph * 40, dt);
+        if (this.st <= 0) { const o = ['juggle', 'cards', 'box', 'confetti']; if (ph === 2) o.push('juggle', 'cards', 'confetti'); this.state = pick(o); this.n = 0; this.st = 0.5; if (this.state === 'confetti') this.st = 2.4; }
+      } else if (this.state === 'juggle') {
+        if (this.st <= 0) { const cnt = ph === 2 ? 8 : 6; for (let i = 0; i < cnt; i++) { const a = i * TAU / cnt + rnd(0, 1); star(player.x + Math.cos(a) * (i ? 110 : 0), player.y + Math.sin(a) * (i ? 110 : 0), 0.8 + i * 0.16, 56); } this.state = 'idle'; this.st = 1.8; }
+      } else if (this.state === 'cards') {
+        if (this.st <= 0) { fan(this.x, this.y, toP + this.n * 0.15, ph === 2 ? 11 : 9, 2.4, 190, 8, DB({ c: this.n % 2 ? DR3 : DR1 })); blip(330, 0.1, 'square', 0.04); this.n++; this.st = 0.45; if (this.n >= (ph === 2 ? 5 : 4)) { this.state = 'idle'; this.st = 1.1; } }
+      } else if (this.state === 'box') {
+        if (this.st <= 0) { burst(this.x, this.y, 14, DR4, 180); const p = arenaPt(rnd(0, TAU), rnd(60, 190)); this.x = p.x; this.y = p.y; burst(this.x, this.y, 14, DR4, 180); ring(this.x, this.y, ph === 2 ? 22 : 16, rnd(0, 1), 170, 8, DB({ c: DR4 })); dzone(this.x, this.y, 95, 0.7, 0.2); this.n++; if (this.n < (ph === 2 ? 2 : 1)) this.st = 0.6; else { this.state = 'idle'; this.st = 1.1; } }
+      } else if (this.state === 'confetti') {
+        this.spin += dt * 2.4; this.n -= dt; if (this.n <= 0) { this.n = 0.09; const arms = ph === 2 ? 4 : 3; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.spin + i * TAU / arms, 185, 7, DB({ c: [DR1, DR3, DR4, DR2][i], life: 3.2 })); }
+        toward(this, player.x, player.y, 40, dt); if (this.st <= 0) { this.state = 'idle'; this.st = 1.2; }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y + Math.sin(time * 6) * 3, f = this.flash > 0;
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(this.x, this.y + 36, 26, 7, 0, 0, TAU); ctx.fill();
+      for (let i = 0; i < 3; i++) { const a = time * 4 + i * 2.1; ctx.fillStyle = [DR1, DR3, DR4][i]; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 42, y - 8 + Math.sin(a) * 18, 6, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = f ? '#fff' : DR1; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 24, y + 14); ctx.lineTo(x, y + 36); ctx.closePath(); ctx.fill(); ctx.fillStyle = f ? '#fff' : DR3; ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x - 24, y + 14); ctx.lineTo(x, y + 36); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#fff8e8'; ctx.beginPath(); ctx.arc(x, y - 18, 15, 0, TAU); ctx.fill(); ctx.fillStyle = '#c0284c'; ctx.beginPath(); ctx.arc(x - 5, y - 20, 2.5, 0, TAU); ctx.arc(x + 5, y - 20, 2.5, 0, TAU); ctx.fill(); ctx.strokeStyle = '#c0284c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y - 15, 7, 0.2, Math.PI - 0.2); ctx.stroke();
+      for (const s of [-1, 1]) { ctx.fillStyle = f ? '#fff' : (s > 0 ? DR3 : DR1); ctx.beginPath(); ctx.moveTo(x, y - 28); ctx.quadraticCurveTo(x + s * 30, y - 40, x + s * 34, y - 12); ctx.lineTo(x + s * 14, y - 26); ctx.fill(); ctx.fillStyle = DR4; ctx.beginPath(); ctx.arc(x + s * 34, y - 12, 4, 0, TAU); ctx.fill(); }
+    };
+    return b;
+  }
+
+  function mkMoth() {
+    const b = base('LUNAR MOTH', 500, 38); b.ang = 0; b.face = Math.PI / 2; b.ca = 0; b.flap = 0;
+    b.update = function (dt) {
+      const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The moth glows with moonlight!'); shake = 12; ring(this.x, this.y, 22, 0, 190, 8, DB({ c: DR3 })); }
+      this.st -= dt; this.ang += dt; this.flap += dt * (this.state === 'swoop' ? 18 : 9); const toP = angTo(this, player);
+      if (this.state !== 'swoop') this.face += clamp(angDiff(toP, this.face), -3 * dt, 3 * dt);
+      if (this.state === 'idle') {
+        toward(this, ARENA.x + Math.cos(this.ang * 0.8) * 190, ARENA.y + Math.sin(this.ang * 0.8) * 150, 120 + ph * 30, dt);
+        if (this.st <= 0) { this.state = pick(ph === 2 ? ['swoop', 'scales', 'moonbeam', 'dustrain', 'swoop'] : ['swoop', 'scales', 'moonbeam', 'dustrain']); this.n = 0; this.st = 0.5; if (this.state === 'swoop') { this.st = 0.7; this.ca = toP; } else if (this.state === 'moonbeam') this.st = 0.6; }
+      } else if (this.state === 'swoop') {
+        if (this.st > 0) { this.ca = toP; this.face = this.ca; } else { this.face = this.ca; this.x += Math.cos(this.ca) * 560 * dt; this.y += Math.sin(this.ca) * 560 * dt; this.pt = (this.pt || 0) + dt; if (this.pt > 0.12) { this.pt = 0; ring(this.x, this.y, 6, rnd(0, 1), 110, 7, DB({ c: DR3, life: 3 })); }
+          if (this.st < -0.65 || inArena(this)) { this.n++; if (this.n < (ph === 2 ? 3 : 2)) this.st = 0.45; else { this.state = 'idle'; this.st = 1.2; } } }
+      } else if (this.state === 'scales') {
+        if (this.st <= 0) { ring(this.x, this.y, 20, this.n * 0.4, 130, 9, DB({ c: DR3 }), 4); ring(this.x, this.y, 12, this.n * 0.7, 190, 7, DB({ c: DR4 })); this.n++; this.st = 0.6; if (this.n >= (ph === 2 ? 4 : 3)) { this.state = 'idle'; this.st = 1.3; } }
+      } else if (this.state === 'moonbeam') {
+        if (this.st <= 0 && !this.bm) { const d = Math.random() < 0.5 ? 1 : -1, a0 = rnd(0, TAU), arms = ph === 2 ? 4 : 3; for (let i = 0; i < arms; i++) addBeam(this.x, this.y, a0 + i * TAU / arms, d * 0.75, 0.7, 2.8, 340); this.bm = true; this.st = 3.6; }
+        else if (this.bm && this.st <= 0) { this.bm = false; this.state = 'idle'; this.st = 1.2; } else if (this.bm) followBeams(this);
+      } else if (this.state === 'dustrain') {
+        if (this.st <= 0) { for (let i = 0; i < (ph === 2 ? 10 : 7); i++) { const p = arenaPt(rnd(0, TAU), rnd(0, ARENA.r - 50)); star(p.x, p.y, 0.9 + i * 0.1, 52); } star(player.x, player.y, 0.9, 52); this.state = 'idle'; this.st = 1.9; }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y, f = this.flash > 0, fl = Math.sin(this.flap);
+      if (this.state === 'swoop' && this.st > 0) { ctx.strokeStyle = 'rgba(127,227,255,.4)'; ctx.lineWidth = 32; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(this.ca) * 540, y + Math.sin(this.ca) * 540); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 44, 40, 10, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(x, y); ctx.rotate(this.face);
+      for (const s of [-1, 1]) { const sc = 0.55 + Math.abs(fl) * 0.45; ctx.save(); ctx.scale(1, s * sc); ctx.fillStyle = f ? '#fff' : '#c9e8ff'; ctx.beginPath(); ctx.moveTo(8, 4); ctx.quadraticCurveTo(-10, 70, -56, 52); ctx.quadraticCurveTo(-40, 14, 8, 4); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#9fd0ff'; ctx.beginPath(); ctx.moveTo(16, 4); ctx.quadraticCurveTo(30, 52, 4, 66); ctx.quadraticCurveTo(0, 30, 16, 4); ctx.fill(); ctx.fillStyle = DR2; ctx.beginPath(); ctx.arc(-18, 32, 9, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-18, 32, 4, 0, TAU); ctx.fill(); ctx.restore(); }
+      ctx.fillStyle = f ? '#fff' : '#f4efff'; ctx.beginPath(); ctx.ellipse(0, 0, 26, 12, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.arc(28, 0, 9, 0, TAU); ctx.fill(); ctx.fillStyle = '#c0284c'; ctx.beginPath(); ctx.arc(32, -4, 2.5, 0, TAU); ctx.arc(32, 4, 2.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#f4efff'; ctx.lineWidth = 2; for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(32, s * 4); ctx.quadraticCurveTo(48, s * 12, 54, s * 20); ctx.stroke(); }
+      ctx.restore();
+    };
+    return b;
+  }
+
+  function mkDreamEater() {
+    const b = base('DREAM EATER', 1500, 56); b.cy = 0; b.ct = 0; b.ph4 = [];
+    b.update = function (dt) {
+      const f = this.hp / this.max, ph = f > 0.66 ? 1 : f > 0.33 ? 2 : 3;
+      if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'The Dream Eater devours the sky!' : 'NIGHTMARE! The Dream Eater tears the dream apart!', 2.2); shake = 18; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 40, DR1, 300); this.state = 'idle'; this.st = 1.2; this.bm = false; ring(this.x, this.y, 26, 0, 200, 9, DB({ c: DR2 })); }
+      this.st -= dt; const toP = angTo(this, player), rest = k => k * [0, 1, 0.75, 0.55][ph];
+      for (const q of this.ph4) { q.t -= dt; if (q.t <= 0 && !q.done) { q.done = true; fan(q.x, q.y, angTo(q, player), 5 + ph, 0.8, 230, 8, DB({ c: DR3 })); } } this.ph4 = this.ph4.filter(q => q.t > -0.3);
+      if (this.state === 'idle') {
+        const d = dist(this, player); if (d > 210) toward(this, player.x, player.y, 40 + ph * 18, dt); else if (d < 140) toward(this, player.x, player.y, -50, dt);
+        if (this.st <= 0) { const o = ['spiral', 'rain', 'nova', 'phantoms']; if (ph >= 2) o.push('tendrils', 'devour', 'orbs', 'spiral'); if (ph === 3) o.push('tear', 'tendrils', 'devour', 'tear'); let nx = pick(o); if (nx === this.last) nx = pick(o); this.last = nx; this.state = nx; this.n = 0; this.cy = rnd(0, TAU); this.ct = 0; this.st = 0.5;
+          if (nx === 'spiral') this.st = 2.8; else if (nx === 'tear') this.st = 4.0; else if (nx === 'devour') { this.st = 0.95; dzone(this.x, this.y, 220, 0.95, 0.2); } else if (nx === 'tendrils') this.st = 0.6; else if (nx === 'phantoms') { for (let i = 0; i < 3 + ph; i++) { const p = arenaPt(rnd(0, TAU), ARENA.r - 40); this.ph4.push({ x: p.x, y: p.y, t: 1.0 + i * 0.15, done: false, life: 1 }); } this.st = 1.8; } }
+      } else if (this.state === 'spiral') {
+        this.ct -= dt; this.cy += dt * 2.0; if (this.ct <= 0) { this.ct = 0.09; const arms = ph + 1; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.cy + i * TAU / arms, 195, 8, DB({ c: i % 2 ? DR3 : DR1, life: 3.4 })); }
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.5); }
+      } else if (this.state === 'rain') {
+        if (this.st <= 0) { const cnt = 8 + ph * 3; for (let i = 0; i < cnt; i++) { const p = arenaPt(rnd(0, TAU), rnd(0, ARENA.r - 50)); star(p.x, p.y, 0.9 + i * 0.1, 52); } star(player.x, player.y, 0.9, 52); star(player.x + rnd(-80, 80), player.y + rnd(-80, 80), 1.3, 52); this.state = 'idle'; this.st = rest(2.2); }
+      } else if (this.state === 'nova') {
+        if (this.st <= 0) { ring(this.x, this.y, 26, toP + this.n * 0.5, 150, 10, DB({ c: DR2 }), 5); this.n++; this.st = 0.55; blip(110, 0.2, 'triangle', 0.06); if (this.n >= 2 + ph) { this.state = 'idle'; this.st = rest(1.4); } }
+      } else if (this.state === 'phantoms') {
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.2); }
+      } else if (this.state === 'tendrils') {
+        if (this.st <= 0 && !this.bm) { const arms = ph === 3 ? 5 : 4, d = Math.random() < 0.5 ? 1 : -1, a0 = rnd(0, TAU); for (let i = 0; i < arms; i++) addBeam(this.x, this.y, a0 + i * TAU / arms, d * 0.75, 0.7, 3.2, 350); this.bm = true; this.st = 4.0; blip(200, 0.3, 'sawtooth', 0.06); }
+        else if (this.bm && this.st <= 0) { this.bm = false; this.state = 'idle'; this.st = rest(1.3); } else if (this.bm) followBeams(this);
+      } else if (this.state === 'devour') {
+        if (this.st <= 0) { wave(this.x, this.y, 220, 460, { w: 30, c: DR2 }); if (ph === 3) wave(this.x, this.y, 220, 460, { w: 26, c: DR1, delay: 0.5 }); for (let i = 0; i < 6; i++) dpool(this.x + Math.cos(i * 1.047) * 165, this.y + Math.sin(i * 1.047) * 165, 36, 3.5); shake = 16; blip(55, 0.45, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = rest(1.5); }
+      } else if (this.state === 'orbs') {
+        if (this.st <= 0) { for (let i = 0; i < 6; i++) ebul(this.x, this.y, i * TAU / 6 + this.n * 0.5, 125, 10, DB({ c: DR4, home: 1.6, life: 5 })); this.n++; this.st = 0.8; if (this.n >= 2) { this.state = 'idle'; this.st = rest(1.6); } }
+      } else if (this.state === 'tear') {
+        toward(this, player.x, player.y, 60, dt); this.ct -= dt; this.cy += dt * 2.6; this.mt = (this.mt || 0) - dt;
+        if (this.ct <= 0) { this.ct = 0.12; for (let i = 0; i < 2; i++) ebul(this.x, this.y, this.cy + i * Math.PI, 205, 8, DB({ c: i ? DR3 : DR1, life: 3 })); }
+        if (this.mt <= 0) { this.mt = 0.45; star(player.x + rnd(-110, 110), player.y + rnd(-110, 110), 0.8, 52); }
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.6); }
+      }
+      inArena(this);
+    };
+    b.draw = function () {
+      const x = this.x, y = this.y + Math.sin(time * 2) * 5, f = this.flash > 0, p3 = this.ph === 3;
+      const core = f ? '#fff' : p3 ? '#6a1f7a' : '#3a2a8a', mid = f ? '#fff' : p3 ? '#c03ca8' : '#6a4ad0', lt = f ? '#fff' : p3 ? '#ff9dd2' : '#b9a0ff';
+      for (const q of this.ph4) { const a = clamp(1 - Math.abs(q.t) * 0.9, 0.2, 0.9); ctx.globalAlpha = a * 0.7; ctx.fillStyle = DR3; ctx.beginPath(); ctx.arc(q.x, q.y, 22, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q.x - 6, q.y - 4, 3, 0, TAU); ctx.arc(q.x + 6, q.y - 4, 3, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(this.x, this.y + 60, 74, 18, 0, 0, TAU); ctx.fill();
+      ctx.lineCap = 'round'; for (let i = 0; i < 9; i++) { const bx = x - 64 + i * 16, w = Math.sin(time * 3 + i) * 12; ctx.strokeStyle = core; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(bx, y + 20); ctx.quadraticCurveTo(bx + w, y + 52, bx - w, y + 84); ctx.stroke(); ctx.strokeStyle = i % 2 ? DR1 : DR3; ctx.lineWidth = 4; ctx.stroke(); }
+      ctx.fillStyle = core; ctx.beginPath(); ctx.arc(x, y, 68, Math.PI, 0); ctx.lineTo(x + 68, y + 24); ctx.lineTo(x - 68, y + 24); ctx.closePath(); ctx.fill(); ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(x, y + 2, 58, Math.PI, 0); ctx.lineTo(x + 58, y + 20); ctx.lineTo(x - 58, y + 20); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = lt; for (let i = 0; i < 9; i++) { ctx.beginPath(); ctx.arc(x + Math.cos(i * 2.4) * (14 + i * 4), y - 8 + Math.sin(i * 1.7) * 20 - 14, 1.6 + (i % 3) * 0.8, 0, TAU); ctx.fill(); }
+      const a = angTo(this, player); ctx.fillStyle = '#fdf6ff'; ctx.beginPath(); ctx.ellipse(x, y - 6, 26, 20, 0, 0, TAU); ctx.fill(); ctx.fillStyle = p3 ? '#ff3d8a' : DR3; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 7, y - 6 + Math.sin(a) * 6, 12, 0, TAU); ctx.fill(); ctx.fillStyle = '#10062a'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * 10, y - 6 + Math.sin(a) * 8, 5, 0, TAU); ctx.fill();
+      for (let i = 0; i < 3; i++) { const o = time * 1.4 + i * TAU / 3; ctx.fillStyle = DR4; ctx.beginPath(); ctx.arc(x + Math.cos(o) * 92, y + Math.sin(o) * 62, 7, 0, TAU); ctx.fill(); }
+    };
+    return b;
+  }
+
   // ------------------------------------------------------------------ admin mode: YOU are the boss, the hero is an AI that dodges well
   let bossMode = false;
   function mkOverlord() {
@@ -800,16 +1002,16 @@
     state = S.HUB; resetWorld(); pillars = mkPillars('hub');
     if (first) { player.x = 140; player.y = 400; } else { player.x = 150; player.y = 380; player.hp = Math.min(player.maxHp, player.hp + 2); }
     player.inv = 0.5; player.dashT = 0; hub.t = 0;
-    toastMsg(first ? 'You wake up deep in a cave...' : bossIdx === 5 ? 'The LAVA PORTAL has opened! The underworld awaits...' : bossIdx === 10 ? 'The ACID PORTAL has opened! One last realm awaits...' : 'You rest by the fire. Next: ' + BOSS_NAMES[bossIdx], first ? 3 : bossIdx === 5 || bossIdx === 10 ? 4 : 2.4);
-    if (bossIdx === 5 || bossIdx === 10) shake = 14;
+    toastMsg(first ? 'You wake up deep in a cave...' : bossIdx === 5 ? 'The LAVA PORTAL has opened! The underworld awaits...' : bossIdx === 10 ? 'The ACID PORTAL has opened! Another realm awaits...' : bossIdx === 15 ? 'The DREAMLAND PORTAL has opened! Sweet dreams...' : 'You rest by the fire. Next: ' + BOSS_NAMES[bossIdx], first ? 3 : bossIdx === 5 || bossIdx === 10 || bossIdx === 15 ? 4 : 2.4);
+    if (bossIdx === 5 || bossIdx === 10 || bossIdx === 15) shake = 14;
     saveSlot();
   }
-  const BOSS_NAMES = ['Rock Golem', 'Bat Queen', 'Slime King', 'Spider Matriarch', 'Crystal Wyrm', 'Hellhound', 'Ash Witch', 'Obsidian Titan', 'Demon Lord', 'Infernal Dragon', 'Acid Scorpion', 'Venom Hydra', 'Toxic Wraith', 'Bile Leviathan', 'Acid Overmind'];
+  const BOSS_NAMES = ['Rock Golem', 'Bat Queen', 'Slime King', 'Spider Matriarch', 'Crystal Wyrm', 'Hellhound', 'Ash Witch', 'Obsidian Titan', 'Demon Lord', 'Infernal Dragon', 'Acid Scorpion', 'Venom Hydra', 'Toxic Wraith', 'Bile Leviathan', 'Acid Overmind', 'The Sandman', 'Nightmare Stallion', 'Mad Jester', 'Lunar Moth', 'Dream Eater'];
   const hub = { t: 0, portal: { x: 850, y: 355, r: 40 }, fire: { x: 470, y: 360 } };
   function startFight() {
     bossMode = false;
     toast = null;
-    fightIdx = bossIdx; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); introT = 2.2;
+    fightIdx = bossIdx; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); { const hm = [1, 2.4, 3.2, 4][realmOf(bossIdx)]; boss.hp = boss.max = Math.round(boss.hp * hm); } introT = 2.2;
     player.x = ARENA.x; player.y = ARENA.y + ARENA.r - 50; player.inv = 1; player.dashT = 0;
     blip(120, 0.6, 'sawtooth', 0.08, 0.6);
   }
@@ -818,7 +1020,7 @@
     eBul.length = 0; hazards.length = 0; for (const m of minions) burst(m.x, m.y, 8, '#fff', 120); minions.length = 0;
     bossIdx++; saveBest(bossIdx); boss.dead = true; deadT = 0; state = S.FIGHT; boss.dying = true;
   }
-  function offerUpgrades() { const pool = (bossIdx >= 11 ? UPGRADES3 : bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
+  function offerUpgrades() { const pool = (bossIdx >= 16 ? UPGRADES4 : bossIdx >= 11 ? UPGRADES3 : bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
   function chooseUpgrade(i) { const u = offered[i]; if (!u) return; u.apply(player); blip(660, 0.15, 'square', 0.06); blip(990, 0.2, 'square', 0.05); if (bossIdx >= BOSSES.length) { state = S.WIN; saveBest(bossIdx); } else enterHub(false); }
 
   // ------------------------------------------------------------------ update
@@ -926,7 +1128,8 @@
   const PALS = [
     { bg: '#120f0e', n1: ['#1c1714', '#0d0b0a', '#241d19'], rock: '#2d2722', sh: '#000', shb: 30, n2: ['#352e28', '#27211d', '#3d352e', '#221c18'], crack: null, spike: ['#3a322b', '#2c2621', '#463d34'], gem: ['#7fe3ff', '#c77dff', '#ff9dd2'] },
     { bg: '#0f0504', n1: ['#1f0b08', '#0a0302', '#2a100b'], rock: '#3a1812', sh: '#ff4a10', shb: 36, n2: ['#44201a', '#2f130f', '#512620', '#26100c'], crack: ['rgba(255,110,30,.55)', '#ff6a1a'], spike: ['#3a1a14', '#2a120e', '#4a2018'], gem: ['#ff6a1a', '#ffb347', '#ff3d3d'] },
-    { bg: '#040d06', n1: ['#0a1c0d', '#030a04', '#102a14'], rock: '#16301a', sh: '#5dff2a', shb: 36, n2: ['#1c4222', '#12301a', '#235228', '#0e2412'], crack: ['rgba(140,255,60,.55)', '#7dff3a'], spike: ['#173a1c', '#0f2a14', '#1f4a24'], gem: ['#9dff3a', '#e6ff5a', '#3affb0'] }
+    { bg: '#040d06', n1: ['#0a1c0d', '#030a04', '#102a14'], rock: '#16301a', sh: '#5dff2a', shb: 36, n2: ['#1c4222', '#12301a', '#235228', '#0e2412'], crack: ['rgba(140,255,60,.55)', '#7dff3a'], spike: ['#173a1c', '#0f2a14', '#1f4a24'], gem: ['#9dff3a', '#e6ff5a', '#3affb0'] },
+    { bg: '#0b0720', n1: ['#140c33', '#07041a', '#1c1245'], rock: '#2a1d5c', sh: '#c77dff', shb: 36, n2: ['#33246e', '#221552', '#40307f', '#1a1040'], crack: ['rgba(255,157,210,.55)', '#ff9dd2'], spike: ['#2f2266', '#201550', '#3d2e80'], gem: ['#ff9dd2', '#7fe3ff', '#ffe9a8'] }
   ];
   function makeBG(kind, realm) {
     const under = realm > 0, P = PALS[realm | 0];
@@ -951,8 +1154,8 @@
     for (let i = 0; i < 9; i++) { const [x, y] = rim(Math.floor(Math.random() * 40)), c1 = pick(cols); g.shadowColor = c1; g.shadowBlur = 16; g.fillStyle = c1; g.beginPath(); const k = rnd(10, 18); g.moveTo(x, y - k); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill(); }
     g.shadowBlur = 0; return c;
   }
-  let bgHub, bgArena, bgHubU, bgArenaU, bgHubA, bgArenaA;
-  const realmOf = i => i >= 10 ? 2 : i >= 5 ? 1 : 0, hubRealm = () => bossIdx >= 11 ? 2 : bossIdx >= 6 ? 1 : 0, portalRealm = () => realmOf(bossIdx), arenaRealm = () => bossMode ? 1 : realmOf(fightIdx);
+  let bgHub, bgArena, bgHubU, bgArenaU, bgHubA, bgArenaA, bgHubD, bgArenaD;
+  const realmOf = i => i >= 15 ? 3 : i >= 10 ? 2 : i >= 5 ? 1 : 0, hubRealm = () => bossIdx >= 16 ? 3 : bossIdx >= 11 ? 2 : bossIdx >= 6 ? 1 : 0, portalRealm = () => realmOf(bossIdx), arenaRealm = () => bossMode ? 1 : realmOf(fightIdx);
 
   const lights = () => state === S.HUB ? [{ x: 150, y: 190, r: 150, c: 1 }, { x: 470, y: 360, r: 230, c: 1 }, { x: 830, y: 540, r: 140, c: 1 }, { x: hub.portal.x, y: hub.portal.y, r: 170, c: 0 }] : [{ x: ARENA.x - 220, y: ARENA.y - 180, r: 120, c: 1 }, { x: ARENA.x + 220, y: ARENA.y - 180, r: 120, c: 1 }, { x: ARENA.x - 220, y: ARENA.y + 190, r: 120, c: 1 }, { x: ARENA.x + 220, y: ARENA.y + 190, r: 120, c: 1 }];
 
@@ -978,7 +1181,7 @@
   }
 
   function drawHub() {
-    ctx.drawImage([bgHub, bgHubU, bgHubA][hubRealm()], 0, 0);
+    ctx.drawImage([bgHub, bgHubU, bgHubA, bgHubD][hubRealm()], 0, 0);
     drawTorch(150, 170); drawTorch(830, 528);
     // fire
     const f = hub.fire, fl = 1 + Math.sin(time * 12) * 0.12;
@@ -987,10 +1190,10 @@
     ctx.fillStyle = '#ff7a1a'; ctx.beginPath(); ctx.moveTo(f.x - 16, f.y + 8); ctx.quadraticCurveTo(f.x - 8, f.y - 30 * fl, f.x, f.y - 44 * fl); ctx.quadraticCurveTo(f.x + 8, f.y - 24 * fl, f.x + 16, f.y + 8); ctx.fill();
     ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.moveTo(f.x - 8, f.y + 8); ctx.quadraticCurveTo(f.x - 3, f.y - 14 * fl, f.x, f.y - 24 * fl); ctx.quadraticCurveTo(f.x + 4, f.y - 12 * fl, f.x + 8, f.y + 8); ctx.fill();
     // portal
-    const p = hub.portal; ctx.save(); ctx.translate(p.x, p.y); const pr = portalRealm(); ctx.shadowColor = ['#c77dff', '#ff6a1a', '#9dff3a'][pr]; ctx.shadowBlur = 30;
-    for (let i = 0; i < 4; i++) { ctx.strokeStyle = [['#7fe3ff', '#c77dff', '#ff9dd2', '#fff'], ['#ffd23f', '#ff7a1a', '#ff3d3d', '#fff'], ['#d8ff7a', '#9dff3a', '#3affb0', '#fff']][pr][i]; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, 0, 22 + i * 7 + Math.sin(time * 3 + i) * 3, 40 + i * 6, time * (i % 2 ? 1 : -1) * 0.6, 0, TAU * 0.78); ctx.stroke(); }
-    ctx.fillStyle = ['rgba(30,10,60,.85)', 'rgba(80,12,0,.9)', 'rgba(8,50,10,.9)'][pr]; ctx.beginPath(); ctx.ellipse(0, 0, 24, 40, 0, 0, TAU); ctx.fill(); ctx.restore();
-    ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 14px ' + FONT; ctx.textAlign = 'center'; ctx.fillText((pr === 2 ? 'ACID REALM ' + (bossIdx - 9) : pr === 1 ? 'UNDERWORLD ' + (bossIdx - 4) : 'BOSS ' + (bossIdx + 1)) + ': ' + BOSS_NAMES[bossIdx].toUpperCase(), p.x - 20, p.y - 70); ctx.fillText(['enter the portal', 'enter the lava portal', 'enter the acid portal'][pr], p.x - 20, p.y - 54);
+    const p = hub.portal; ctx.save(); ctx.translate(p.x, p.y); const pr = portalRealm(); ctx.shadowColor = ['#c77dff', '#ff6a1a', '#9dff3a', '#ff9dd2'][pr]; ctx.shadowBlur = 30;
+    for (let i = 0; i < 4; i++) { ctx.strokeStyle = [['#7fe3ff', '#c77dff', '#ff9dd2', '#fff'], ['#ffd23f', '#ff7a1a', '#ff3d3d', '#fff'], ['#d8ff7a', '#9dff3a', '#3affb0', '#fff'], ['#ff9dd2', '#c77dff', '#7fe3ff', '#fff']][pr][i]; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, 0, 22 + i * 7 + Math.sin(time * 3 + i) * 3, 40 + i * 6, time * (i % 2 ? 1 : -1) * 0.6, 0, TAU * 0.78); ctx.stroke(); }
+    ctx.fillStyle = ['rgba(30,10,60,.85)', 'rgba(80,12,0,.9)', 'rgba(8,50,10,.9)', 'rgba(40,12,70,.9)'][pr]; ctx.beginPath(); ctx.ellipse(0, 0, 24, 40, 0, 0, TAU); ctx.fill(); ctx.restore();
+    ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 14px ' + FONT; ctx.textAlign = 'center'; ctx.fillText((pr === 3 ? 'DREAMLAND ' + (bossIdx - 14) : pr === 2 ? 'ACID REALM ' + (bossIdx - 9) : pr === 1 ? 'UNDERWORLD ' + (bossIdx - 4) : 'BOSS ' + (bossIdx + 1)) + ': ' + BOSS_NAMES[bossIdx].toUpperCase(), p.x - 20, p.y - 70); ctx.fillText(['enter the portal', 'enter the lava portal', 'enter the acid portal', 'enter the dream portal'][pr], p.x - 20, p.y - 54);
     for (const s of pillars) drawPillar(s);
     drawBullets(); drawPlayer();
   }
@@ -1017,10 +1220,10 @@
     for (const h of hazards) {
       if (h.k === 'zone') { const on = h.t >= h.delay; ctx.fillStyle = on ? h.c.replace(')', ',.55)').replace('rgb', 'rgba') : (h.tc || 'rgba(255,60,50,.14)'); if (on) ctx.fillStyle = h.c; ctx.globalAlpha = on ? 0.6 : 0.5; ctx.beginPath(); ctx.arc(h.x, h.y, on ? h.r : h.r * (h.t / Math.max(0.01, h.delay)), 0, TAU); ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = h.c; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
       else if (h.k === 'cone') { const on = h.t > h.delay; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a); ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, h.r, -h.half, h.half); ctx.closePath(); if (on) { const g = ctx.createLinearGradient(0, 0, h.r, 0); g.addColorStop(0, 'rgba(255,245,160,.95)'); g.addColorStop(0.5, 'rgba(255,120,30,.8)'); g.addColorStop(1, 'rgba(200,40,10,.25)'); ctx.fillStyle = g; ctx.fill(); } else { ctx.fillStyle = 'rgba(255,80,40,.12)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,80,40,.6)'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.stroke(); ctx.setLineDash([]); } ctx.restore(); }
-      else if (h.k === 'fire') { const fl = 1 + Math.sin(time * 14 + h.x) * 0.08, al = clamp((h.dur - h.t) / 0.6, 0, 1); ctx.globalAlpha = al; const g = ctx.createRadialGradient(h.x, h.y, 2, h.x, h.y, h.r * fl); g.addColorStop(0, h.acid ? '#e8ffa0' : '#ffe08a'); g.addColorStop(0.5, h.acid ? '#6fd22a' : '#ff7a1a'); g.addColorStop(1, h.acid ? 'rgba(20,110,20,.3)' : 'rgba(200,40,10,.25)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, h.r * fl, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+      else if (h.k === 'fire') { const fl = 1 + Math.sin(time * 14 + h.x) * 0.08, al = clamp((h.dur - h.t) / 0.6, 0, 1); ctx.globalAlpha = al; const g = ctx.createRadialGradient(h.x, h.y, 2, h.x, h.y, h.r * fl); g.addColorStop(0, h.dream ? '#ffe6f6' : h.acid ? '#e8ffa0' : '#ffe08a'); g.addColorStop(0.5, h.dream ? '#b36bff' : h.acid ? '#6fd22a' : '#ff7a1a'); g.addColorStop(1, h.dream ? 'rgba(90,40,160,.3)' : h.acid ? 'rgba(20,110,20,.3)' : 'rgba(200,40,10,.25)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, h.r * fl, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
       else if (h.k === 'web') { ctx.fillStyle = 'rgba(232,240,255,.22)'; ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgba(232,240,255,.7)'; ctx.lineWidth = 1.5; for (let i = 0; i < 8; i++) { ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x + Math.cos(i * 0.785) * h.r, h.y + Math.sin(i * 0.785) * h.r); ctx.stroke(); } for (const rr of [0.35, 0.7, 1]) { ctx.beginPath(); ctx.arc(h.x, h.y, h.r * rr, 0, TAU); ctx.stroke(); } }
       else if (h.k === 'wave') { if (h.delay > 0) continue; ctx.strokeStyle = h.c || '#ffb27a'; ctx.lineWidth = h.w; ctx.globalAlpha = 0.7 * (1 - h.r / h.maxR * 0.6); ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; }
-      else if (h.k === 'beam') { const on = h.t > h.delay; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a); const R = arenaRealm(), bc = R === 2 ? '#9dff3a' : R === 1 ? '#ff7a1a' : '#7fe3ff'; if (on) { ctx.globalAlpha = 0.25; ctx.fillStyle = bc; ctx.fillRect(0, -16, h.len, 32); ctx.globalAlpha = 1; ctx.fillRect(0, -9, h.len, 18); ctx.fillStyle = '#fff'; ctx.fillRect(0, -3, h.len, 6); } else { ctx.fillStyle = R === 2 ? 'rgba(157,255,58,.4)' : R === 1 ? 'rgba(255,122,26,.4)' : 'rgba(127,227,255,.35)'; ctx.fillRect(0, -2, h.len, 4); } ctx.restore(); }
+      else if (h.k === 'beam') { const on = h.t > h.delay; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a); const R = arenaRealm(), bc = R === 3 ? '#c77dff' : R === 2 ? '#9dff3a' : R === 1 ? '#ff7a1a' : '#7fe3ff'; if (on) { ctx.globalAlpha = 0.25; ctx.fillStyle = bc; ctx.fillRect(0, -16, h.len, 32); ctx.globalAlpha = 1; ctx.fillRect(0, -9, h.len, 18); ctx.fillStyle = '#fff'; ctx.fillRect(0, -3, h.len, 6); } else { ctx.fillStyle = R === 3 ? 'rgba(199,125,255,.4)' : R === 2 ? 'rgba(157,255,58,.4)' : R === 1 ? 'rgba(255,122,26,.4)' : 'rgba(127,227,255,.35)'; ctx.fillRect(0, -2, h.len, 4); } ctx.restore(); }
     }
   }
 
@@ -1038,7 +1241,7 @@
   const fmtTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
 
   function drawFight() {
-    ctx.drawImage([bgArena, bgArenaU, bgArenaA][arenaRealm()], 0, 0);
+    ctx.drawImage([bgArena, bgArenaU, bgArenaA, bgArenaD][arenaRealm()], 0, 0);
     drawHazards();
     for (const s of pillars) drawPillar(s);
     for (const m of minions) m.draw();
@@ -1054,7 +1257,7 @@
   }
 
   function drawDark() {
-    dark.globalCompositeOperation = 'source-over'; const RR = state === S.HUB ? hubRealm() : state === S.TITLE ? 0 : arenaRealm(); dark.fillStyle = RR === 2 ? 'rgba(2,16,5,.55)' : RR === 1 ? 'rgba(22,3,0,.55)' : state === S.HUB || state === S.TITLE ? 'rgba(4,3,10,.62)' : 'rgba(4,3,10,.58)'; dark.fillRect(0, 0, W, H);
+    dark.globalCompositeOperation = 'source-over'; const RR = state === S.HUB ? hubRealm() : state === S.TITLE ? 0 : arenaRealm(); dark.fillStyle = RR === 3 ? 'rgba(8,3,26,.5)' : RR === 2 ? 'rgba(2,16,5,.55)' : RR === 1 ? 'rgba(22,3,0,.55)' : state === S.HUB || state === S.TITLE ? 'rgba(4,3,10,.62)' : 'rgba(4,3,10,.58)'; dark.fillRect(0, 0, W, H);
     dark.globalCompositeOperation = 'destination-out';
     if (!bigCut) { bigCut = document.createElement('canvas'); bigCut.width = bigCut.height = 256; const g = bigCut.getContext('2d'), gr = g.createRadialGradient(128, 128, 12, 128, 128, 128); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); }
     const cut = (x, y, r, a) => { dark.globalAlpha = a; dark.drawImage(bigCut, x - r, y - r, r * 2, r * 2); dark.globalAlpha = 1; };
@@ -1075,7 +1278,7 @@
     if (state === S.TITLE) {
       ctx.drawImage(bgHub, 0, 0); drawTorch(150, 170); drawTorch(830, 528); ctx.restore();
       player.x = 300; player.y = 400; drawDark();
-      overlay('BOSS RUSH', 'You wake up in a cave. Fifteen bosses stand between you and freedom.', []);
+      overlay('BOSS RUSH', 'You wake up in a cave. Twenty bosses stand between you and freedom.', []);
       for (let i = 0; i < 3; i++) { const x = SLOT_X + i * 240, y = SLOT_Y, sv = slots[i]; ctx.fillStyle = 'rgba(40,32,26,.95)'; ctx.fillRect(x, y, 220, 120); ctx.strokeStyle = eraseArm === i ? '#ff6b7a' : '#ffb347'; ctx.lineWidth = 3; ctx.strokeRect(x, y, 220, 120); ctx.textAlign = 'center'; ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 18px ' + FONT; ctx.fillText('[' + (i + 1) + '] SAVE ' + (i + 1), x + 110, y + 30); ctx.fillStyle = '#d9cfc4'; ctx.font = '14px ' + FONT;
         if (eraseArm === i) { ctx.fillStyle = '#ff6b7a'; ctx.fillText('Erase this save?', x + 110, y + 66); ctx.fillText('Shift+click again', x + 110, y + 88); }
         else if (sv) { ctx.fillText('Bosses beaten: ' + sv.idx + '/' + BOSSES.length, x + 110, y + 62); ctx.fillText('Next: ' + BOSS_NAMES[sv.idx], x + 110, y + 84); ctx.fillText('Time ' + fmtTime(sv.t || 0), x + 110, y + 104); }
@@ -1091,7 +1294,7 @@
       overlay('BOSS DEFEATED', 'Choose an upgrade', []);
       offered.forEach((u, i) => { const x = 140 + i * 260, y = 320; ctx.fillStyle = 'rgba(40,32,26,.95)'; ctx.fillRect(x, y, 220, 170); ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 3; ctx.strokeRect(x, y, 220, 170); ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 18px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('[' + (i + 1) + '] ' + u.name, x + 110, y + 40); ctx.fillStyle = '#d9cfc4'; ctx.font = '14px ' + FONT; wrap(u.desc, x + 110, y + 80, 190, 20); });
     } else if (state === S.WIN) {
-      overlay('YOU CONQUERED THE ACID REALM!', 'All fifteen bosses are down. You are free.', ['Time: ' + fmtTime(runTime), '', 'Press Enter to play again'], '#9dff9d');
+      overlay('YOU CONQUERED THE DREAMLAND!', 'All twenty bosses are down. You may finally wake up.', ['Time: ' + fmtTime(runTime), '', 'Press Enter to play again'], '#9dff9d');
     } else if (state === S.OVER) {
       if (bossMode) overlay(overTitle, 'Boss mode (admin)', ['Press R to play again', 'Press N to leave boss mode'], overTitle.startsWith('THE HERO') ? '#9dff9d' : '#ff6b7a'); else overlay(overTitle, boss ? 'Defeated by ' + boss.name : '', ['Press R to retry this boss (upgrades kept)', 'Press N for the save screen']);
     }
@@ -1152,7 +1355,9 @@
       for (const u of UPGRADES2) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
       g = sec('Free acid upgrades');
       for (const u of UPGRADES3) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
-      g.append(row('ALL upgrades x3', () => { for (let k = 0; k < 3; k++) for (const u of UPGRADES.concat(UPGRADES2, UPGRADES3)) u.apply(player); player.hp = player.maxHp; }));
+      g = sec('Free dreamland upgrades');
+      for (const u of UPGRADES4) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
+      g.append(row('ALL upgrades x3', () => { for (let k = 0; k < 3; k++) for (const u of UPGRADES.concat(UPGRADES2, UPGRADES3, UPGRADES4)) u.apply(player); player.hp = player.maxHp; }));
       g = sec('Broken stuff');
       g.append(row(admin.god ? 'God mode: ON' : 'God mode', () => { admin.god = !admin.god; }, admin.god), row(admin.infDash ? 'Infinite dash: ON' : 'Infinite dash', () => { admin.infDash = !admin.infDash; }, admin.infDash),
         row(admin.speedMul > 1 ? 'Super speed: ON' : 'Super speed', () => { admin.speedMul = admin.speedMul > 1 ? 1 : 2; }, admin.speedMul > 1), row(admin.freeze ? 'Freeze bosses: ON' : 'Freeze bosses', () => { admin.freeze = !admin.freeze; }, admin.freeze),
@@ -1170,7 +1375,7 @@
   })();
 
   // ------------------------------------------------------------------ loop
-  player = newPlayer(); pBul = []; eBul = []; hazards = []; parts = []; minions = []; pillars = []; bgHub = makeBG('hub'); bgArena = makeBG('arena'); bgHubU = makeBG('hub', 1); bgArenaU = makeBG('arena', 1); bgHubA = makeBG('hub', 2); bgArenaA = makeBG('arena', 2);
+  player = newPlayer(); pBul = []; eBul = []; hazards = []; parts = []; minions = []; pillars = []; bgHub = makeBG('hub'); bgArena = makeBG('arena'); bgHubU = makeBG('hub', 1); bgArenaU = makeBG('arena', 1); bgHubA = makeBG('hub', 2); bgArenaA = makeBG('arena', 2); bgHubD = makeBG('hub', 3); bgArenaD = makeBG('arena', 3);
   let last = performance.now();
   function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(frame); }
   requestAnimationFrame(frame);
