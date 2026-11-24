@@ -294,20 +294,20 @@
   }
 
   function mkHound() {
-    const b = base('HELLHOUND', 190, 40); b.ang = 0; b.tel = null;
+    const b = base('HELLHOUND', 130, 40); b.ang = 0; b.tel = null;
     b.update = function (dt) {
       const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The hellhound howls!'); shake = 12; ring(this.x, this.y, 16, 0, 200, 8, { c: '#ff8a1a' }); }
       this.st -= dt;
       if (this.state === 'idle') {
-        this.ang += dt * 1.4; toward(this, player.x + Math.cos(this.ang) * 210, player.y + Math.sin(this.ang) * 210, 230, dt);
-        if (this.st <= 0) { const o = ['lunge', 'lunge', 'breath', 'howl']; this.state = pick(o); this.n = 0; if (this.state === 'lunge') { this.ca = angTo(this, player); this.st = 0.55; } else this.st = 0.6; }
+        this.ang += dt * 1.4; toward(this, player.x + Math.cos(this.ang) * 210, player.y + Math.sin(this.ang) * 230, 165, dt);
+        if (this.st <= 0) { const o = ['lunge', 'breath', 'howl', 'breath']; this.state = pick(o); this.n = 0; if (this.state === 'lunge') { this.ca = angTo(this, player); this.st = 0.85; } else this.st = 0.8; }
       } else if (this.state === 'lunge') {
         if (this.st > 0) { this.tel = this.ca = angTo(this, player); }
-        else { this.tel = null; this.x += Math.cos(this.ca) * 720 * dt; this.y += Math.sin(this.ca) * 720 * dt; if (Math.random() < 0.9) fire(this.x, this.y, 22, 3.2); if (this.st < -0.45 || inArena(this)) { this.n++; if (this.n < (ph === 2 ? 3 : 2)) { this.st = 0.5; this.ca = angTo(this, player); } else { this.state = 'idle'; this.st = 1.0; } } }
+        else { this.tel = null; this.x += Math.cos(this.ca) * 560 * dt; this.y += Math.sin(this.ca) * 560 * dt; if (Math.random() < 0.4) fire(this.x, this.y, 20, 2.2); if (this.st < -0.4 || inArena(this)) { this.n++; if (this.n < (ph === 2 ? 2 : 1)) { this.st = 0.7; this.ca = angTo(this, player); } else { this.state = 'idle'; this.st = 1.8; } } }
       } else if (this.state === 'breath') {
-        if (this.st <= 0) { fan(this.x, this.y, angTo(this, player), ph === 2 ? 9 : 7, 1.2, 250, 8, { c: '#ff8a1a' }); blip(150, 0.15, 'sawtooth', 0.05); this.n++; this.st = 0.4; if (this.n >= 3) { this.state = 'idle'; this.st = 1.0; } }
+        if (this.st <= 0) { fan(this.x, this.y, angTo(this, player), ph === 2 ? 7 : 5, 1.1, 210, 8, { c: '#ff8a1a' }); blip(150, 0.15, 'sawtooth', 0.05); this.n++; this.st = 0.6; if (this.n >= 2) { this.state = 'idle'; this.st = 1.8; } }
       } else if (this.state === 'howl') {
-        if (this.st <= 0) { ring(this.x, this.y, 18, rnd(0, 1), 190, 8, { c: '#ff8a1a' }); for (let i = 0; i < 3; i++) meteor(player.x + rnd(-120, 120), player.y + rnd(-120, 120), 0.8 + i * 0.2, 50); this.state = 'idle'; this.st = 1.2; }
+        if (this.st <= 0) { ring(this.x, this.y, 14, rnd(0, 1), 160, 8, { c: '#ff8a1a' }); for (let i = 0; i < 2; i++) meteor(player.x + rnd(-120, 120), player.y + rnd(-120, 120), 1.1 + i * 0.3, 50); this.state = 'idle'; this.st = 1.8; }
       }
       inArena(this);
     };
