@@ -422,7 +422,7 @@
   }
 
   function mkDragon() {
-    const b = base('INFERNAL DRAGON', 1000, 52); b.face = Math.PI / 2; b.air = 0; b.stun = 0; b.wing = 0; b.cone = null; b.tx = 0; b.ty = 0;
+    const b = base('INFERNAL DRAGON', 800, 52); b.face = Math.PI / 2; b.air = 0; b.stun = 0; b.wing = 0; b.cone = null; b.tx = 0; b.ty = 0;
     const flying = d => d.air > 0.3;
     b.update = function (dt) {
       const f = this.hp / this.max, ph = f > 0.7 ? 1 : f > 0.42 ? 2 : f > 0.2 ? 3 : 4;
