@@ -720,12 +720,12 @@
     const b = base('BILE LEVIATHAN', 470, 44); b.air = 0; b.tr = []; b.face = Math.PI / 2; b.tx = 0; b.ty = 0;
     b.update = function (dt) {
       const ph = this.hp / this.max < 0.5 ? 2 : 1; if (ph !== this.ph) { this.ph = ph; toastMsg('The leviathan thrashes - it burrows faster!'); shake = 12; ring(this.x, this.y, 16, 0, 190, 8, AB()); }
-      this.st -= dt; const toP = angTo(this, player), l = this.tr[0];
+      this.st -= dt; this.digCd = Math.max(0, (this.digCd || 0) - dt); const toP = angTo(this, player), l = this.tr[0];
       if (!l || Math.hypot(l.x - this.x, l.y - this.y) > 9) { this.tr.unshift({ x: this.x, y: this.y }); if (this.tr.length > 30) this.tr.pop(); }
       if (this.state === 'idle' || this.state === 'spit' || this.state === 'rain') this.face += clamp(angDiff(toP, this.face), -2.5 * dt, 2.5 * dt);
       if (this.state === 'idle') {
         if (dist(this, player) > 120) toward(this, player.x, player.y, 85 + ph * 20, dt);
-        if (this.st <= 0) { this.state = pick(ph === 2 ? ['spit', 'rain', 'burrow', 'burrow', 'burrow'] : ['spit', 'spit', 'rain', 'burrow', 'burrow']); this.n = 0; this.st = 0.5; }
+        if (this.st <= 0) { this.state = this.digCd > 0 ? pick(['spit', 'spit', 'rain']) : pick(['burrow', 'burrow', 'spit', 'rain']); this.n = 0; this.st = this.state === 'rain' || this.state === 'spit' ? 0.5 : 0.5; }
       } else if (this.state === 'spit') {
         if (this.st <= 0) { fan(this.x, this.y, toP, 7, 1.2, 225, 9, AB()); for (let i = -1; i <= 1; i += 2) ebul(this.x, this.y, toP + i * 0.5, 170, 9, AB({ c: AC2, home: 1.3, life: 4 })); blip(180, 0.12, 'sawtooth', 0.05); this.n++; this.st = 0.6; if (this.n >= (ph === 2 ? 4 : 3)) { this.state = 'idle'; this.st = 1.1; } }
       } else if (this.state === 'rain') {
@@ -736,7 +736,7 @@
         toward(this, player.x, player.y, 230, dt); this.face = toP; inArena(this); if (Math.random() < 0.5) parts.push({ x: this.x + rnd(-14, 14), y: this.y + rnd(-8, 8), vx: rnd(-30, 30), vy: rnd(-40, -10), life: 0.5, max: 0.5, c: '#4a7a2a', r: 4 });
         if (this.st <= 0) { this.state = 'erupt'; this.st = 0.9; this.tx = player.x; this.ty = player.y; acidZone(this.tx, this.ty, 120, 0.9, 0.2); }
       } else if (this.state === 'erupt') {
-        if (this.st <= 0) { this.x = this.tx; this.y = this.ty; this.tr.length = 0; this.air = 0; shake = 20; blip(50, 0.5, 'sawtooth', 0.12, 0.4); wave(this.x, this.y, 235, 440, { w: 30, c: AC }); ring(this.x, this.y, ph === 2 ? 18 : 12, 0, 190, 9, AB()); pool(this.x, this.y, 50, 4); this.n++; if (ph === 2 && this.n < 2) { this.state = 'burrow'; this.st = 0.55; this.air = 0; } else { this.state = 'idle'; this.st = 1.4; } }
+        if (this.st <= 0) { this.x = this.tx; this.y = this.ty; this.tr.length = 0; this.air = 0; shake = 20; blip(50, 0.5, 'sawtooth', 0.12, 0.4); wave(this.x, this.y, 235, 440, { w: 30, c: AC }); ring(this.x, this.y, ph === 2 ? 18 : 12, 0, 190, 9, AB()); pool(this.x, this.y, 50, 4); this.n++; if (ph === 2 && this.n < 2) { this.state = 'burrow'; this.st = 0.55; this.air = 0; } else { this.state = 'idle'; this.st = 1.4; this.digCd = ph === 2 ? 9 : 11; } }
       }
       inArena(this);
     };
