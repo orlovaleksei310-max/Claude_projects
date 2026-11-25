@@ -429,16 +429,16 @@
       if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'The dragon takes to the sky!' : ph === 3 ? 'The dragon is ENRAGED!' : 'LAST STAND! The dragon burns with fury!', 2.2); shake = 18; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 40, '#ff8a1a', 300); this.state = 'idle'; this.st = 1.1; this.air = 0; this.stun = 0; this.cone = null; this.mouth = false; ring(this.x, this.y, 20, 0, 210, 9, { c: '#ff8a1a' }); }
       if (this.stun > 0) { this.stun -= dt; return; }
       this.st -= dt; this.wing += dt;
-      const toP = angTo(this, player), rest = k => k * [0, 0.8, 0.6, 0.45, 0.32][ph], spd = [0, 62, 88, 112, 138][ph];
+      const toP = angTo(this, player), rest = k => k * [0, 1.0, 0.85, 0.7, 0.55][ph], spd = [0, 55, 72, 90, 105][ph];
       if (['idle', 'stomp', 'tail', 'fireballs', 'gust', 'cyclone'].includes(this.state)) this.face += clamp(angDiff(toP, this.face), -2.6 * dt, 2.6 * dt);
       if (this.state === 'idle') {
-        if (dist(this, player) > 120) { toward(this, player.x, player.y, spd, dt); if (ph >= 3) { this.ft = (this.ft || 0) - dt; if (this.ft <= 0) { this.ft = 0.55; fire(this.x - Math.cos(this.face) * 40, this.y - Math.sin(this.face) * 40, 26, 2.6); } } }
+        if (dist(this, player) > 120) { toward(this, player.x, player.y, spd, dt); if (ph >= 3) { this.ft = (this.ft || 0) - dt; if (this.ft <= 0) { this.ft = 0.9; fire(this.x - Math.cos(this.face) * 40, this.y - Math.sin(this.face) * 40, 22, 2.0); } } }
         if (this.st <= 0) {
-          const o = ['breath', 'tail', 'fireballs', 'stomp']; if (ph >= 2) o.push('fly', 'gust'); if (ph >= 3) o.push('eruption', 'cyclone', 'breath', 'fly'); if (ph === 4) o.push('eruption', 'cyclone', 'fly');
+          const o = ['breath', 'tail', 'fireballs', 'stomp']; if (ph >= 2) o.push('fly', 'gust'); if (ph >= 3) o.push('eruption', 'cyclone', 'breath'); if (ph === 4) o.push('fly');
           let nx = pick(o); if (nx === this.last) nx = pick(o); this.last = nx; this.state = nx; this.n = 0; this.bt = 0;
-          if (nx === 'stomp') { this.st = ph >= 3 ? 0.8 : 1.0; zone(this.x, this.y, 140, this.st, 0.15, {}); }
-          else if (nx === 'tail') { this.st = ph >= 3 ? 0.65 : 0.8; zone(this.x, this.y, 190, this.st, 0.4, { c: '#ff5a3d' }); }
-          else if (nx === 'breath') { this.st = 0.8; this.face = toP; const d = Math.random() < 0.5 ? 1 : -1, rot = d * [0, 0.85, 0.95, 1.1, 1.25][ph], dur = [0, 1.8, 2.0, 2.4, 2.7][ph]; this.cone = { k: 'cone', own: this, x: this.x, y: this.y, a: this.face - d * 0.7, rot, delay: 0.8, dur, t: 0, r: 390, half: 0.3 }; hazards.push(this.cone); if (ph >= 3) hazards.push({ k: 'cone', own: this, x: this.x, y: this.y, a: this.face - d * 0.7 + Math.PI, rot, delay: 0.8, dur, t: 0, r: 390, half: 0.26 }); }
+          if (nx === 'stomp') { this.st = ph >= 3 ? 1.0 : 1.2; zone(this.x, this.y, 140, this.st, 0.15, {}); }
+          else if (nx === 'tail') { this.st = ph >= 3 ? 0.85 : 1.0; zone(this.x, this.y, 190, this.st, 0.4, { c: '#ff5a3d' }); }
+          else if (nx === 'breath') { this.st = 0.8; this.face = toP; const d = Math.random() < 0.5 ? 1 : -1, rot = d * [0, 0.75, 0.8, 0.9, 1.0][ph], dur = [0, 1.8, 1.9, 2.1, 2.3][ph]; this.cone = { k: 'cone', own: this, x: this.x, y: this.y, a: this.face - d * 0.7, rot, delay: 0.8, dur, t: 0, r: 390, half: 0.3 }; hazards.push(this.cone); if (ph === 4) hazards.push({ k: 'cone', own: this, x: this.x, y: this.y, a: this.face - d * 0.7 + Math.PI, rot, delay: 0.8, dur, t: 0, r: 390, half: 0.26 }); }
           else if (nx === 'fly') { this.st = 0.8; }
           else if (nx === 'eruption') { this.st = 0.6; }
           else if (nx === 'cyclone') { this.st = 3.2; this.cy = rnd(0, TAU); this.ct = 0; }
@@ -449,28 +449,28 @@
       } else if (this.state === 'tail') {
         if (this.st <= 0) { ring(this.x, this.y, ph >= 2 ? 14 : 10, 0.3, 210, 8, { c: '#ff5a3d' }); if (ph >= 3) zone(this.x, this.y, 270, 0.7, 0.3, { c: '#ff5a3d' }); this.state = 'idle'; this.st = rest(1.4); }
       } else if (this.state === 'breath') {
-        if (this.cone) { this.face = this.cone.a; this.mouth = true; this.bt -= dt; if (ph >= 3 && this.bt <= 0 && this.cone.t > this.cone.delay) { this.bt = ph === 4 ? 0.4 : 0.55; ebul(this.x, this.y, toP, 230, 8, { c: '#ffd23f', home: 1.2, life: 3 }); } }
+        if (this.cone) { this.face = this.cone.a; this.mouth = true; this.bt -= dt; if (ph >= 3 && this.bt <= 0 && this.cone.t > this.cone.delay) { this.bt = ph === 4 ? 0.7 : 0.9; ebul(this.x, this.y, toP, 230, 8, { c: '#ffd23f', home: 1.2, life: 3 }); } }
         if (this.st <= -(this.cone ? this.cone.dur : 0) - 0.1 || (this.cone && this.cone.dead)) { this.cone = null; this.mouth = false; this.state = 'idle'; this.st = rest(1.3); }
       } else if (this.state === 'fireballs') {
-        if (this.st <= 0) { const a = angTo(this, player); fan(this.x, this.y, a, 5 + ph * 2, 1.25, 245 + ph * 10, 8, { c: '#ffd23f' }); for (let i = -1; i <= 1; i += 2) ebul(this.x, this.y, a + i * 0.45, 175, 9, { c: '#ff9a3a', home: 1.1 + ph * 0.25, life: 4 }); blip(220, 0.12, 'sawtooth', 0.05); this.n++; this.st = 0.5 - ph * 0.04; if (this.n >= 2 + ph) { this.state = 'idle'; this.st = rest(1.3); } }
+        if (this.st <= 0) { const a = angTo(this, player); fan(this.x, this.y, a, 4 + ph, 1.25, 215 + ph * 8, 8, { c: '#ffd23f' }); if (ph >= 2) for (let i = -1; i <= 1; i += 2) ebul(this.x, this.y, a + i * 0.45, 160, 9, { c: '#ff9a3a', home: 0.9, life: 3.5 }); blip(220, 0.12, 'sawtooth', 0.05); this.n++; this.st = 0.65 - ph * 0.04; if (this.n >= 1 + ph) { this.state = 'idle'; this.st = rest(1.3); } }
       } else if (this.state === 'gust') {
-        if (this.st <= 0) { ring(this.x, this.y, 18, this.n * 0.35, 135 + ph * 8, 12, { c: '#ff8a1a' }, 4); this.n++; this.st = 0.62; blip(100, 0.2, 'triangle', 0.06); if (this.n >= 3 + (ph >= 3 ? 1 : 0)) { this.state = 'idle'; this.st = rest(1.3); } }
+        if (this.st <= 0) { ring(this.x, this.y, 16, this.n * 0.35, 120 + ph * 6, 12, { c: '#ff8a1a' }, 4); this.n++; this.st = 0.8; blip(100, 0.2, 'triangle', 0.06); if (this.n >= 3) { this.state = 'idle'; this.st = rest(1.3); } }
       } else if (this.state === 'cyclone') {
         toward(this, player.x, player.y, 60, dt); this.ct -= dt; this.cy += dt * 2.3;
-        if (this.ct <= 0) { this.ct = 0.1; const arms = ph === 4 ? 4 : 3; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.cy + i * TAU / arms, 215, 7, { c: '#ff8a1a', life: 3.2 }); }
+        if (this.ct <= 0) { this.ct = 0.14; const arms = ph === 4 ? 3 : 2; for (let i = 0; i < arms; i++) ebul(this.x, this.y, this.cy + i * TAU / arms, 190, 7, { c: '#ff8a1a', life: 3.2 }); }
         if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.4); }
       } else if (this.state === 'fly') {
         this.air = clamp(this.air + dt * 1.3, 0, 1);
-        if (this.st <= 0) { this.state = 'hover'; this.st = [0, 0, 2.4, 2.8, 3.2][ph]; this.n = 0; this.mt = 0; }
+        if (this.st <= 0) { this.state = 'hover'; this.st = [0, 0, 2.2, 2.4, 2.6][ph]; this.n = 0; this.mt = 0; }
       } else if (this.state === 'hover') {
-        this.mt -= dt; if (this.mt <= 0) { meteor(player.x + rnd(-140, 140), player.y + rnd(-140, 140), 0.85, 54); if (this.n % 2 === 0) meteor(player.x, player.y, 0.85, 52); if (ph >= 3 && this.n % 3 === 0) fan(this.x, this.y, toP, 5, 0.9, 230, 8, { c: '#ffd23f' }); this.n++; this.mt = [0, 0, 0.36, 0.28, 0.2][ph]; }
+        this.mt -= dt; if (this.mt <= 0) { meteor(player.x + rnd(-140, 140), player.y + rnd(-140, 140), 0.85, 54); if (this.n % 2 === 0) meteor(player.x, player.y, 0.85, 52); if (ph >= 3 && this.n % 3 === 0) fan(this.x, this.y, toP, 5, 0.9, 230, 8, { c: '#ffd23f' }); this.n++; this.mt = [0, 0, 0.5, 0.42, 0.34][ph]; }
         toward(this, player.x, player.y, 100, dt);
-        if (this.st <= 0) { this.state = 'dive'; this.st = ph >= 3 ? 0.85 : 1.0; this.dv = this.st; this.tx = player.x; this.ty = player.y; this.fx = this.x; this.fy = this.y; zone(this.tx, this.ty, 110, this.st, 0.2, { c: '#ff3d3d' }); }
+        if (this.st <= 0) { this.state = 'dive'; this.st = ph >= 3 ? 1.1 : 1.25; this.dv = this.st; this.tx = player.x; this.ty = player.y; this.fx = this.x; this.fy = this.y; zone(this.tx, this.ty, 110, this.st, 0.2, { c: '#ff3d3d' }); }
       } else if (this.state === 'dive') {
         const u = clamp(1 - this.st / this.dv, 0, 1); this.x = this.fx + (this.tx - this.fx) * u * u; this.y = this.fy + (this.ty - this.fy) * u * u; this.air = clamp(1 - u * u * 1.1, 0, 1);
-        if (this.st <= 0) { this.air = 0; this.x = this.tx; this.y = this.ty; shake = 22; blip(50, 0.5, 'sawtooth', 0.12, 0.4); wave(this.x, this.y, 240, 450, { w: 30, c: '#ffb27a' }); if (ph >= 3) wave(this.x, this.y, 240, 450, { w: 26, c: '#ff6a1a', delay: 0.45 }); ring(this.x, this.y, ph >= 3 ? 20 : 14, 0, 195, 9, { c: '#ff8a1a' }); fire(this.x, this.y, 52, 4); if (ph === 4) for (let i = 0; i < 5; i++) meteor(player.x + rnd(-150, 150), player.y + rnd(-150, 150), 0.8 + i * 0.1, 50); this.state = 'idle'; this.st = rest(1.3); this.stun = [0, 0, 1.5, 1.1, 0.8][ph]; toastMsg('The dragon is stunned - hit it!', 1.2); }
+        if (this.st <= 0) { this.air = 0; this.x = this.tx; this.y = this.ty; shake = 22; blip(50, 0.5, 'sawtooth', 0.12, 0.4); wave(this.x, this.y, 240, 450, { w: 30, c: '#ffb27a' }); if (ph >= 3) wave(this.x, this.y, 240, 450, { w: 26, c: '#ff6a1a', delay: 0.6 }); ring(this.x, this.y, ph >= 3 ? 16 : 12, 0, 195, 9, { c: '#ff8a1a' }); fire(this.x, this.y, 52, 4); if (ph === 4) for (let i = 0; i < 3; i++) meteor(player.x + rnd(-150, 150), player.y + rnd(-150, 150), 1.0 + i * 0.2, 50); this.state = 'idle'; this.st = rest(1.3); this.stun = [0, 0, 2.2, 1.9, 1.6][ph]; toastMsg('The dragon is stunned - hit it!', 1.2); }
       } else if (this.state === 'eruption') {
-        if (this.st <= 0) { const a = toP; for (let i = 1; i <= 8; i++) meteor(this.x + Math.cos(a) * i * 75, this.y + Math.sin(a) * i * 75, 0.5 + i * 0.1, 48); for (let k = -1; k <= 1; k += 2) for (let i = 2; i <= 6; i += 2) meteor(this.x + Math.cos(a + k * 0.5) * i * 75, this.y + Math.sin(a + k * 0.5) * i * 75, 0.7 + i * 0.1, 44); if (ph >= 3) for (let i = 0; i < 6; i++) meteor(player.x + Math.cos(i * 1.047) * 130, player.y + Math.sin(i * 1.047) * 130, 1.0, 44); this.state = 'idle'; this.st = rest(2.4); }
+        if (this.st <= 0) { const a = toP; for (let i = 1; i <= 7; i++) meteor(this.x + Math.cos(a) * i * 75, this.y + Math.sin(a) * i * 75, 0.7 + i * 0.1, 48); for (let k = -1; k <= 1; k += 2) for (let i = 2; i <= 6; i += 2) meteor(this.x + Math.cos(a + k * 0.5) * i * 75, this.y + Math.sin(a + k * 0.5) * i * 75, 0.7 + i * 0.1, 44); if (ph >= 3) for (let i = 0; i < 4; i++) meteor(player.x + Math.cos(i * 1.57) * 130, player.y + Math.sin(i * 1.57) * 130, 1.2, 44); this.state = 'idle'; this.st = rest(2.4); }
       }
       inArena(this);
     };
