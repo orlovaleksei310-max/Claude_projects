@@ -5,7 +5,7 @@
   'use strict';
 
   const W = 960, H = 640, TAU = Math.PI * 2, FONT = '"Courier New", monospace';
-  const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+  const canvas = document.getElementById('game'); let ctx = canvas.getContext('2d'); const mainCtx = ctx;
   const BEST_KEY = 'bossRush.best';
   const S = { TITLE: 0, HUB: 1, FIGHT: 2, UPGRADE: 3, WIN: 4, OVER: 5 };
   const ARENA = { x: W / 2, y: H / 2 + 14, r: 270 };
@@ -1234,7 +1234,7 @@
     // contact damage
     if (boss && !boss.dying && !(boss.air > 0.3) && hitCircle(player, boss, -10)) hurt(1);
     for (const m of minions) if (hitCircle(player, m, -2) && (m.z || 0) < 5) hurt(1);
-    if (state === S.FIGHT && boss && boss.dying) { deadT += dt; if (deadT < 1.8 && Math.random() < 0.6) burst(boss.x + rnd(-40, 40), boss.y + rnd(-40, 40), 4, pick(['#ffd23f', '#ff7a3d', '#fff']), 200); boss.flash = deadT < 1.2 && Math.floor(deadT * 14) % 2 ? 0.05 : 0; if (deadT < 2.2 && Math.random() < 0.3) burst(boss.x + rnd(-30, 30), boss.y + 30, 2, '#cfc6bd', 90); if (deadT > boss.deadEnd) { boss = null; offerUpgrades(); } }
+    if (state === S.FIGHT && boss && boss.dying) { deadT += dt; deathFx(dt); if (deadT < 1.8 && Math.random() < 0.3) burst(boss.x + rnd(-40, 40), boss.y + rnd(-40, 40), 4, pick(['#ffd23f', '#ff7a3d', '#fff']), 200); boss.flash = deadT < 1.2 && Math.floor(deadT * 14) % 2 ? 0.05 : 0; if (deadT < 2.2 && Math.random() < 0.3) burst(boss.x + rnd(-30, 30), boss.y + 30, 2, '#cfc6bd', 90); if (deadT > boss.deadEnd) { boss = null; offerUpgrades(); } }
   }
 
   function updateHub(dt) {
@@ -1372,6 +1372,59 @@
   }
   const fmtTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
 
+  // how each boss dies: [animation, particle colour]
+  const DEATH = [['crumble', '#8a7a6a'], ['swarm', '#2a2236'], ['melt', '#6fd22a'], ['flip', '#6a5a4a'], ['shatter', '#7fe3ff'], ['burn', '#ff7a1a'], ['smoke', '#b07dff'], ['crumble', '#3a2a30'], ['implode', '#ff3d3d'], ['topple', '#ff9a3a'],
+    ['flip', '#9dff3a'], ['melt', '#9dff3a'], ['smoke', '#9dff3a'], ['sink', '#4a7a2a'], ['explode', '#9dff3a'], ['smoke', '#ffe9a8'], ['topple', '#c77dff'], ['deflate', '#fff3e0'], ['ascend', '#c9e8ff'], ['shatter', '#ff9dd2']];
+  let offC = null, offX = null;
+  function deathFx(dt) {
+    const [T, col] = DEATH[fightIdx] || ['topple', '#fff'], t = deadT, b = boss, bx = b.x, by = b.y;
+    const spark = (n, vx, vy, r, life, ox, oy) => { for (let i = 0; i < n; i++) parts.push({ x: bx + rnd(-ox, ox), y: by + rnd(-oy, oy), vx: rnd(-vx, vx), vy: vy + rnd(-vx, vx) * 0.3, life: life * rnd(0.6, 1), max: life, c: col, r: rnd(r * 0.6, r) }); };
+    if (t < 1.9) {
+      if (T === 'crumble') { if (Math.random() < 0.7) spark(2, 90, 60, 7, 0.9, 44, 30); }
+      else if (T === 'swarm') { if (Math.random() < 0.8) for (let i = 0; i < 2; i++) parts.push({ x: bx, y: by, vx: rnd(-230, 230), vy: rnd(-280, -50), life: 1.3, max: 1.3, c: col, r: 4 }); }
+      else if (T === 'melt') { if (Math.random() < 0.7) spark(2, 50, 70, 6, 0.9, 40, 10); }
+      else if (T === 'burn') { if (Math.random() < 0.8) spark(3, 50, -120, 5, 1.0, 40, 30); }
+      else if (T === 'smoke') { if (Math.random() < 0.6) spark(2, 30, -60, 9, 1.2, 30, 30); }
+      else if (T === 'implode') { if (Math.random() < 0.8) { const a = rnd(0, TAU); parts.push({ x: bx + Math.cos(a) * 110, y: by + Math.sin(a) * 110, vx: -Math.cos(a) * 160, vy: -Math.sin(a) * 160, life: 0.6, max: 0.6, c: col, r: 4 }); } }
+      else if (T === 'topple') { if (Math.random() < 0.5) burst(bx + rnd(-40, 40), by + rnd(-30, 30), 6, pick([col, '#ffd23f', '#fff']), 220); if (t > 1.3 && !b.fx1) { b.fx1 = 1; shake = 22; burst(bx, by + 40, 30, '#cfc6bd', 260); } }
+      else if (T === 'sink') { if (Math.random() < 0.8) spark(2, 120, 20, 6, 0.7, 50, 6); }
+      else if (T === 'deflate') { if (Math.random() < 0.6) spark(2, 80, -40, 8, 0.9, 30, 20); }
+      else if (T === 'ascend') { if (Math.random() < 0.9) spark(2, 40, -110, 4, 1.2, 50, 30); }
+      else if (T === 'flip') { if (Math.random() < 0.5) spark(2, 90, 20, 5, 0.7, 40, 30); }
+    }
+    if (T === 'shatter') { if (t < 1.1 && Math.random() < 0.6) spark(2, 140, 0, 4, 0.5, 30, 30); if (t >= 1.1 && !b.fx1) { b.fx1 = 1; shake = 22; burst(bx, by, 70, col, 380); burst(bx, by, 30, '#fff', 300); blip(900, 0.5, 'triangle', 0.08, 0.2); } }
+    if (T === 'explode') { if (t < 1.2 && Math.random() < 0.6) spark(2, 160, 0, 5, 0.4, 40, 40); if (t >= 1.2 && !b.fx1) { b.fx1 = 1; shake = 28; burst(bx, by, 90, col, 420); burst(bx, by, 30, '#fff', 340); for (let i = 0; i < 24; i++) parts.push({ x: bx, y: by, vx: Math.cos(i / 24 * TAU) * 330, vy: Math.sin(i / 24 * TAU) * 330, life: 0.9, max: 0.9, c: '#e8ffa0', r: 5 }); blip(80, 0.6, 'sawtooth', 0.12, 0.4); } }
+    if (T === 'implode' && t >= 1.9 && !b.fx1) { b.fx1 = 1; shake = 14; burst(bx, by, 40, col, 300); }
+    if (T === 'crumble' && t >= 1.9 && !b.fx1) { b.fx1 = 1; shake = 16; burst(bx, by + 20, 30, col, 240); }
+  }
+  function drawDying() {
+    const [T] = DEATH[fightIdx] || ['topple'], t = deadT, u = clamp((t - 0.25) / 1.9, 0, 1), e = u * u, sd = boss.side;
+    let a = 1, sx = 1, sy = 1, rot = 0, dy = 0, dx = 0, clipY = null, vis = true;
+    const fade = (from, to) => 1 - clamp((u - from) / (to - from), 0, 1);
+    if (t < 0.9 && T !== 'sink') { dx = rnd(-3, 3); dy = rnd(-2, 2); }
+    switch (T) {
+      case 'crumble': sy = 1 - 0.65 * e; sx = 1 + 0.2 * e; a = fade(0.65, 1); break;
+      case 'swarm': a = fade(0.1, 0.6); sx = sy = 1 + 0.25 * u; break;
+      case 'melt': sy = 1 - 0.85 * e; sx = 1 + 0.6 * e; a = fade(0.7, 1); break;
+      case 'flip': rot = sd * Math.PI * Math.min(1, u * 1.6); sx = sy = 1 - 0.3 * e; a = fade(0.75, 1); break;
+      case 'shatter': if (t >= 1.1) vis = false; else { dx = rnd(-6, 6); dy = rnd(-6, 6); } break;
+      case 'burn': a = fade(0.1, 1); sy = 1 - 0.3 * u; dy += 15 * u; break;
+      case 'smoke': a = fade(0.1, 0.95); dy -= 55 * u; sx = sy = 1 + 0.35 * u; rot = sd * u * 0.4; break;
+      case 'implode': sx = sy = 1 - 0.95 * e; rot = sd * e * 9; if (t >= 1.9) vis = false; break;
+      case 'topple': rot = sd * e * 1.45; sx = sy = 1 - 0.4 * e; dy += e * 45; break;
+      case 'sink': clipY = boss.y + 38; dy = 110 * e; a = fade(0.8, 1); break;
+      case 'explode': if (t >= 1.2) vis = false; else { sx = sy = 1 + 0.45 * (t / 1.2); dx = rnd(-5, 5); dy = rnd(-5, 5); } break;
+      case 'deflate': sy = 1 - 0.7 * e; sx = 1 + 0.25 * e; rot = sd * 0.25 * e; a = fade(0.8, 1); break;
+      case 'ascend': dy = -110 * e; a = fade(0.2, 1); sx = sy = 1 - 0.25 * e; break;
+    }
+    if (!vis || a <= 0.01) return;
+    const main = mainCtx; let off = null;
+    if (a < 0.99) { if (!offC) { offC = document.createElement('canvas'); offC.width = W; offC.height = H; offX = offC.getContext('2d'); } offX.clearRect(0, 0, W, H); ctx = offX; off = offX; }
+    ctx.save(); if (clipY !== null) { ctx.beginPath(); ctx.rect(0, 0, W, clipY); ctx.clip(); }
+    const py = boss.y + 30; ctx.translate(boss.x + dx, py + dy); ctx.rotate(rot); ctx.scale(sx, sy); ctx.translate(-boss.x, -py); boss.draw(); ctx.restore();
+    ctx.globalAlpha = 1; ctx = main;
+    if (off) { main.globalAlpha = a; main.drawImage(offC, 0, 0); main.globalAlpha = 1; }
+  }
   function wrapText(t, maxW) { const out = []; let cur = ''; for (const w of t.split(' ')) { const nx = cur ? cur + ' ' + w : w; if (ctx.measureText(nx).width > maxW && cur) { out.push(cur); cur = w; } else cur = nx; } if (cur) out.push(cur); return out; }
   function drawSpeech() {
     if (deadT < 1.4 || !boss.line) return; const n = boss.line.length, shown = Math.min(n, Math.floor(Math.max(0, deadT - 1.6) * 38)), bx = 70, bw = W - 140, by = H - 150, bh = 112, col = ['#ffb347', '#ff6a1a', '#9dff3a', '#ff9dd2'][realmOf(fightIdx)];
@@ -1385,7 +1438,7 @@
     drawHazards();
     for (const s of pillars) drawPillar(s);
     for (const m of minions) m.draw();
-    if (boss && boss.dying) { const u = clamp((deadT - 0.25) / 1.9, 0, 1), e = u * u; ctx.save(); if (deadT < 1.0) ctx.translate(rnd(-3, 3), rnd(-3, 3)); ctx.translate(boss.x, boss.y + 30); ctx.rotate(boss.side * e * 1.45); ctx.scale(1 - 0.5 * e, 1 - 0.5 * e); ctx.translate(-boss.x, -(boss.y + 30) + e * 45); boss.draw(); ctx.restore(); }
+    if (boss && boss.dying) drawDying();
     else if (boss) boss.draw();
     drawBullets(); drawPlayer();
     if (introT > 0) { ctx.globalAlpha = clamp(introT, 0, 1); ctx.fillStyle = '#000'; ctx.fillRect(0, H / 2 - 50, W, 100); ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 40px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(boss.name, W / 2, H / 2 + 14); ctx.globalAlpha = 1; }
