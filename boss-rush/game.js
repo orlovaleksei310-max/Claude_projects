@@ -1417,49 +1417,114 @@
   }
 
   function mkZeus() {
-    const b = base('ZEUS', 1600, 58); b.cy = 0; b.ct = 0;
+    // ZEUS: a colossal, stationary storm king. He never walks: his giant hands do the fighting, and an
+    // aegis of lightning pylons shields him until you tear them down.
+    const b = base('ZEUS', 1600, 64); b.x = ARENA.x; b.y = ARENA.y - 160; b.ct = 0; b.cy = 0; b.aegis = false; b.pylons = []; b.stun = 0; b.vt = 0; b.rounds = 0; b.eye = 0;
+    b.hands = [{ x: b.x - 150, y: b.y + 70, hx: b.x - 150, hy: b.y + 70, s: 0 }, { x: b.x + 150, y: b.y + 70, hx: b.x + 150, hy: b.y + 70, s: 0 }];
+    const hand = (o, i) => o.hands[i];
+    const moveHand = (h, x, y, k, dt) => { h.x += (x - h.x) * Math.min(1, k * dt); h.y += (y - h.y) * Math.min(1, k * dt); };
+    const raise = o => {
+      const n = 2 + o.ph, ph = o.ph; o.pylons = []; o.aegis = true; o.stun = 0; o.rounds++;
+      const a0 = rnd(0, TAU);
+      for (let i = 0; i < n; i++) { const a = a0 + i * TAU / n; o.pylons.push({ x: ARENA.x + Math.cos(a) * 185, y: ARENA.y + Math.sin(a) * 185 + 10, r: 22, hp: Math.round(o.max * (0.017 + 0.004 * ph)), max: 0, flash: 0, t: rnd(0, 2), cd: rnd(1.5, 3) }); }
+      for (const p of o.pylons) p.max = p.hp;
+      toastMsg('Zeus raises the Aegis - shatter the pylons!', 2.2); shake = 10; burst(o.x, o.y, 30, GD4, 260);
+    };
+    b.init = false;
     b.update = function (dt) {
       const f = this.hp / this.max, ph = f > 0.66 ? 1 : f > 0.33 ? 2 : 3;
-      if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'Zeus summons the storm!' : 'ZEUS UNLEASHES HIS FULL WRATH!', 2.4); shake = 20; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 40, GD4, 300); this.state = 'idle'; this.st = 1.2; this.bm = false; ring(this.x, this.y, 26, 0, 200, 9, GB()); }
-      this.st -= dt; const toP = angTo(this, player), rest = k => k * [0, 1, 0.75, 0.55][ph];
+      this.y = ARENA.y - 160 + Math.sin(time * 1.3) * 5; this.eye = Math.max(0, this.eye - dt);
+      if (!this.init) { this.init = true; this.ph = 1; this.st = 1.8; raise(this); }
+      if (ph !== this.ph) { this.ph = ph; toastMsg(ph === 2 ? 'Zeus summons the storm!' : 'ZEUS UNLEASHES HIS FULL WRATH!', 2.4); shake = 20; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 40, GD4, 300); this.state = 'idle'; this.st = 1.4; this.bm = false; ring(this.x, this.y, 26, 0, 200, 9, GB()); raise(this); }
+      // pylons: shoot at the player, die when shot
+      for (const p of this.pylons) { p.t += dt; p.flash = Math.max(0, p.flash - dt); if (p.hp <= 0) continue; p.cd -= dt; if (p.cd <= 0 && !this.stun) { p.cd = 3.6 - ph * 0.4 + rnd(0, 1.2); gstrike(player.x + rnd(-40, 40), player.y + rnd(-40, 40), 0.9, 44); ebul(p.x, p.y, Math.atan2(player.y - p.y, player.x - p.x), 150, 8, GB({ c: GD3, life: 4 })); } }
+      if (this.aegis && this.pylons.every(p => p.hp <= 0)) { this.aegis = false; this.stun = 7 + ph; this.state = 'idle'; this.st = 99; this.bm = false; hazards.length = 0; eBul.length = 0; burst(this.x, this.y, 50, '#fff', 300); shake = 16; toastMsg('The Aegis shatters! Zeus is exposed - HIT HIM!', 2); blip(80, 0.6, 'sawtooth', 0.1, 0.4); }
+      if (this.stun > 0) {
+        this.stun -= dt; for (let i = 0; i < 2; i++) moveHand(this.hands[i], this.x + (i ? 120 : -120), this.y + 150, 3, dt);
+        if (this.stun <= 0) { this.st = 1.0; raise(this); }
+        inArena(this); return;
+      }
+      this.st -= dt; const toP = angTo(this, player), rest = k => k * [0, 1, 0.78, 0.6][ph] * (this.aegis ? 1 : 1);
+      const H = this.hands;
       if (this.state === 'idle') {
-        const d = dist(this, player); if (d > 210) toward(this, player.x, player.y, 40 + ph * 18, dt); else if (d < 150) toward(this, player.x, player.y, -50, dt);
-        if (this.st <= 0) { const o = ['bolts', 'chain', 'thunder', 'smite']; if (ph >= 2) o.push('storm', 'judgement', 'eagles', 'bolts'); if (ph === 3) o.push('wrath', 'chain', 'judgement', 'wrath'); let nx = pick(o); if (nx === this.last) nx = pick(o); this.last = nx; this.state = nx; this.n = 0; this.cy = rnd(0, TAU); this.ct = 0; this.st = 0.5;
-          if (nx === 'wrath') this.st = 4.2; else if (nx === 'judgement') { this.st = 1.0; gzone(this.x, this.y, 240, 1.0, 0.2); } else if (nx === 'chain') this.st = 0.6; }
+        for (let i = 0; i < 2; i++) moveHand(H[i], this.x + (i ? 160 : -160) + Math.sin(time * 1.8 + i * 2) * 14, this.y + 80 + Math.cos(time * 2 + i) * 10, 4, dt);
+        if (this.st <= 0) {
+          const o = ['slam', 'slam', 'sweep', 'bolts', 'clap']; if (ph >= 2) o.push('grid', 'gaze', 'storm', 'slam'); if (ph === 3) o.push('tempest', 'grid', 'wrath', 'gaze');
+          let nx = pick(o); if (nx === this.last) nx = pick(o); this.last = nx; this.state = nx; this.n = 0; this.ct = 0; this.st = 0.4; this.cy = rnd(0, TAU); this.hi = Math.random() < 0.5 ? 0 : 1;
+          if (nx === 'clap') this.st = 1.1; else if (nx === 'gaze') this.st = 0.8; else if (nx === 'wrath') this.st = 5.0; else if (nx === 'tempest') this.st = 5.5; else if (nx === 'grid') this.st = 0.5;
+        }
+      } else if (this.state === 'slam') {
+        const h = H[this.n % 2];
+        if (this.ct === 0) { this.tx = clamp(player.x + player.vx * 0.25 || player.x, ARENA.x - 220, ARENA.x + 220); this.ty = player.y; this.ct = 1; gzone(this.tx, this.ty, 78, 0.85, 0.2); this.st = 0.85; }
+        moveHand(h, this.tx, this.ty - (this.st > 0.1 ? 60 : 0), 8, dt);
+        if (this.st <= 0) { gpool(this.tx, this.ty, 50, 2); wave(this.tx, this.ty, 230, 210, { w: 22, c: GD4 }); shake = 12; blip(60, 0.3, 'sawtooth', 0.1); h.x = this.tx; h.y = this.ty; this.n++; this.ct = 0; this.st = 0.3; if (this.n >= 2 + ph) { this.state = 'idle'; this.st = rest(1.6); } }
+      } else if (this.state === 'sweep') {
+        const h = H[this.hi], dir = this.hi ? -1 : 1, y0 = clamp(player.y, ARENA.y - 150, ARENA.y + 180);
+        if (this.n === 0) { this.n = 1; this.sy = y0; this.sx = ARENA.x - dir * 260; for (let i = 0; i <= 10; i++) gstrike(ARENA.x - dir * 250 + dir * i * 50, y0, 0.7 + i * 0.09, 44); if (ph >= 2) for (let i = 0; i <= 10; i++) gstrike(ARENA.x - dir * 250 + dir * i * 50, y0 + (i % 2 ? 60 : -60), 0.9 + i * 0.09, 38); this.st = 2.2; }
+        const prog = clamp((2.2 - this.st - 0.7) / 0.95, 0, 1); moveHand(h, ARENA.x - dir * 250 + dir * 500 * prog, this.sy - 10, 14, dt);
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.5); }
+      } else if (this.state === 'clap') {
+        moveHand(H[0], this.st > 0 ? ARENA.x - 250 : this.x - 30, this.st > 0 ? this.y + 90 : ARENA.y + 20, 9, dt); moveHand(H[1], this.st > 0 ? ARENA.x + 250 : this.x + 30, this.st > 0 ? this.y + 90 : ARENA.y + 20, 9, dt);
+        if (this.st <= 0 && this.n === 0) { this.n = 1; const cy = ARENA.y + 10; wave(ARENA.x - 255, cy, 250, 560, { w: 34, c: GD4 }); wave(ARENA.x + 255, cy, 250, 560, { w: 34, c: GD4 }); if (ph >= 2) { wave(ARENA.x - 255, cy, 250, 560, { w: 28, c: GD2, delay: 0.55 }); wave(ARENA.x + 255, cy, 250, 560, { w: 28, c: GD2, delay: 0.55 }); } shake = 14; blip(65, 0.4, 'sawtooth', 0.1); this.st = 1.3; }
+        else if (this.n === 1 && this.st <= 0) { this.state = 'idle'; this.st = rest(1.5); }
       } else if (this.state === 'bolts') {
-        if (this.st <= 0) { gstrike(player.x + rnd(-30, 30), player.y + rnd(-30, 30), 0.55, 52); this.n++; this.st = 0.28; blip(300, 0.05, 'square', 0.04); if (this.n >= 4 + ph * 2) { this.state = 'idle'; this.st = rest(1.6); } }
-      } else if (this.state === 'chain') {
-        if (this.st <= 0 && !this.bm) { const arms = ph === 3 ? 5 : 4, d = Math.random() < 0.5 ? 1 : -1, a0 = rnd(0, TAU); for (let i = 0; i < arms; i++) addBeam(this.x, this.y, a0 + i * TAU / arms, d * 0.75, 0.7, 3.2, 350); this.bm = true; this.st = 4.0; blip(200, 0.3, 'sawtooth', 0.06); }
-        else if (this.bm && this.st <= 0) { this.bm = false; this.state = 'idle'; this.st = rest(1.3); } else if (this.bm) followBeams(this);
-      } else if (this.state === 'thunder') {
-        if (this.st <= 0) { ring(this.x, this.y, 26, toP + this.n * 0.5, 150, 10, GB({ c: this.n % 2 ? GD2 : GD4 }), 5); this.n++; this.st = 0.55; blip(110, 0.2, 'triangle', 0.06); if (this.n >= 2 + ph) { this.state = 'idle'; this.st = rest(1.4); } }
-      } else if (this.state === 'smite') {
-        if (this.st <= 0) { gstrike(player.x, player.y, 0.6, 70); this.n++; this.st = 0.55; if (this.n >= 3 + (ph >= 2 ? 1 : 0)) { this.state = 'idle'; this.st = rest(1.5); } }
+        if (this.st <= 0) { gstrike(player.x + rnd(-30, 30), player.y + rnd(-30, 30), 0.55, 52); this.n++; this.st = 0.28; this.eye = 0.2; blip(300, 0.05, 'square', 0.04); if (this.n >= 4 + ph * 2) { this.state = 'idle'; this.st = rest(1.6); } }
+      } else if (this.state === 'grid') {
+        // lightning lattice: beams link the arena's anchor points, safe pockets in between
+        if (this.n === 0 && this.st <= 0) { this.n = 1; const R = 215, k = ph === 3 ? 6 : 5, a0 = rnd(0, TAU); const pts = []; for (let i = 0; i < k; i++) pts.push([ARENA.x + Math.cos(a0 + i * TAU / k) * R, ARENA.y + 10 + Math.sin(a0 + i * TAU / k) * R]);
+          for (let i = 0; i < k; i++) { const p = pts[i], q = pts[(i + 2) % k], ang = Math.atan2(q[1] - p[1], q[0] - p[0]); addBeam(p[0], p[1], ang, 0, 1.1, 1.8, Math.hypot(q[0] - p[0], q[1] - p[1])); }
+          this.gp = pts; blip(200, 0.3, 'sawtooth', 0.06); this.st = 3.3; }
+        else if (this.n === 1 && this.st <= 0) { this.gp = null; this.state = 'idle'; this.st = rest(1.6); }
+      } else if (this.state === 'gaze') {
+        moveHand(H[0], this.x - 70, this.y + 100, 5, dt); moveHand(H[1], this.x + 70, this.y + 100, 5, dt); this.eye = 0.2;
+        if (this.st <= 0 && !this.bm) { for (const s of [-1, 1]) addBeam(this.x + s * 16, this.y - 8, Math.PI / 2 + s * 0.5, -s * 0.5 * (ph === 3 ? 1.4 : 1), 0.8, 3.0, 460); this.bm = true; this.st = 3.8; blip(200, 0.3, 'sawtooth', 0.06); }
+        else if (this.bm && this.st <= 0) { this.bm = false; this.state = 'idle'; this.st = rest(1.3); } else if (this.bm) { for (const h of hazards) if (h.k === 'beam') { h.x = this.x + (h.rot < 0 ? 16 : -16); h.y = this.y - 8; } }
       } else if (this.state === 'storm') {
         if (this.st <= 0) { const cnt = 10 + ph * 3; for (let i = 0; i < cnt; i++) { const a = rnd(0, TAU), d = rnd(0, ARENA.r - 50); gstrike(ARENA.x + Math.cos(a) * d, ARENA.y + Math.sin(a) * d, 0.9 + i * 0.09, 50); } gstrike(player.x, player.y, 0.9, 50); this.state = 'idle'; this.st = rest(2.2); }
-      } else if (this.state === 'judgement') {
-        if (this.st <= 0) { wave(this.x, this.y, 240, 460, { w: 30, c: GD4 }); if (ph === 3) wave(this.x, this.y, 240, 460, { w: 26, c: GD2, delay: 0.5 }); for (let i = 0; i < 6; i++) gpool(this.x + Math.cos(i * 1.047) * 170, this.y + Math.sin(i * 1.047) * 170, 36, 3); shake = 16; blip(55, 0.45, 'sawtooth', 0.1, 0.5); this.state = 'idle'; this.st = rest(1.5); }
-      } else if (this.state === 'eagles') {
-        if (this.st <= 0) { for (let i = 0; i < 6; i++) ebul(this.x, this.y, i * TAU / 6 + this.n * 0.5, 125, 10, GB({ c: GD2, home: 1.6, life: 5 })); this.n++; this.st = 0.8; if (this.n >= 2) { this.state = 'idle'; this.st = rest(1.6); } }
+      } else if (this.state === 'tempest') {
+        this.ct -= dt; this.cy += dt * 1.7;
+        if (this.ct <= 0) { this.ct = 0.2; for (let i = 0; i < 5; i++) ebul(this.x, this.y + 30, this.cy + i * TAU / 5, 150, 8, GB({ c: i % 2 ? GD2 : GD3, life: 4.5 })); }
+        this.mt = (this.mt || 0) - dt; if (this.mt <= 0) { this.mt = 1.6; this.hi = (this.hi + 1) % 2; const h = H[this.hi]; gzone(player.x, player.y, 74, 0.85, 0.2); const px = player.x, py = player.y; h.x = px; h.y = py - 40; this.sx = px; this.sy = py; this.slamT = 0.85; }
+        if (this.slamT > 0) { this.slamT -= dt; if (this.slamT <= 0) { gpool(this.sx, this.sy, 48, 2); wave(this.sx, this.sy, 230, 200, { w: 20, c: GD4 }); shake = 8; } }
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.8); }
       } else if (this.state === 'wrath') {
-        toward(this, player.x, player.y, 55, dt); this.ct -= dt; this.cy += dt * 2.6; this.mt = (this.mt || 0) - dt;
-        if (this.ct <= 0) { this.ct = 0.12; for (let i = 0; i < 2; i++) ebul(this.x, this.y, this.cy + i * Math.PI, 205, 8, GB({ c: i ? GD2 : GD4, life: 3 })); }
-        if (this.mt <= 0) { this.mt = 0.4; gstrike(player.x + rnd(-100, 100), player.y + rnd(-100, 100), 0.7, 50); }
-        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.6); }
+        moveHand(H[0], this.x - 90, this.y + 20, 5, dt); moveHand(H[1], this.x + 90, this.y + 20, 5, dt); this.eye = 0.2;
+        this.ct -= dt; this.mt = (this.mt || 0) - dt;
+        if (this.ct <= 0) { this.ct = 0.5; fan(this.x, this.y + 20, toP, 5, 0.38, 210, 8, GB({ c: GD4, life: 3.4 })); }
+        if (this.mt <= 0) { this.mt = 0.38; gstrike(player.x + rnd(-110, 110), player.y + rnd(-110, 110), 0.7, 50); }
+        if (this.st <= 0) { this.state = 'idle'; this.st = rest(1.8); }
       }
       inArena(this);
     };
     b.draw = function () {
-      const x = this.x, y = this.y + Math.sin(time * 2) * 4, f = this.flash > 0, p3 = this.ph === 3;
-      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(this.x, this.y + 78, 84, 16, 0, 0, TAU); ctx.fill();
-      for (let i = 0; i < 6; i++) { const cx = x - 70 + i * 28, cy = y + 56 + Math.sin(time * 1.5 + i) * 4; ctx.fillStyle = f ? '#fff' : (i % 2 ? '#d8dcea' : '#eef0fa'); ctx.beginPath(); ctx.arc(cx, cy, 26, 0, TAU); ctx.fill(); }
-      ctx.fillStyle = f ? '#fff' : '#f4f0e8'; ctx.beginPath(); ctx.moveTo(x - 36, y - 14); ctx.lineTo(x + 36, y - 14); ctx.lineTo(x + 52, y + 62); ctx.lineTo(x - 52, y + 62); ctx.closePath(); ctx.fill(); ctx.fillStyle = f ? '#fff' : GD4; ctx.fillRect(x - 40, y + 10, 80, 7); ctx.fillStyle = f ? '#fff' : '#3a6ab8'; ctx.beginPath(); ctx.moveTo(x - 36, y - 14); ctx.lineTo(x - 8, y - 14); ctx.lineTo(x + 30, y + 62); ctx.lineTo(x - 10, y + 62); ctx.closePath(); ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1;
-      for (const s of [-1, 1]) { ctx.strokeStyle = f ? '#fff' : '#e8c8a0'; ctx.lineWidth = 14; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + s * 34, y - 6); ctx.lineTo(x + s * 62, y - 44); ctx.stroke(); }
-      ctx.strokeStyle = f ? '#fff' : GD2; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x + 62, y - 44); ctx.lineTo(x + 52, y - 66); ctx.lineTo(x + 66, y - 74); ctx.lineTo(x + 54, y - 98); ctx.stroke(); ctx.strokeStyle = GD4; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = f ? '#fff' : '#f0c8a0'; ctx.beginPath(); ctx.arc(x, y - 36, 22, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : '#f4f4fa'; ctx.beginPath(); ctx.arc(x, y - 44, 24, Math.PI * 1.05, Math.PI * 1.95); ctx.fill(); ctx.beginPath(); ctx.moveTo(x - 20, y - 30); ctx.quadraticCurveTo(x - 24, y + 34, x, y + 40); ctx.quadraticCurveTo(x + 24, y + 34, x + 20, y - 30); ctx.quadraticCurveTo(x, y - 18, x - 20, y - 30); ctx.fill();
-      ctx.fillStyle = p3 ? '#ff6a3d' : '#5ab8ff'; ctx.beginPath(); ctx.ellipse(x - 8, y - 38, 4, 2.6, 0, 0, TAU); ctx.ellipse(x + 8, y - 38, 4, 2.6, 0, 0, TAU); ctx.fill(); ctx.strokeStyle = '#8a8a9a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 14, y - 44); ctx.lineTo(x - 3, y - 41); ctx.moveTo(x + 14, y - 44); ctx.lineTo(x + 3, y - 41); ctx.stroke();
-      ctx.strokeStyle = GD4; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y - 52, 26, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); ctx.fillStyle = '#3aa060'; for (let i = 0; i < 7; i++) { const a = Math.PI * 1.1 + i * 0.13; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * 26, y - 52 + Math.sin(a) * 26, 5, 2.6, a + 1.5, 0, TAU); ctx.fill(); }
-      ctx.strokeStyle = p3 ? '#fff' : '#bfe8ff'; ctx.lineWidth = 2; for (let i = 0; i < (p3 ? 7 : 4); i++) { const a = rnd(0, TAU), r0 = 50 + rnd(0, 20); ctx.beginPath(); let px = x + Math.cos(a) * r0, py = y + 6 + Math.sin(a) * r0 * 0.8; ctx.moveTo(px, py); for (let k = 0; k < 4; k++) { px += Math.cos(a) * 12 + rnd(-8, 8); py += Math.sin(a) * 12 + rnd(-8, 8); ctx.lineTo(px, py); } ctx.stroke(); }
+      const x = this.x, y = this.y, f = this.flash > 0, p3 = this.ph === 3, T = time;
+      // storm cloud throne
+      ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x, y + 210, 90, 16, 0, 0, TAU); ctx.fill();
+      for (let i = 0; i < 9; i++) { const cx = x - 120 + i * 30, cy = y + 52 + Math.sin(T * 1.2 + i) * 5 + Math.abs(i - 4) * 4; ctx.fillStyle = f ? '#fff' : (i % 2 ? '#3a4466' : '#4a5580'); ctx.beginPath(); ctx.arc(cx, cy, 34 - Math.abs(i - 4) * 2, 0, TAU); ctx.fill(); }
+      for (let i = 0; i < 7; i++) { const cx = x - 90 + i * 30, cy = y + 28 + Math.sin(T * 1.5 + i * 1.3) * 4; ctx.fillStyle = f ? '#fff' : (i % 2 ? '#56608a' : '#6a76a8'); ctx.beginPath(); ctx.arc(cx, cy, 30, 0, TAU); ctx.fill(); }
+      // aegis halo
+      if (this.aegis) { ctx.strokeStyle = 'rgba(127,208,255,' + (0.45 + Math.sin(T * 6) * 0.15) + ')'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(x, y - 6, 92 + Math.sin(T * 4) * 3, 0, TAU); ctx.stroke(); ctx.fillStyle = 'rgba(127,208,255,.12)'; ctx.fill(); for (const p of this.pylons) if (p.hp > 0) { ctx.strokeStyle = 'rgba(127,208,255,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); let px = x, py = y; for (let k = 1; k <= 6; k++) { px = x + (p.x - x) * k / 6 + rnd(-8, 8); py = y + (p.y - y) * k / 6 + rnd(-8, 8); ctx.lineTo(px, py); } ctx.lineTo(p.x, p.y); ctx.stroke(); } }
+      // robe and shoulders
+      ctx.fillStyle = f ? '#fff' : '#e8e4f4'; ctx.beginPath(); ctx.moveTo(x - 70, y + 40); ctx.quadraticCurveTo(x - 76, y - 26, x - 34, y - 34); ctx.lineTo(x + 34, y - 34); ctx.quadraticCurveTo(x + 76, y - 26, x + 70, y + 40); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#3a6ab8'; ctx.globalAlpha = 0.55; ctx.beginPath(); ctx.moveTo(x - 60, y + 30); ctx.quadraticCurveTo(x - 40, y - 20, x - 10, y - 30); ctx.lineTo(x + 6, y + 40); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.fillStyle = f ? '#fff' : GD4; ctx.beginPath(); ctx.moveTo(x - 66, y + 4); ctx.lineTo(x + 66, y + 4); ctx.lineTo(x + 68, y + 14); ctx.lineTo(x - 68, y + 14); ctx.fill(); ctx.fillStyle = '#7fd0ff'; ctx.beginPath(); ctx.arc(x, y + 9, 7, 0, TAU); ctx.fill();
+      // head: huge bearded face with stern brow
+      ctx.fillStyle = f ? '#fff' : '#f0c8a0'; ctx.beginPath(); ctx.ellipse(x, y - 48, 31, 35, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = f ? '#fff' : '#f6f6ff'; ctx.beginPath(); ctx.ellipse(x, y - 70, 39, 28, 0, Math.PI, TAU); ctx.fill(); for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + s * 34, y - 52, 11, 30, s * 0.15, 0, TAU); ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(x - 29, y - 40); ctx.quadraticCurveTo(x - 36, y + 22, x, y + 38); ctx.quadraticCurveTo(x + 36, y + 22, x + 29, y - 40); ctx.quadraticCurveTo(x, y - 24, x - 29, y - 40); ctx.fill();
+      ctx.strokeStyle = f ? '#fff' : '#d4d4e4'; ctx.lineWidth = 2; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(x + i * 8, y - 18); ctx.quadraticCurveTo(x + i * 10, y + 6, x + i * 6, y + 26); ctx.stroke(); }
+      const eyeC = this.eye > 0 || p3 ? '#ffe9a8' : '#7fd0ff', eg = this.eye > 0 ? 9 : 5; ctx.fillStyle = eyeC; ctx.shadowColor = eyeC; ctx.shadowBlur = 0; ctx.beginPath(); ctx.ellipse(x - 12, y - 52, 8, eg * 0.7, 0, 0, TAU); ctx.ellipse(x + 12, y - 52, 8, eg * 0.7, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#6a6a84'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 24, y - 64); ctx.lineTo(x - 3, y - 54); ctx.moveTo(x + 24, y - 64); ctx.lineTo(x + 3, y - 54); ctx.stroke();
+      // laurel crown + crackling halo
+      ctx.strokeStyle = GD4; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y - 70, 38, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke(); ctx.fillStyle = '#3aa060'; for (let i = 0; i < 9; i++) { const a = Math.PI * 1.07 + i * 0.1; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * 38, y - 70 + Math.sin(a) * 38, 6, 3, a + 1.5, 0, TAU); ctx.fill(); }
+      ctx.strokeStyle = p3 ? '#fff' : '#bfe8ff'; ctx.lineWidth = 2; for (let i = 0; i < (p3 ? 8 : 4); i++) { const a = rnd(Math.PI * 0.9, Math.PI * 2.1), r0 = 52 + rnd(0, 18); ctx.beginPath(); let px = x + Math.cos(a) * r0, py = y - 50 + Math.sin(a) * r0; ctx.moveTo(px, py); for (let k = 0; k < 4; k++) { px += Math.cos(a) * 11 + rnd(-8, 8); py += Math.sin(a) * 11 + rnd(-8, 8); ctx.lineTo(px, py); } ctx.stroke(); }
+      if (this.stun > 0) { ctx.fillStyle = '#fff'; ctx.font = 'bold 22px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('* * *', x, y - 120 + Math.sin(T * 8) * 4); }
+      // lattice anchors
+      if (this.gp) for (const p of this.gp) { ctx.fillStyle = GD4; ctx.beginPath(); ctx.arc(p[0], p[1], 9 + Math.sin(T * 12) * 2, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p[0], p[1], 4, 0, TAU); ctx.fill(); }
+      // pylons
+      for (const p of this.pylons) { if (p.hp <= 0) { ctx.fillStyle = '#2a2a3a'; ctx.beginPath(); ctx.arc(p.x, p.y + 6, 14, 0, TAU); ctx.fill(); continue; } const pf = p.flash > 0; ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + 26, 22, 7, 0, 0, TAU); ctx.fill(); ctx.fillStyle = pf ? '#fff' : '#8a90b0'; ctx.fillRect(p.x - 10, p.y - 6, 20, 32); ctx.fillStyle = pf ? '#fff' : '#b0b6d4'; ctx.beginPath(); ctx.moveTo(p.x - 12, p.y - 6); ctx.lineTo(p.x, p.y - 34); ctx.lineTo(p.x + 12, p.y - 6); ctx.fill(); ctx.fillStyle = GD3; ctx.beginPath(); ctx.arc(p.x, p.y - 38, 8 + Math.sin(p.t * 6) * 2, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y - 38, 3, 0, TAU); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillRect(p.x - 18, p.y + 32, 36, 5); ctx.fillStyle = '#7fd0ff'; ctx.fillRect(p.x - 17, p.y + 33, 34 * p.hp / p.max, 3); }
+      // giant hands
+      for (let i = 0; i < 2; i++) { const h = this.hands[i], s = i ? 1 : -1, fl = f; ctx.save(); ctx.translate(h.x, h.y); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(0, 50, 36, 10, 0, 0, TAU); ctx.fill(); ctx.fillStyle = fl ? '#fff' : '#f0c8a0'; ctx.beginPath(); ctx.ellipse(0, 0, 36, 32, 0, 0, TAU); ctx.fill(); for (let k = -2; k <= 1; k++) { ctx.beginPath(); ctx.ellipse(k * 14 + 7, -28, 7, 15, k * 0.1, 0, TAU); ctx.fill(); } ctx.beginPath(); ctx.ellipse(s * -36, -4, 8, 16, s * 0.6, 0, TAU); ctx.fill(); ctx.strokeStyle = '#d0a070'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 6, 18, 0.2, 2.9); ctx.stroke(); ctx.strokeStyle = GD4; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(0, 30, 26, 0.1, 3.0); ctx.stroke(); ctx.restore(); }
     };
     return b;
   }
@@ -1654,7 +1719,8 @@
       for (const s of pillars) if (Math.hypot(b.x - s.x, b.y - s.y) < s.r + b.r) { b.life = 0; burst(b.x, b.y, 3, '#aaa', 60); }
       if (b.life <= 0) continue;
       for (const m of minions) if (m.hp > 0 && !(b.hits && b.hits.includes(m)) && hitCircle(b, m)) { m.hp -= (b.dmg || player.dmg); m.flash = 0.08; if (b.pierce) b.hits.push(m); else b.life = 0; burst(b.x, b.y, 4, '#fff', 100); if (m.hp <= 0) { burst(m.x, m.y, 10, '#fff', 150); blip(200, 0.1, 'square', 0.04, 0.5); } if (!b.pierce) break; }
-      if (b.life > 0 && boss && !boss.dying && !(b.hits && b.hits.includes(boss)) && !(boss.air > 0.3) && hitCircle(b, boss, -4)) { boss.hp -= (b.dmg || player.dmg) * (boss.stun > 0 ? 1.5 : 1); boss.flash = 0.07; if (b.pierce) b.hits.push(boss); else b.life = 0; burst(b.x, b.y, 3, '#ffd23f', 110); blip(160, 0.05, 'square', 0.03); if (boss.hp <= 0) { boss.hp = 0; if (bossMode) endBossMode(false); else bossDefeated(); } }
+      if (b.life > 0 && boss && boss.pylons) for (const p of boss.pylons) if (p.hp > 0 && !(b.hits && b.hits.includes(p)) && hitCircle(b, p)) { p.hp -= (b.dmg || player.dmg); p.flash = 0.08; if (b.pierce) b.hits.push(p); else b.life = 0; burst(b.x, b.y, 4, '#7fd0ff', 100); blip(300, 0.04, 'square', 0.03); if (p.hp <= 0) { burst(p.x, p.y, 24, '#7fd0ff', 220); blip(120, 0.3, 'sawtooth', 0.08); shake = 8; } if (!b.pierce) break; }
+      if (b.life > 0 && boss && !boss.dying && !(b.hits && b.hits.includes(boss)) && !(boss.air > 0.3) && hitCircle(b, boss, -4)) { boss.hp -= (b.dmg || player.dmg) * (boss.stun > 0 ? 1.5 : 1) * (boss.aegis ? 0.12 : 1); boss.flash = 0.07; if (b.pierce) b.hits.push(boss); else b.life = 0; burst(b.x, b.y, 3, '#ffd23f', 110); blip(160, 0.05, 'square', 0.03); if (boss.hp <= 0) { boss.hp = 0; if (bossMode) endBossMode(false); else bossDefeated(); } }
     }
     pBul = pBul.filter(b => b.life > 0); minions = minions.filter(m => m.hp > 0);
     if (boss) boss.flash = Math.max(0, boss.flash - dt); for (const m of minions) m.flash = Math.max(0, m.flash - dt);
