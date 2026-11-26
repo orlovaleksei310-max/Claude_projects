@@ -1276,6 +1276,61 @@
   const GB = o => Object.assign({ c: GD4 }, o);
   const godLegs = (x, y, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x - 12, y + 34, 8, 12, 0, 0, TAU); ctx.ellipse(x + 12, y + 34, 8, 12, 0, 0, TAU); ctx.fill(); };
 
+  // ---- epic upgrade for the four lesser gods: scaled-up body, glowing aura, and a themed layer behind and in front
+  const glow = (x, y, r, c, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, c.replace('A', a)); g.addColorStop(1, c.replace('A', 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); };
+  const EPIC = {
+    hermes: {
+      s: 1.45,
+      pre(b) {
+        const x = b.x, y = b.y, T = time; (b.tr = b.tr || []).unshift([x, y]); if (b.tr.length > 7) b.tr.pop();
+        if (b.state === 'dash' && b.st > 0) { ctx.strokeStyle = 'rgba(255,230,120,.4)'; ctx.lineWidth = 24; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(b.ca) * 520, y + Math.sin(b.ca) * 520); ctx.stroke(); }
+        for (let i = b.tr.length - 1; i >= 2; i--) { ctx.globalAlpha = 0.28 * (1 - i / 8); ctx.fillStyle = '#fff2b0'; ctx.beginPath(); ctx.ellipse(b.tr[i][0], b.tr[i][1], 26, 34, 0, 0, TAU); ctx.fill(); } ctx.globalAlpha = 1;
+        glow(x, y, 120, 'rgba(255,225,120,A)', 0.55);
+        for (const sd of [-1, 1]) for (let k = 0; k < 6; k++) { const fl = Math.sin(T * 12 + k * 0.5 + (sd > 0 ? 1 : 0)) * 0.12, a = -2.35 + k * 0.28 + fl, L = 80 - k * 4; ctx.save(); ctx.translate(x + sd * 14, y - 4); ctx.scale(sd, 1); ctx.rotate(a + Math.PI * 0); ctx.fillStyle = k % 2 ? '#fff7d0' : '#ffe9a8'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(L * 0.5, -9, L, 0); ctx.quadraticCurveTo(L * 0.5, 8, 0, 0); ctx.fill(); ctx.restore(); }
+      },
+      post(b) { const x = b.x, y = b.y, T = time; for (let i = 0; i < 6; i++) { const a = T * 2.2 + i * TAU / 6, px = x + Math.cos(a) * 62, py = y - 6 + Math.sin(a) * 46; ctx.save(); ctx.translate(px, py); ctx.rotate(a + 1.57); ctx.fillStyle = 'rgba(255,247,208,.9)'; ctx.beginPath(); ctx.ellipse(0, 0, 3.4, 9, 0, 0, TAU); ctx.fill(); ctx.restore(); } glow(x, y - 44, 26, 'rgba(255,240,170,A)', 0.8); }
+    },
+    ares: {
+      s: 1.3,
+      pre(b) {
+        const x = b.x, y = b.y, T = time;
+        if (b.state === 'rush' && b.st > 0) { ctx.strokeStyle = 'rgba(255,90,61,.4)'; ctx.lineWidth = 40; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(b.ca) * 540, y + Math.sin(b.ca) * 540); ctx.stroke(); }
+        glow(x, y, 130, 'rgba(255,70,30,A)', 0.5);
+        for (let i = 0; i < 12; i++) { const a = i * TAU / 12 + T * 0.6, fx = x + Math.cos(a) * 52, fy = y + 14 + Math.sin(a) * 30, h = 26 + Math.sin(T * 9 + i * 2) * 10; ctx.fillStyle = i % 2 ? 'rgba(255,140,40,.7)' : 'rgba(255,60,30,.7)'; ctx.beginPath(); ctx.moveTo(fx - 8, fy); ctx.quadraticCurveTo(fx - 2, fy - h * 0.6, fx + Math.sin(T * 7 + i) * 6, fy - h); ctx.quadraticCurveTo(fx + 2, fy - h * 0.5, fx + 8, fy); ctx.fill(); }
+        ctx.save(); ctx.translate(x, y); ctx.rotate(b.face); ctx.fillStyle = '#7a1420'; ctx.beginPath(); ctx.moveTo(-8, -26); for (let i = 0; i <= 6; i++) ctx.lineTo(-30 - i * 12, -34 + i * 3 + Math.sin(T * 5 + i) * 8); for (let i = 6; i >= 0; i--) ctx.lineTo(-30 - i * 12 + (i === 6 ? 6 : 0), 34 - i * 3 + Math.sin(T * 5 + i + 2) * 8); ctx.lineTo(-8, 26); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#b02a3a'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore();
+      },
+      post(b) { const x = b.x, y = b.y, T = time; ctx.save(); ctx.translate(x, y); ctx.rotate(b.face); for (const sd of [-1, 1]) { ctx.fillStyle = '#e8c050'; ctx.beginPath(); ctx.moveTo(-6, sd * 28); ctx.lineTo(-2, sd * 46); ctx.lineTo(8, sd * 30); ctx.fill(); ctx.fillStyle = '#ff2a2a'; ctx.beginPath(); ctx.arc(12, sd * 4, 2.2, 0, TAU); ctx.fill(); } ctx.fillStyle = '#c8d0e0'; ctx.beginPath(); ctx.moveTo(14, -6); ctx.lineTo(26, 0); ctx.lineTo(14, 6); ctx.fill(); ctx.restore(); for (let i = 0; i < 8; i++) { const u = (T * 0.8 + i * 0.125) % 1; ctx.fillStyle = 'rgba(255,' + (120 + i * 12) + ',40,' + (1 - u) + ')'; ctx.fillRect(x + Math.sin(i * 7 + T) * 50, y + 20 - u * 90, 3, 3); } }
+    },
+    poseidon: {
+      s: 1.35,
+      pre(b) {
+        const x = b.x, y = b.y, T = time; glow(x, y + 10, 140, 'rgba(70,170,255,A)', 0.45);
+        ctx.strokeStyle = 'rgba(160,225,255,.55)'; ctx.lineWidth = 3; for (let r = 0; r < 3; r++) { ctx.beginPath(); ctx.ellipse(x, y + 52, 70 + r * 22 + Math.sin(T * 2 + r) * 4, 17 + r * 5, 0, T * (r % 2 ? -1 : 1) * 0.8, T * (r % 2 ? -1 : 1) * 0.8 + 4.4); ctx.stroke(); }
+        for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + (i - 2) * 0.5, w = Math.sin(T * 3 + i) * 5; ctx.fillStyle = i % 2 ? '#3a96d8' : '#5ab8e8'; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 20, y - 30 + Math.sin(a) * 20); ctx.quadraticCurveTo(x + Math.cos(a) * 70 + w, y - 30 + Math.sin(a) * 70, x + Math.cos(a) * 58 + 16, y - 30 + Math.sin(a) * 58 + 14); ctx.quadraticCurveTo(x + Math.cos(a) * 52, y - 30 + Math.sin(a) * 60, x + Math.cos(a) * 20 + 8, y - 22 + Math.sin(a) * 20); ctx.fill(); }
+      },
+      post(b) { const x = b.x, y = b.y, T = time; for (let i = 0; i < 7; i++) { const a = T * 1.6 + i * TAU / 7, px = x + Math.cos(a) * 78, py = y + 4 + Math.sin(a) * 52; ctx.fillStyle = 'rgba(190,235,255,.75)'; ctx.beginPath(); ctx.arc(px, py, 5 + (i % 3), 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(px - 1.5, py - 1.5, 2, 0, TAU); ctx.fill(); } const tx = x + 62 * 1.35 - 62 * 1.35 * 0 + (62 * 0.35); glow(tx, y - 78, 34, 'rgba(120,220,255,A)', 0.7); }
+    },
+    apollo: {
+      s: 1.35,
+      pre(b) {
+        const x = b.x, y = b.y, T = time;
+        if (b.state === 'chariot' && b.st > 0) { ctx.strokeStyle = 'rgba(255,230,120,.45)'; ctx.lineWidth = 34; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(b.ca) * 540, y + Math.sin(b.ca) * 540); ctx.stroke(); }
+        glow(x, y - 16, 150, 'rgba(255,220,90,A)', 0.6); glow(x, y - 16, 80, 'rgba(255,255,220,A)', 0.55);
+        for (let i = 0; i < 24; i++) { const a = -b.rot * 0.6 + i * TAU / 24, l = 70 + (i % 3) * 26 + Math.sin(T * 4 + i) * 8; ctx.fillStyle = i % 2 ? 'rgba(255,210,63,.55)' : 'rgba(255,245,190,.6)'; ctx.beginPath(); ctx.moveTo(x + Math.cos(a - 0.07) * 54, y - 16 + Math.sin(a - 0.07) * 54); ctx.lineTo(x + Math.cos(a) * (54 + l), y - 16 + Math.sin(a) * (54 + l)); ctx.lineTo(x + Math.cos(a + 0.07) * 54, y - 16 + Math.sin(a + 0.07) * 54); ctx.fill(); }
+        ctx.strokeStyle = 'rgba(255,240,170,.6)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y - 16, 62, 0, TAU); ctx.stroke();
+      },
+      post(b) { const x = b.x, y = b.y, T = time; ctx.strokeStyle = '#3aa060'; ctx.lineWidth = 2; for (let i = 0; i < 10; i++) { const a = Math.PI * 1.1 + i * 0.087; ctx.fillStyle = '#4ac070'; ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * 22, y - 36 + Math.sin(a) * 22 * 1.0, 5, 2.4, a + 1.5, 0, TAU); ctx.fill(); } for (let i = 0; i < 5; i++) { const a = T * 1.8 + i * TAU / 5, px = x + Math.cos(a) * 68, py = y - 12 + Math.sin(a) * 50; ctx.save(); ctx.translate(px, py); ctx.rotate(a + 1.57); ctx.fillStyle = '#fff6c0'; ctx.fillRect(-1, -12, 2, 20); ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(4, -9); ctx.lineTo(-4, -9); ctx.fill(); ctx.restore(); } }
+    }
+  };
+  function epic(b, kind) {
+    const E = EPIC[kind], orig = b.draw;
+    b.draw = function () {
+      E.pre(this); const st = this.st; if (this.state === 'dash' || this.state === 'rush' || this.state === 'chariot') this.st = Math.min(st, 0);
+      ctx.save(); ctx.translate(this.x, this.y); ctx.scale(E.s, E.s); ctx.translate(-this.x, -this.y); orig.call(this); ctx.restore(); this.st = st; E.post(this);
+    };
+    return b;
+  }
+
   function mkHermes() {
     const b = base('HERMES', 520, 30); b.ang = 0; b.ca = 0;
     b.update = function (dt) {
@@ -1305,7 +1360,7 @@
       ctx.fillStyle = f ? '#fff' : '#f0c8a0'; ctx.beginPath(); ctx.arc(x, y - 22, 13, 0, TAU); ctx.fill(); ctx.fillStyle = f ? '#fff' : GD4; ctx.beginPath(); ctx.arc(x, y - 26, 14, Math.PI, 0); ctx.fill(); for (const s of [-1, 1]) { ctx.fillStyle = GD2; ctx.beginPath(); ctx.moveTo(x + s * 12, y - 28); ctx.lineTo(x + s * 30, y - 38 - fl * 3); ctx.lineTo(x + s * 22, y - 26); ctx.fill(); }
       ctx.strokeStyle = '#a0763a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + 30, y + 30); ctx.lineTo(x + 30, y - 30); ctx.stroke(); ctx.strokeStyle = GD4; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + 30, y - 22, 6, 0, TAU); ctx.stroke();
     };
-    return b;
+    return epic(b, 'hermes');
   }
 
   function mkAres() {
@@ -1342,7 +1397,7 @@
       ctx.fillStyle = f ? '#fff' : '#c8c8d8'; ctx.beginPath(); ctx.arc(2, 0, 20, 0, TAU); ctx.fill(); ctx.fillStyle = '#10101a'; ctx.fillRect(8, -4, 12, 8); ctx.fillStyle = '#ff3d3d'; for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.ellipse(-6 - i * 4, -2 + Math.sin(time * 6 + i) * 2, 6, 4, 0, 0, TAU); ctx.fill(); }
       ctx.restore();
     };
-    return b;
+    return epic(b, 'ares');
   }
 
   function mkPoseidon() {
@@ -1377,7 +1432,7 @@
       ctx.fillStyle = GD4; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(x + i * 7 - 3, y - 42); ctx.lineTo(x + i * 7, y - 54 - (2 - Math.abs(i)) * 3); ctx.lineTo(x + i * 7 + 3, y - 42); ctx.fill(); }
       const tx = x + 62; ctx.strokeStyle = '#c8a050'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tx, y + 50); ctx.lineTo(tx, y - 54); ctx.stroke(); ctx.strokeStyle = f ? '#fff' : GD4; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tx - 14, y - 40); ctx.lineTo(tx - 14, y - 64); ctx.moveTo(tx + 14, y - 40); ctx.lineTo(tx + 14, y - 64); ctx.moveTo(tx, y - 54); ctx.lineTo(tx, y - 70); ctx.moveTo(tx - 14, y - 40); ctx.quadraticCurveTo(tx, y - 30, tx + 14, y - 40); ctx.stroke();
     };
-    return b;
+    return epic(b, 'poseidon');
   }
 
   function mkApollo() {
@@ -1413,7 +1468,7 @@
       ctx.fillStyle = '#5a7ab8'; ctx.beginPath(); ctx.arc(x - 5, y - 24, 2, 0, TAU); ctx.arc(x + 5, y - 24, 2, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#a07a2a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x - 36, y + 4, 26, -1.2, 1.2); ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 36 + Math.cos(-1.2) * 26, y + 4 + Math.sin(-1.2) * 26); ctx.lineTo(x - 36 + Math.cos(1.2) * 26, y + 4 + Math.sin(1.2) * 26); ctx.stroke();
     };
-    return b;
+    return epic(b, 'apollo');
   }
 
   function mkZeus() {
