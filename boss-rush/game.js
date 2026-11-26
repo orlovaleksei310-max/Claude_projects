@@ -153,6 +153,8 @@
     { id: 'heal', name: 'Campfire Stew', desc: 'Heal all hearts', apply: p => { p.hp = p.maxHp; } }
   ];
 
+  const maxedStats = () => { const t = { dmg: 1, fireDelay: 0.26, shots: 1, pierce: false }; for (const U of [UPGRADES, UPGRADES2, UPGRADES3, UPGRADES4, UPGRADES5, UPGRADES6]) for (const u of U) if (u.id !== 'heal' && /dmg|fireDelay|shots|pierce/.test(String(u.apply))) { try { u.apply(t); } catch (e) { } } t.fireDelay = Math.max(0.04, t.fireDelay); t.shots = 13; return t; };
+  function toggleMaxedGun() { if (player.maxed) { Object.assign(player, player._gun); player.maxed = false; toastMsg('Maxed out gun off'); } else { player._gun = { dmg: player.dmg, fireDelay: player.fireDelay, shots: player.shots, pierce: player.pierce }; const t = maxedStats(); player.dmg = t.dmg; player.fireDelay = t.fireDelay; player.shots = t.shots; player.pierce = true; player.maxed = true; toastMsg('MAXED OUT GUN equipped - every gun upgrade!'); } }
   const admin = { open: false, ok: false, god: false, infDash: false, freeze: false, onehit: false, speedMul: 1 };
   const UPGRADES2 = [
     { id: 'u_heart', name: 'Phoenix Heart', desc: '+2 max hearts and heal 2', apply: p => { p.maxHp += 2; p.hp = Math.min(p.maxHp, p.hp + 2); } },
@@ -1751,7 +1753,7 @@
     p.fireT -= dt;
     if (aiming && p.fireT <= 0 && !(state === S.FIGHT && boss && boss.dying)) {
       const ul = p.ultra; p.fireT = ul ? 0.035 : p.fireDelay; const n = ul ? Math.max(3, p.shots) : p.shots;
-      for (let i = 0; i < n; i++) { const a = p.face + (n === 1 ? 0 : (i - (n - 1) / 2) * (ul ? 0.09 : 0.16)); pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * (ul ? 900 : 560), vy: Math.sin(a) * (ul ? 900 : 560), r: ul ? 8 : 5, life: 0.9, dmg: admin.onehit ? 99999 : ul ? 30 : p.dmg, pierce: !!ul || !!p.pierce, hits: [], c: ul ? '#7fffd4' : p.pierce ? '#ffb347' : null }); }
+      for (let i = 0; i < n; i++) { const a = p.face + (n === 1 ? 0 : (i - (n - 1) / 2) * (ul ? 0.09 : 0.16)); pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * (ul ? 900 : 560), vy: Math.sin(a) * (ul ? 900 : 560), r: ul ? 8 : 5, life: 0.9, dmg: admin.onehit ? 99999 : ul ? 30 : p.dmg, pierce: !!ul || !!p.pierce, hits: [], c: ul ? '#7fffd4' : p.maxed ? '#ff7ad9' : p.pierce ? '#ffb347' : null }); }
       blip(520 + Math.random() * 60, 0.06, 'square', 0.025, 0.6);
     }
   }
@@ -2121,7 +2123,7 @@
       }
       const sec = t => { const h = document.createElement('h3'); h.textContent = t; card.appendChild(h); const d = document.createElement('div'); d.className = 'grid'; card.appendChild(d); return d; };
       let g = sec('Weapons');
-      g.append(row(player.ultra ? 'Ultra Gun: ON' : 'Get Ultra Gun', () => { player.ultra = !player.ultra; toastMsg(player.ultra ? 'ULTRA GUN equipped' : 'Ultra gun off'); }, player.ultra), row(admin.onehit ? 'One-hit kills: ON' : 'One-hit kills', () => { admin.onehit = !admin.onehit; }, admin.onehit));
+      g.append(row(player.maxed ? 'Maxed Out Gun: ON' : 'Maxed Out Gun', toggleMaxedGun, player.maxed), row(player.ultra ? 'Ultra Gun: ON' : 'Get Ultra Gun', () => { player.ultra = !player.ultra; toastMsg(player.ultra ? 'ULTRA GUN equipped' : 'Ultra gun off'); }, player.ultra), row(admin.onehit ? 'One-hit kills: ON' : 'One-hit kills', () => { admin.onehit = !admin.onehit; }, admin.onehit));
       g = sec('Free upgrades');
       for (const u of UPGRADES) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
       g = sec('Free underworld upgrades');
