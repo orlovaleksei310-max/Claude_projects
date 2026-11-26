@@ -7,7 +7,7 @@
   const W = 960, H = 640, TAU = Math.PI * 2, FONT = '"Courier New", monospace';
   const canvas = document.getElementById('game'); let ctx = canvas.getContext('2d'); const mainCtx = ctx;
   const BEST_KEY = 'bossRush.best';
-  const S = { TITLE: 0, HUB: 1, FIGHT: 2, UPGRADE: 3, WIN: 4, OVER: 5 };
+  const S = { TITLE: 0, HUB: 1, FIGHT: 2, UPGRADE: 3, WIN: 4, OVER: 5, STORY: 6 };
   const ARENA = { x: W / 2, y: H / 2 + 14, r: 270 };
   const HUB_BOX = { x1: 70, y1: 150, x2: 890, y2: 560 };
   const rnd = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
@@ -130,6 +130,7 @@
   }
   function wantTrack() {
     if (state === S.TITLE) return 'title';
+    if (state === S.STORY) return storyI < 2 ? 'hub5' : 'boss29';
     if (state === S.HUB) return 'hub' + hubRealm();
     if (state === S.UPGRADE) return 'hub' + realmOf(fightIdx);
     if (state === S.WIN) return 'win';
@@ -1670,7 +1671,7 @@
   function pickSlot(i, erase) {
     if (erase) { if (eraseArm === i) { slots[i] = null; writeSlots(); eraseArm = -1; } else eraseArm = i; return; }
     eraseArm = -1; slot = i; const sv = slots[i];
-    if (sv && sv.idx < BOSSES.length) { bossMode = false; player = Object.assign(newPlayer(), sv.p); bossIdx = sv.idx; runTime = sv.t || 0; resetWorld(); enterHub(false); } else newRun();
+    if (sv && sv.idx < BOSSES.length) { bossMode = false; player = Object.assign(newPlayer(), sv.p); bossIdx = sv.idx; runTime = sv.t || 0; resetWorld(); enterHub(false); } else startStory();
   }
   function toTitle(clearSlot) { if (clearSlot && slot >= 0) { slots[slot] = null; writeSlots(); } bossMode = false; slot = -1; eraseArm = -1; boss = null; resetWorld(); player = newPlayer(); state = S.TITLE; }
   function newRun() { bossMode = false; player = newPlayer(); bossIdx = 0; runTime = 0; resetWorld(); enterHub(true); }
@@ -1830,6 +1831,7 @@
     if (state === S.HUB) updateHub(dt);
     else if (state === S.FIGHT) updateFight(dt);
     else if (state === S.OVER) deadT += dt;
+    else if (state === S.STORY) { storyT += dt; if (storyT >= STORY[storyI].d) nextStory(); }
     else if (state === S.UPGRADE) { player.inv = 99; }
   }
 
@@ -2046,7 +2048,95 @@
 
   const darkC = document.createElement('canvas'); darkC.width = W; darkC.height = H; const dark = darkC.getContext('2d');
 
+  // ------------------------------------------------------------------ intro cutscene (plays when you start a new game)
+  const STORY = [
+    { d: 7, t: 'Long ago, the realms lived in peace beneath the watch of the gods.' },
+    { d: 7, t: 'But Zeus, king of the gods, grew hungry for power. He wanted every realm for himself.' },
+    { d: 7, t: 'He hurled down his thunder, and the world began to burn.' },
+    { d: 9, t: 'One by one the realms fell: the Caves, the Underworld, the Acid Swamps, Dreamland, the Shadow Realm.' },
+    { d: 7, t: 'He set mighty guardians to hold every realm. Thirty monsters, all sworn to him.' },
+    { d: 7, t: 'Heroes rose to stop him. Every one of them fell.' },
+    { d: 7, t: 'Now only you remain. You are the last hope of the world.' },
+    { d: 9, t: 'Fight through every realm. Climb to the Land of the Gods. Find Zeus, and defeat him.' },
+    { d: 6, t: 'The final battle awaits.' }
+  ];
+  let storyI = 0, storyT = 0, storyZ = null;
+  function startStory() { state = S.STORY; storyI = 0; storyT = 0; storyZ = mkZeus(); storyZ.ph = 3; }
+  function nextStory() { storyI++; storyT = 0; if (storyI >= STORY.length) newRun(); }
+  function drawStory() {
+    const sc = STORY[storyI], t = storyT, u = clamp(t / sc.d, 0, 1), i = storyI, T = time;
+    ctx.save(); ctx.clearRect(0, 0, W, H);
+    const sky = (a, b) => { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, a); g.addColorStop(1, b); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
+    const stars = (n, al) => { ctx.fillStyle = 'rgba(255,255,255,' + al + ')'; for (let k = 0; k < n; k++) ctx.fillRect((Math.sin(k * 91.7) * 0.5 + 0.5) * W, (Math.sin(k * 47.3 + 2) * 0.5 + 0.5) * H * 0.6, 2, 2); };
+    const cloud = (x, y, s, c) => { ctx.fillStyle = c; for (const [dx, dy, r] of [[0, 0, 30], [34, -10, 38], [72, 0, 30], [36, 10, 32]]) { ctx.beginPath(); ctx.arc(x + dx * s, y + dy * s, r * s, 0, TAU); ctx.fill(); } };
+    const bolt = (x, y0, y1, seed) => { ctx.lineJoin = 'round'; ctx.beginPath(); let px = x, py = y0, k = 0; ctx.moveTo(px, py); while (py < y1) { py += 24 + ((seed * 7 + k * 13) % 17); px += Math.sin(seed * 3.1 + k * 2.3) * 28; ctx.lineTo(px, py); k++; } ctx.strokeStyle = 'rgba(255,230,120,.55)'; ctx.lineWidth = 12; ctx.stroke(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke(); };
+    const zeus = (cx, cy, k, al) => { ctx.save(); ctx.globalAlpha = al || 1; ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-storyZ.x, -storyZ.y); storyZ.draw(); ctx.restore(); };
+    const flame = (x, y, s) => { for (let k = 0; k < 3; k++) { const h = (26 + Math.sin(T * 9 + x + k * 2) * 9) * s; ctx.fillStyle = k === 0 ? 'rgba(255,70,30,.9)' : k === 1 ? 'rgba(255,150,40,.9)' : 'rgba(255,230,120,.9)'; ctx.beginPath(); ctx.moveTo(x - (10 - k * 3) * s, y); ctx.quadraticCurveTo(x - 4 * s, y - h * 0.6, x + Math.sin(T * 6 + x) * 4, y - h * (1 - k * 0.22)); ctx.quadraticCurveTo(x + 4 * s, y - h * 0.5, x + (10 - k * 3) * s, y); ctx.fill(); } };
+    const house = (x, y, s, c) => { ctx.fillStyle = c; ctx.fillRect(x - 18 * s, y - 20 * s, 36 * s, 20 * s); ctx.beginPath(); ctx.moveTo(x - 24 * s, y - 20 * s); ctx.lineTo(x, y - 40 * s); ctx.lineTo(x + 24 * s, y - 20 * s); ctx.fill(); };
+    const hero = (x, y, s, r) => { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.rotate((1 - r) * -1.5); ctx.fillStyle = '#1d3f86'; ctx.beginPath(); ctx.moveTo(-14, -26); ctx.lineTo(14, -26); ctx.lineTo(20, 0); ctx.lineTo(-20, 0); ctx.fill(); ctx.fillStyle = '#2a5fb8'; ctx.beginPath(); ctx.ellipse(0, -22, 12, 14, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#f0c8a0'; ctx.beginPath(); ctx.arc(0, -42, 11, 0, TAU); ctx.fill(); ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(0, -46, 11, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#1b1b2a'; ctx.fillRect(-5, -42, 3, 3); ctx.fillRect(3, -42, 3, 3); ctx.restore(); };
+    ctx.save(); const zm = 1 + u * 0.05; ctx.translate(W / 2, H / 2); ctx.scale(zm, zm); ctx.translate(-W / 2, -H / 2);
+    if (i === 0) {
+      sky('#6ec6ff', '#ffeab0'); const sx = 760, sy = 130; ctx.fillStyle = 'rgba(255,240,150,.35)'; ctx.beginPath(); ctx.arc(sx, sy, 90, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(sx, sy, 52, 0, TAU); ctx.fill();
+      for (let k = 0; k < 3; k++) cloud(((T * 14 + k * 340) % 1200) - 150, 90 + k * 70, 1.1 - k * 0.2, 'rgba(255,255,255,.85)');
+      ctx.fillStyle = '#9aa8c0'; ctx.beginPath(); ctx.moveTo(250, 430); ctx.lineTo(480, 150); ctx.lineTo(710, 430); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(430, 205); ctx.lineTo(480, 150); ctx.lineTo(530, 205); ctx.lineTo(500, 195); ctx.lineTo(480, 215); ctx.lineTo(460, 195); ctx.fill();
+      ctx.fillStyle = '#f4f0e0'; ctx.fillRect(448, 126, 64, 6); for (let k = 0; k < 5; k++) ctx.fillRect(452 + k * 13, 108, 5, 18); ctx.beginPath(); ctx.moveTo(444, 108); ctx.lineTo(480, 92); ctx.lineTo(516, 108); ctx.fill();
+      ctx.fillStyle = '#5fae4a'; ctx.beginPath(); ctx.moveTo(0, 470); ctx.quadraticCurveTo(250, 380, 520, 460); ctx.quadraticCurveTo(780, 400, 960, 450); ctx.lineTo(960, 640); ctx.lineTo(0, 640); ctx.fill(); ctx.fillStyle = '#4a9a3c'; ctx.beginPath(); ctx.moveTo(0, 540); ctx.quadraticCurveTo(300, 470, 600, 540); ctx.quadraticCurveTo(800, 570, 960, 520); ctx.lineTo(960, 640); ctx.lineTo(0, 640); ctx.fill();
+      for (const [x, y, s] of [[160, 520, 1], [250, 540, 1.2], [700, 510, 1], [800, 535, 1.3], [880, 505, 0.9]]) house(x, y, s, '#e8d8b0'), ctx.fillStyle = '#c0452c', ctx.beginPath(), ctx.moveTo(x - 26 * s, y - 20 * s), ctx.lineTo(x, y - 42 * s), ctx.lineTo(x + 26 * s, y - 20 * s), ctx.fill();
+      ctx.strokeStyle = '#2a3a4a'; ctx.lineWidth = 2; for (let k = 0; k < 4; k++) { const bx = ((T * 60 + k * 260) % 1100) - 100, by = 200 + k * 30 + Math.sin(T * 3 + k) * 10, w = Math.sin(T * 10 + k) * 5; ctx.beginPath(); ctx.moveTo(bx - 10, by + w); ctx.lineTo(bx, by); ctx.lineTo(bx + 10, by + w); ctx.stroke(); }
+    } else if (i === 1) {
+      sky('#6ec6ff', '#ffeab0'); ctx.fillStyle = 'rgba(30,6,50,' + (0.15 + u * 0.75) + ')'; ctx.fillRect(0, 0, W, H); stars(40, u * 0.8);
+      for (let k = 0; k < 6; k++) cloud(k * 190 - 60 + Math.sin(T * 0.5 + k) * 20, 470 - u * 40 + (k % 2) * 40, 1.7, 'rgba(70,60,110,' + (0.5 + u * 0.4) + ')');
+      glowRing(480, 290, 190 + u * 30, 'rgba(160,100,255,A)', 0.25 + u * 0.35); zeus(480, 300, 1.45 + u * 0.25, Math.min(1, t / 1.4));
+      if (u > 0.5 && Math.sin(T * 7) > 0.8) { ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(0, 0, W, H); }
+    } else if (i === 2) {
+      sky('#0d0618', '#3a0f2a'); for (let k = 0; k < 7; k++) cloud(k * 170 - 80 + Math.sin(T * 0.4 + k) * 24, 60 + (k % 3) * 40, 1.8, 'rgba(30,20,50,.95)'); zeus(480, 190, 1.2, 0.5);
+      ctx.fillStyle = '#0a0610'; ctx.fillRect(0, 520, W, 120); for (let k = 0; k < 9; k++) { const x = 60 + k * 105, s = 1 + (k % 3) * 0.3; house(x, 540, s, '#150c18'); if ((k * 5 + 3) % 4 !== 0) { flame(x - 6 * s, 516 * 1, s * 1.1); flame(x + 8 * s, 530, s * 0.9); } }
+      const ph = (t * 1.1) % 1; if (ph < 0.3) { const sd = Math.floor(t * 1.1); bolt(120 + ((sd * 217) % 720), 80, 520, sd + 1); ctx.fillStyle = 'rgba(255,255,255,' + (0.3 - ph) * 0.7 + ')'; ctx.fillRect(0, 0, W, H); }
+    } else if (i === 3) {
+      sky('#07050d', '#1a1020'); stars(60, 0.7); zeus(480, 120, 1.0, 0.45);
+      const R = [['CAVES', '#c8b090'], ['UNDERWORLD', '#ff6a1a'], ['ACID', '#9dff3a'], ['DREAMLAND', '#c77dff'], ['SHADOW', '#6a6ab0'], ['GODS', '#ffd23f']];
+      for (let k = 0; k < 6; k++) { const x = 100 + k * 152, y = 400 + Math.sin(k * 1.1) * 40, tt = t - (0.9 + k * 1.2), fallen = tt > 0, c = R[k][1];
+        glowRing(x, y, 80, fallen ? 'rgba(120,20,30,A)' : c.length === 7 ? hexA(c) : 'rgba(255,255,255,A)', fallen ? 0.35 : 0.6);
+        ctx.fillStyle = fallen ? '#2a2630' : c; ctx.beginPath(); ctx.arc(x, y, 44, 0, TAU); ctx.fill(); if (!fallen) { ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.arc(x + 12, y + 10, 34, 0, TAU); ctx.fill(); }
+        if (fallen) { ctx.strokeStyle = '#8a1a2a'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(x - 30, y - 30); ctx.lineTo(x + 30, y + 30); ctx.moveTo(x + 30, y - 30); ctx.lineTo(x - 30, y + 30); ctx.stroke(); ctx.strokeStyle = '#555'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 50, 0, TAU); ctx.stroke(); }
+        if (tt > 0 && tt < 0.35) { bolt(x, 0, y, k + 4); ctx.fillStyle = 'rgba(255,255,255,' + (0.35 - tt) + ')'; ctx.fillRect(0, 0, W, H); }
+        ctx.fillStyle = fallen ? '#7a6a78' : '#fff'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(R[k][0], x, y + 72); }
+    } else if (i === 4) {
+      sky('#1a0508', '#5a1418'); stars(25, 0.4); zeus(480, 230, 1.75, 0.9); const cnt = Math.floor(clamp(t / 4.5, 0, 1) * 30);
+      for (let k = 0; k < cnt; k++) { const row = Math.floor(k / 10), col = k % 10, x = 78 + col * 89 + (row % 2) * 30, y = 440 + row * 62, s = 0.8 + row * 0.18, c = ['#7fe3ff', '#ff6a1a', '#9dff3a', '#c77dff', '#ff2d55', '#ffd23f'][Math.floor(k / 5)]; ctx.fillStyle = '#050308'; ctx.beginPath(); ctx.ellipse(x, y, 24 * s, 30 * s, 0, 0, TAU); ctx.fill(); ctx.fillStyle = c; ctx.fillRect(x - 11 * s, y - 8 * s, 7 * s, 5 * s); ctx.fillRect(x + 4 * s, y - 8 * s, 7 * s, 5 * s); }
+    } else if (i === 5) {
+      sky('#2a0a14', '#7a2418'); ctx.fillStyle = '#120808'; ctx.beginPath(); ctx.moveTo(0, 500); ctx.quadraticCurveTo(480, 440, 960, 500); ctx.lineTo(960, 640); ctx.lineTo(0, 640); ctx.fill();
+      for (let k = 0; k < 9; k++) { const x = 70 + k * 98, y = 520 + Math.sin(k * 2.1) * 14, a = Math.sin(k * 3.7) * 0.35; ctx.save(); ctx.translate(x, y); ctx.rotate(a); if (k % 3 === 0) { ctx.fillStyle = '#8a6a3a'; ctx.beginPath(); ctx.arc(0, -40, 26, 0, TAU); ctx.fill(); ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 3; ctx.stroke(); } else { ctx.fillStyle = '#c8ccd8'; ctx.beginPath(); ctx.moveTo(0, -92); ctx.lineTo(7, -20); ctx.lineTo(-7, -20); ctx.fill(); ctx.fillStyle = '#7a5a2a'; ctx.fillRect(-16, -22, 32, 6); ctx.fillRect(-3, -16, 6, 30); } ctx.restore(); }
+      for (let k = 0; k < 14; k++) { const v = (T * 0.25 + k * 0.071) % 1; ctx.fillStyle = 'rgba(60,40,40,' + (0.5 - v * 0.5) + ')'; ctx.beginPath(); ctx.arc(60 + k * 66 + Math.sin(T + k) * 14, 500 - v * 300, 18 + v * 30, 0, TAU); ctx.fill(); }
+      ctx.save(); ctx.translate(480, 160); ctx.rotate(Math.sin(T * 1.2) * 0.04); ctx.fillStyle = '#8a1a2a'; ctx.beginPath(); ctx.moveTo(-34, 0); ctx.lineTo(34, 0); ctx.lineTo(34, 120); ctx.lineTo(10, 100); ctx.lineTo(-6, 130); ctx.lineTo(-34, 105); ctx.fill(); ctx.fillStyle = '#c8b0a0'; ctx.fillRect(-4, -20, 8, 24); ctx.restore();
+    } else if (i === 6) {
+      ctx.fillStyle = '#05050a'; ctx.fillRect(0, 0, W, H); const fl = 0.8 + Math.sin(T * 11) * 0.1 + Math.sin(T * 7) * 0.08; glowRing(160, 300, 260 * fl, 'rgba(255,150,50,A)', 0.55); glowRing(480, 430, 220, 'rgba(120,160,255,A)', 0.18 + u * 0.3);
+      ctx.fillStyle = '#16131a'; ctx.beginPath(); ctx.moveTo(0, 470); ctx.lineTo(960, 470); ctx.lineTo(960, 640); ctx.lineTo(0, 640); ctx.fill(); ctx.fillStyle = '#2a2230'; for (let k = 0; k < 12; k++) { ctx.beginPath(); ctx.moveTo(k * 90, 0); ctx.lineTo(k * 90 + 40, 70 + (k % 3) * 40); ctx.lineTo(k * 90 + 80, 0); ctx.fill(); }
+      ctx.fillStyle = '#6a4a2a'; ctx.fillRect(154, 320, 12, 100); flame(160, 322, 1.5); hero(480, 490, 2.4, clamp((t - 1) / 3.5, 0, 1));
+      if (t > 4.5) { ctx.fillStyle = 'rgba(255,255,255,' + clamp((t - 4.5) / 2, 0, 0.5) + ')'; ctx.fillRect(0, 0, W, 6); }
+    } else if (i === 7) {
+      sky('#0a0a1c', '#3a2a40'); stars(50, 0.8); const P = [[90, 490], [270, 450], [140, 380], [380, 350], [250, 250], [520, 215]], C = ['#c8b090', '#ff6a1a', '#9dff3a', '#c77dff', '#6a6ab0', '#ffd23f'];
+      ctx.strokeStyle = 'rgba(255,230,160,.35)'; ctx.lineWidth = 8; ctx.setLineDash([14, 10]); ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); for (let k = 1; k < 6; k++) ctx.lineTo(P[k][0], P[k][1]); ctx.lineTo(720, 150); ctx.stroke(); ctx.setLineDash([]);
+      const prog = clamp(t / 7, 0, 1) * 5.5; for (let k = 0; k < 6; k++) { const on = prog >= k - 0.05; glowRing(P[k][0], P[k][1], on ? 70 : 40, hexA(C[k]), on ? 0.6 : 0.15); ctx.strokeStyle = on ? C[k] : '#444'; ctx.lineWidth = 6; ctx.beginPath(); ctx.ellipse(P[k][0], P[k][1], 22, 32, 0, 0, TAU); ctx.stroke(); }
+      ctx.fillStyle = '#f4f0e0'; ctx.fillRect(690, 90, 60, 60); ctx.beginPath(); ctx.moveTo(682, 90); ctx.lineTo(720, 62); ctx.lineTo(758, 90); ctx.fill(); glowRing(720, 100, 120, 'rgba(255,210,63,A)', 0.4 + Math.sin(T * 3) * 0.1); if (prog > 5) { ctx.fillStyle = '#7fd0ff'; ctx.fillRect(708, 100, 8, 5); ctx.fillRect(724, 100, 8, 5); }
+      const k0 = Math.min(4, Math.floor(prog)), f = prog - k0, Q = k0 < 5 ? [P[k0][0] + (P[k0 + 1][0] - P[k0][0]) * f, P[k0][1] + (P[k0 + 1][1] - P[k0][1]) * f] : P[5]; hero(Q[0], Q[1] + 16, 0.9, 1);
+    } else {
+      sky('#000', '#120820'); const gl = Math.sin(T * 8) > 0.85; zeus(480, 300, 2.1 + u * 0.2, 1); if (gl) { ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(0, 0, W, H); } if (Math.sin(T * 3) > 0.7) bolt(100 + (Math.floor(T * 3) * 233) % 760, 0, 500, Math.floor(T * 3));
+      if (t > 1.6) { ctx.globalAlpha = clamp((t - 1.6) / 1.2, 0, 1); ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 76px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('BOSS RUSH', W / 2, 150); ctx.globalAlpha = 1; }
+    }
+    ctx.restore();
+    // caption
+    ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(0, 528, W, 112); const n = Math.floor(clamp((t - 0.5) * 34, 0, sc.t.length)), txt = sc.t.slice(0, n); ctx.font = 'bold 21px ' + FONT; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe9c0';
+    const words = txt.split(' '), lines = []; let cur = ''; for (const w of words) { if (ctx.measureText(cur + ' ' + w).width > 840 && cur) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; } lines.push(cur); lines.forEach((l, k) => ctx.fillText(l, W / 2, 568 + k * 28));
+    ctx.font = '13px ' + FONT; ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.textAlign = 'right'; ctx.fillText('Space / click: next    Esc: skip story', W - 16, 24); ctx.textAlign = 'left'; for (let k = 0; k < STORY.length; k++) { ctx.fillStyle = k <= i ? '#ffd23f' : 'rgba(255,255,255,.25)'; ctx.fillRect(16 + k * 18, 16, 12, 5); }
+    const fade = Math.max(1 - t / 0.6, (t - (sc.d - 0.6)) / 0.6, 0); if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + clamp(fade, 0, 1) + ')'; ctx.fillRect(0, 0, W, H); }
+    ctx.restore();
+  }
+  function glowRing(x, y, r, c, a) { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, c.replace('A', a)); g.addColorStop(1, c.replace('A', 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+  function hexA(h) { const n = parseInt(h.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',A)'; }
+
   function draw() {
+    if (state === S.STORY) { drawStory(); return; }
     ctx.save(); ctx.clearRect(0, 0, W, H);
     if (shake > 0) ctx.translate(rnd(-shake, shake) * 0.4, rnd(-shake, shake) * 0.4);
     if (state === S.TITLE) {
@@ -2081,6 +2171,7 @@
   canvas.addEventListener('mousemove', e => { const p = toCanvas(e); mouse.x = p.x; mouse.y = p.y; });
   canvas.addEventListener('mousedown', e => {
     const p = toCanvas(e); mouse.x = p.x; mouse.y = p.y; mouse.down = true; blip(1, 0.01, 'sine', 0.0001);
+    if (state === S.STORY) { nextStory(); return; }
     if (state === S.TITLE) { for (let i = 0; i < 3; i++) if (p.x > SLOT_X + i * 240 && p.x < SLOT_X + i * 240 + 220 && p.y > SLOT_Y && p.y < SLOT_Y + 120) pickSlot(i, e.shiftKey); return; }
     if (state === S.UPGRADE) offered.forEach((u, i) => { const x = 140 + i * 260; if (p.x > x && p.x < x + 220 && p.y > 320 && p.y < 490) chooseUpgrade(i); });
     if (state === S.WIN) toTitle(true);
@@ -2091,6 +2182,7 @@
   window.addEventListener('keydown', e => {
     if (e.target && e.target.tagName === 'INPUT') return;
     if (admin.open) return;
+    if (state === S.STORY) { if (e.code === 'Escape' || e.code === 'KeyS') newRun(); else if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowRight') { nextStory(); e.preventDefault(); } return; }
     if ((e.code === 'Space' || e.code === 'Enter') && state === S.FIGHT && boss && boss.dying && deadT > 1.7) { const full = 1.6 + boss.line.length / 38; deadT = deadT < full ? full : Math.max(deadT, boss.deadEnd); }
     keys.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
