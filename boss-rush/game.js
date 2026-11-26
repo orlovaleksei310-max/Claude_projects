@@ -130,7 +130,7 @@
   }
   function wantTrack() {
     if (state === S.TITLE) return 'title';
-    if (state === S.STORY) return storyI < 2 ? 'hub5' : 'boss29';
+    if (state === S.STORY) return storyEnd ? 'win' : storyI < 2 ? 'hub5' : 'boss29';
     if (state === S.HUB) return 'hub' + hubRealm();
     if (state === S.UPGRADE) return 'hub' + realmOf(fightIdx);
     if (state === S.WIN) return 'win';
@@ -1730,7 +1730,7 @@
     eBul.length = 0; hazards.length = 0; for (const m of minions) burst(m.x, m.y, 8, '#fff', 120); minions.length = 0;
     bossIdx++; saveBest(bossIdx); boss.dead = true; deadT = 0; state = S.FIGHT; boss.dying = true; boss.air = 0; boss.line = DEFEAT_LINES[fightIdx] || 'The boss has been defeated.'; boss.deadEnd = 1.6 + boss.line.length / 38 + 2.2; boss.side = Math.random() < 0.5 ? -1 : 1; fanfare(); blip(420, 1.8, 'sawtooth', 0.08, 0.12);
   }
-  function offerUpgrades() { const pool = (bossIdx >= 26 ? UPGRADES6 : bossIdx >= 21 ? UPGRADES5 : bossIdx >= 16 ? UPGRADES4 : bossIdx >= 11 ? UPGRADES3 : bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
+  function offerUpgrades() { if (bossIdx >= BOSSES.length) { startStory(true); return; } const pool = (bossIdx >= 26 ? UPGRADES6 : bossIdx >= 21 ? UPGRADES5 : bossIdx >= 16 ? UPGRADES4 : bossIdx >= 11 ? UPGRADES3 : bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
   function chooseUpgrade(i) { const u = offered[i]; if (!u) return; u.apply(player); blip(660, 0.15, 'square', 0.06); blip(990, 0.2, 'square', 0.05); if (bossIdx >= BOSSES.length) { state = S.WIN; saveBest(bossIdx); } else enterHub(false); }
 
   // ------------------------------------------------------------------ update
@@ -2049,7 +2049,7 @@
   const darkC = document.createElement('canvas'); darkC.width = W; darkC.height = H; const dark = darkC.getContext('2d');
 
   // ------------------------------------------------------------------ intro cutscene (plays when you start a new game)
-  const STORY = [
+  const STORY_INTRO = [
     { d: 7, t: 'Long ago, the realms lived in peace beneath the watch of the gods.' },
     { d: 7, t: 'But Zeus, king of the gods, grew hungry for power. He wanted every realm for himself.' },
     { d: 7, t: 'He hurled down his thunder, and the world began to burn.' },
@@ -2060,11 +2060,21 @@
     { d: 9, t: 'Fight through every realm. Climb to the Land of the Gods. Find Zeus, and defeat him.' },
     { d: 6, t: 'The final battle awaits.' }
   ];
+  const STORY_END = [
+    { d: 8, t: 'With one last blow, the thunder king fell, and his storm fell silent.' },
+    { d: 8, t: 'His power shattered, and the dark clouds that smothered the world began to part.' },
+    { d: 9, t: 'One by one the realms were freed: the Caves, the Underworld, the Acid Swamps, Dreamland, the Shadow Realm and the Land of the Gods.' },
+    { d: 7, t: 'The fires went out. The villages were rebuilt, and the people cheered.' },
+    { d: 7, t: 'And they all knew whose courage had saved them.' },
+    { d: 7, t: 'The legend of the last hero will be told forever.' }
+  ];
+  let STORY = STORY_INTRO, storyEnd = false;
   let storyI = 0, storyT = 0, storyZ = null;
-  function startStory() { state = S.STORY; storyI = 0; storyT = 0; storyZ = mkZeus(); storyZ.ph = 3; }
-  function nextStory() { storyI++; storyT = 0; if (storyI >= STORY.length) newRun(); }
+  function startStory(end) { storyEnd = !!end; STORY = end ? STORY_END : STORY_INTRO; state = S.STORY; storyI = 0; storyT = 0; storyZ = mkZeus(); storyZ.ph = 3; }
+  function finishStory() { if (storyEnd) { state = S.WIN; saveBest(bossIdx); } else newRun(); }
+  function nextStory() { storyI++; storyT = 0; if (storyI >= STORY.length) finishStory(); }
   function drawStory() {
-    const sc = STORY[storyI], t = storyT, u = clamp(t / sc.d, 0, 1), i = storyI, T = time;
+    const sc = STORY[storyI], t = storyT, u = clamp(t / sc.d, 0, 1), i = storyEnd ? 20 + storyI : storyI, T = time;
     ctx.save(); ctx.clearRect(0, 0, W, H);
     const sky = (a, b) => { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, a); g.addColorStop(1, b); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
     const stars = (n, al) => { ctx.fillStyle = 'rgba(255,255,255,' + al + ')'; for (let k = 0; k < n; k++) ctx.fillRect((Math.sin(k * 91.7) * 0.5 + 0.5) * W, (Math.sin(k * 47.3 + 2) * 0.5 + 0.5) * H * 0.6, 2, 2); };
@@ -2120,15 +2130,45 @@
       const prog = clamp(t / 7, 0, 1) * 5.5; for (let k = 0; k < 6; k++) { const on = prog >= k - 0.05; glowRing(P[k][0], P[k][1], on ? 70 : 40, hexA(C[k]), on ? 0.6 : 0.15); ctx.strokeStyle = on ? C[k] : '#444'; ctx.lineWidth = 6; ctx.beginPath(); ctx.ellipse(P[k][0], P[k][1], 22, 32, 0, 0, TAU); ctx.stroke(); }
       ctx.fillStyle = '#f4f0e0'; ctx.fillRect(690, 90, 60, 60); ctx.beginPath(); ctx.moveTo(682, 90); ctx.lineTo(720, 62); ctx.lineTo(758, 90); ctx.fill(); glowRing(720, 100, 120, 'rgba(255,210,63,A)', 0.4 + Math.sin(T * 3) * 0.1); if (prog > 5) { ctx.fillStyle = '#7fd0ff'; ctx.fillRect(708, 100, 8, 5); ctx.fillRect(724, 100, 8, 5); }
       const k0 = Math.min(4, Math.floor(prog)), f = prog - k0, Q = k0 < 5 ? [P[k0][0] + (P[k0 + 1][0] - P[k0][0]) * f, P[k0][1] + (P[k0 + 1][1] - P[k0][1]) * f] : P[5]; hero(Q[0], Q[1] + 16, 0.9, 1);
-    } else {
+    } else if (i === 8) {
       sky('#000', '#120820'); const gl = Math.sin(T * 8) > 0.85; zeus(480, 300, 2.1 + u * 0.2, 1); if (gl) { ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(0, 0, W, H); } if (Math.sin(T * 3) > 0.7) bolt(100 + (Math.floor(T * 3) * 233) % 760, 0, 500, Math.floor(T * 3));
       if (t > 1.6) { ctx.globalAlpha = clamp((t - 1.6) / 1.2, 0, 1); ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 76px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('BOSS RUSH', W / 2, 150); ctx.globalAlpha = 1; }
+    } else if (i === 20) {
+      sky('#07040e', '#1a0a24'); const sh = clamp((t - 2.5) / 3.5, 0, 1); glowRing(480, 300, 120 + sh * 520, 'rgba(255,240,170,A)', 0.15 + sh * 0.6); zeus(480 + Math.sin(T * 40) * (1 - sh) * 4, 300, 1.8, 1 - sh * 0.9);
+      ctx.strokeStyle = 'rgba(255,255,255,' + clamp(t / 3, 0, 1) + ')'; ctx.lineWidth = 3; for (let k = 0; k < 10; k++) { const a = k * 0.63 + 0.3, r0 = 20 + k * 3, r1 = 60 + clamp(t / 4, 0, 1) * 170 + (k % 3) * 20; ctx.beginPath(); ctx.moveTo(480 + Math.cos(a) * r0, 290 + Math.sin(a) * r0); ctx.lineTo(480 + Math.cos(a + 0.15) * (r0 + r1) / 2, 290 + Math.sin(a + 0.15) * (r0 + r1) / 2); ctx.lineTo(480 + Math.cos(a) * r1, 290 + Math.sin(a) * r1); ctx.stroke(); }
+      hero(480, 600, 1.7, 1); if (t > 5 && t < 5.6) { ctx.fillStyle = 'rgba(255,255,255,' + (1 - (t - 5) / 0.6) * 0.9 + ')'; ctx.fillRect(0, 0, W, H); }
+    } else if (i === 21) {
+      sky('#2a1a4a', '#ffb070'); ctx.fillStyle = 'rgba(10,6,30,' + (1 - clamp(t / 5, 0, 1)) * 0.85 + ')'; ctx.fillRect(0, 0, W, H); glowRing(480, 470, 380, 'rgba(255,220,130,A)', clamp(t / 5, 0, 0.8));
+      for (let k = 0; k < 8; k++) { const dir = k % 2 ? 1 : -1; cloud(480 + dir * (40 + t * (30 + k * 12)) + (k - 4) * 60, 150 + (k % 4) * 80 - t * 6, 1.6, 'rgba(60,50,90,' + (0.9 - clamp(t / 7, 0, 0.7)) + ')'); }
+      ctx.save(); ctx.translate(480, 360 + t * 8); ctx.rotate(Math.sin(t) * 0.05 + t * 0.12); ctx.fillStyle = '#ffd23f'; ctx.globalAlpha = Math.max(0, 1 - t / 6); ctx.beginPath(); ctx.moveTo(-60, 20); ctx.lineTo(-40, -30); ctx.lineTo(-20, 0); ctx.lineTo(0, -40); ctx.lineTo(20, 0); ctx.lineTo(40, -30); ctx.lineTo(60, 20); ctx.fill(); ctx.restore(); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#16101c'; ctx.beginPath(); ctx.moveTo(0, 520); ctx.quadraticCurveTo(480, 470, 960, 520); ctx.lineTo(960, 640); ctx.lineTo(0, 640); ctx.fill();
+    } else if (i === 22) {
+      sky('#ffcf90', '#ffefc0'); stars(0, 0); const R = ['#c8b090', '#ff6a1a', '#9dff3a', '#c77dff', '#6a6ab0', '#ffd23f'], NM = ['CAVES', 'UNDERWORLD', 'ACID', 'DREAMLAND', 'SHADOW', 'GODS'];
+      for (let k = 0; k < 6; k++) { const x = 100 + k * 152, y = 330 + Math.sin(k * 1.1) * 40, tt = t - (0.6 + k * 1.1), free = tt > 0; glowRing(x, y, free ? 95 : 60, free ? hexA(R[k]) : 'rgba(80,20,30,A)', free ? 0.6 : 0.3); ctx.fillStyle = free ? R[k] : '#2a2630'; ctx.beginPath(); ctx.arc(x, y, 44, 0, TAU); ctx.fill(); if (free) { ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.arc(x + 12, y + 10, 34, 0, TAU); ctx.fill(); } else { ctx.strokeStyle = '#8a1a2a'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(x - 30, y - 30); ctx.lineTo(x + 30, y + 30); ctx.moveTo(x + 30, y - 30); ctx.lineTo(x - 30, y + 30); ctx.stroke(); }
+        if (free && tt < 1.2) { ctx.strokeStyle = 'rgba(255,255,255,' + (1 - tt / 1.2) + ')'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, 44 + tt * 90, 0, TAU); ctx.stroke(); for (let q = 0; q < 8; q++) { const a = q * 0.785; ctx.fillStyle = 'rgba(255,255,255,' + (1 - tt / 1.2) + ')'; ctx.fillRect(x + Math.cos(a) * (50 + tt * 70), y + Math.sin(a) * (50 + tt * 70), 5, 5); } }
+        ctx.fillStyle = free ? '#5a3a1a' : '#7a6a78'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(NM[k], x, y + 72); }
+    } else if (i === 23) {
+      sky('#ffb070', '#ffe8b0'); ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(480, 300, 64, 0, TAU); ctx.fill(); glowRing(480, 300, 200, 'rgba(255,230,140,A)', 0.5);
+      ctx.fillStyle = '#6aa84a'; ctx.beginPath(); ctx.moveTo(0, 400); ctx.quadraticCurveTo(300, 340, 600, 400); ctx.quadraticCurveTo(800, 430, 960, 380); ctx.lineTo(960, 640); ctx.lineTo(0, 640); ctx.fill();
+      for (let k = 0; k < 6; k++) { const x = 80 + k * 160, y = 470 + (k % 2) * 20; house(x, y, 1.4, '#f0e0b8'); ctx.fillStyle = '#c0452c'; ctx.beginPath(); ctx.moveTo(x - 34, y - 28); ctx.lineTo(x, y - 58); ctx.lineTo(x + 34, y - 28); ctx.fill(); ctx.fillStyle = '#ffd23f'; ctx.fillRect(x + 20, y - 80, 3, 24); ctx.fillRect(x + 23, y - 80, 14, 9); }
+      for (let k = 0; k < 14; k++) { const x = 40 + k * 66 + Math.sin(k * 5) * 12, y = 560 + (k % 3) * 16, j = Math.abs(Math.sin(T * 5 + k)) * 14; ctx.fillStyle = ['#c0452c', '#2a5fb8', '#3aa060', '#e8c050'][k % 4]; ctx.fillRect(x - 6, y - 26 - j, 12, 20); ctx.fillStyle = '#f0c8a0'; ctx.beginPath(); ctx.arc(x, y - 34 - j, 7, 0, TAU); ctx.fill(); ctx.strokeStyle = '#f0c8a0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x - 6, y - 22 - j); ctx.lineTo(x - 14, y - 44 - j - Math.sin(T * 8 + k) * 4); ctx.moveTo(x + 6, y - 22 - j); ctx.lineTo(x + 14, y - 44 - j + Math.sin(T * 8 + k) * 4); ctx.stroke(); }
+      for (let k = 0; k < 18; k++) { const v = (T * 0.3 + k * 0.057) % 1; ctx.fillStyle = ['#ff7ad9', '#ffd23f', '#7fd0ff', '#9dff3a'][k % 4]; ctx.fillRect(40 + k * 50 + Math.sin(T * 3 + k) * 20, 100 + v * 380, 6, 6); }
+    } else if (i === 24) {
+      sky('#ff9a4a', '#ffe9a0'); glowRing(480, 250, 340, 'rgba(255,240,170,A)', 0.8); ctx.fillStyle = '#fff6c0'; ctx.beginPath(); ctx.arc(480, 250, 80, 0, TAU); ctx.fill();
+      for (let k = 0; k < 20; k++) { const a = k * TAU / 20 + T * 0.1; ctx.fillStyle = 'rgba(255,240,170,.35)'; ctx.beginPath(); ctx.moveTo(480, 250); ctx.lineTo(480 + Math.cos(a - 0.05) * 900, 250 + Math.sin(a - 0.05) * 900); ctx.lineTo(480 + Math.cos(a + 0.05) * 900, 250 + Math.sin(a + 0.05) * 900); ctx.fill(); }
+      ctx.fillStyle = '#4a3a50'; ctx.beginPath(); ctx.moveTo(0, 640); ctx.lineTo(260, 470); ctx.lineTo(420, 430); ctx.lineTo(480, 410); ctx.lineTo(540, 430); ctx.lineTo(700, 480); ctx.lineTo(960, 640); ctx.fill();
+      ctx.save(); ctx.translate(480, 412); ctx.scale(2.3, 2.3); ctx.fillStyle = '#10101c'; ctx.beginPath(); ctx.moveTo(-14, -26); ctx.lineTo(14, -26); ctx.lineTo(20, 0); ctx.lineTo(-20, 0); ctx.fill(); ctx.beginPath(); ctx.arc(0, -42, 11, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.moveTo(-14, -26); ctx.lineTo(-34 + Math.sin(T * 2) * 2, -22); ctx.lineTo(-34, -30); ctx.lineTo(-14, -34); ctx.fill(); ctx.strokeStyle = '#10101c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(14, -30); ctx.lineTo(30, -58); ctx.stroke(); ctx.fillStyle = '#ffd23f'; ctx.fillRect(26, -72, 8, 18); ctx.restore();
+      ctx.strokeStyle = '#2a1a2a'; ctx.lineWidth = 2; for (let k = 0; k < 5; k++) { const bx = ((T * 50 + k * 220) % 1100) - 100, by = 130 + k * 24 + Math.sin(T * 3 + k) * 8, w = Math.sin(T * 9 + k) * 5; ctx.beginPath(); ctx.moveTo(bx - 10, by + w); ctx.lineTo(bx, by); ctx.lineTo(bx + 10, by + w); ctx.stroke(); }
+    } else {
+      sky('#05030c', '#150a24'); stars(90, 0.9); glowRing(480, 280, 260, 'rgba(255,210,63,A)', 0.25 + Math.sin(T * 2) * 0.05);
+      ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 64px ' + FONT; ctx.textAlign = 'center'; ctx.globalAlpha = clamp(t / 1.5, 0, 1); ctx.fillText('YOU SAVED', W / 2, 250); ctx.fillText('THE WORLD', W / 2, 330); ctx.font = 'bold 26px ' + FONT; ctx.fillStyle = '#ffe9c0'; ctx.globalAlpha = clamp((t - 2.5) / 1.5, 0, 1); ctx.fillText('~ THE END ~', W / 2, 400); ctx.globalAlpha = 1;
+      for (let k = 0; k < 20; k++) { const v = (T * 0.2 + k * 0.05) % 1; ctx.fillStyle = 'rgba(255,215,90,' + (1 - v) + ')'; ctx.fillRect((Math.sin(k * 71) * 0.5 + 0.5) * W, 520 - v * 480, 3, 3); }
     }
     ctx.restore();
     // caption
     ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(0, 528, W, 112); const n = Math.floor(clamp((t - 0.5) * 34, 0, sc.t.length)), txt = sc.t.slice(0, n); ctx.font = 'bold 21px ' + FONT; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe9c0';
     const words = txt.split(' '), lines = []; let cur = ''; for (const w of words) { if (ctx.measureText(cur + ' ' + w).width > 840 && cur) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; } lines.push(cur); lines.forEach((l, k) => ctx.fillText(l, W / 2, 568 + k * 28));
-    ctx.font = '13px ' + FONT; ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.textAlign = 'right'; ctx.fillText('Space / click: next    Esc: skip story', W - 16, 24); ctx.textAlign = 'left'; for (let k = 0; k < STORY.length; k++) { ctx.fillStyle = k <= i ? '#ffd23f' : 'rgba(255,255,255,.25)'; ctx.fillRect(16 + k * 18, 16, 12, 5); }
+    ctx.font = '13px ' + FONT; ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.textAlign = 'right'; ctx.fillText('Space / click: next    Esc: skip story', W - 16, 24); ctx.textAlign = 'left'; for (let k = 0; k < STORY.length; k++) { ctx.fillStyle = k <= storyI ? '#ffd23f' : 'rgba(255,255,255,.25)'; ctx.fillRect(16 + k * 18, 16, 12, 5); }
     const fade = Math.max(1 - t / 0.6, (t - (sc.d - 0.6)) / 0.6, 0); if (fade > 0) { ctx.fillStyle = 'rgba(0,0,0,' + clamp(fade, 0, 1) + ')'; ctx.fillRect(0, 0, W, H); }
     ctx.restore();
   }
@@ -2182,7 +2222,7 @@
   window.addEventListener('keydown', e => {
     if (e.target && e.target.tagName === 'INPUT') return;
     if (admin.open) return;
-    if (state === S.STORY) { if (e.code === 'Escape' || e.code === 'KeyS') newRun(); else if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowRight') { nextStory(); e.preventDefault(); } return; }
+    if (state === S.STORY) { if (e.code === 'Escape' || e.code === 'KeyS') finishStory(); else if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowRight') { nextStory(); e.preventDefault(); } return; }
     if ((e.code === 'Space' || e.code === 'Enter') && state === S.FIGHT && boss && boss.dying && deadT > 1.7) { const full = 1.6 + boss.line.length / 38; deadT = deadT < full ? full : Math.max(deadT, boss.deadEnd); }
     keys.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
