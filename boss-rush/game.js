@@ -1825,6 +1825,7 @@
   }
 
   function update(dt) {
+    if (!bossMode && player && player.maxHp > 13) player.maxHp = 13; if (player && player.hp > player.maxHp) player.hp = player.maxHp; 
     time += dt; if (toast) { toast.life -= dt; if (toast.life <= 0) toast = null; }
     shake = Math.max(0, shake - dt * 30); setTrack(wantTrack());
     for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94; p.life -= dt; } parts = parts.filter(p => p.life > 0);
@@ -1951,7 +1952,7 @@
     ctx.fillStyle = '#d9cfc4'; ctx.font = '11px ' + FONT; ctx.textAlign = 'left'; ctx.fillText('DASH', 130, 58);
     ctx.textAlign = 'right'; ctx.fillText('BOSS ' + Math.min(bossIdx + (boss ? 1 : 0), BOSSES.length) + '/' + BOSSES.length + '   BEST ' + best + '   ' + fmtTime(runTime), W - 16, 22);
     if (bossMode && boss && boss.cd) { const items = [['CLICK', 'shoot', boss.cd.fire, 0.24], ['Q', 'ring', boss.cd.q, 3], ['E', 'wave', boss.cd.e, 5], ['R', 'meteors', boss.cd.r, 5], ['F', 'imps', boss.cd.f, 10], ['SPACE', 'dash', boss.cd.d, 1.6]]; items.forEach(([k, n, c, m], i) => { const x = W / 2 - 3 * 78 + i * 78, y = H - 46; ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x, y, 72, 34); ctx.fillStyle = c <= 0 ? '#ff5acd' : '#5a2a50'; ctx.fillRect(x, y + 28, 72 * (1 - c / m), 6); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(k + ' ' + n, x + 36, y + 18); }); }
-    if (state === S.FIGHT && boss) { const bw = 520, bx = (W - bw) / 2; ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(bx - 3, 12, bw + 6, 20); ctx.fillStyle = boss.dying ? '#555' : '#c0283c'; ctx.fillRect(bx, 15, bw * clamp(boss.hp / boss.max, 0, 1), 14); ctx.fillStyle = '#fff'; ctx.font = 'bold 13px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(boss.name, W / 2, 46); }
+    if (state === S.FIGHT && boss) { const bw = 600, bx = (W - bw) / 2, by = H - 30; ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(bx - 3, by - 3, bw + 6, 24); ctx.fillStyle = boss.dying ? '#555' : '#c0283c'; ctx.fillRect(bx, by, bw * clamp(boss.hp / boss.max, 0, 1), 18); ctx.fillStyle = '#fff'; ctx.font = 'bold 13px ' + FONT; ctx.textAlign = 'center'; ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.fillText(boss.name, W / 2, by + 14); ctx.shadowBlur = 0; }
     if (toast) { ctx.globalAlpha = clamp(toast.life / 0.4, 0, 1); ctx.fillStyle = '#ffe9a8'; ctx.font = 'bold 22px ' + FONT; ctx.textAlign = 'center'; ctx.shadowColor = '#000'; ctx.shadowBlur = 6; ctx.fillText(toast.t, W / 2, 96); ctx.shadowBlur = 0; ctx.globalAlpha = 1; }
   }
   const fmtTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
