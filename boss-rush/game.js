@@ -2407,7 +2407,7 @@
   }
 
   function drawDark() {
-    dark.globalCompositeOperation = 'source-over'; const RR = state === S.HUB ? hubRealm() : state === S.TITLE ? 0 : arenaRealm(); dark.fillStyle = RR >= 6 ? 'rgba(2,3,14,.5)' : RR === 5 ? 'rgba(8,12,30,.3)' : RR === 4 ? 'rgba(0,0,4,.66)' : RR === 3 ? 'rgba(8,3,26,.5)' : RR === 2 ? 'rgba(2,16,5,.55)' : RR === 1 ? 'rgba(22,3,0,.55)' : state === S.HUB || state === S.TITLE ? 'rgba(4,3,10,.62)' : 'rgba(4,3,10,.58)'; dark.fillRect(0, 0, W, H);
+    dark.setTransform(0.5, 0, 0, 0.5, 0, 0); dark.globalCompositeOperation = 'source-over'; dark.globalAlpha = 1; const RR = state === S.HUB ? hubRealm() : state === S.TITLE ? 0 : arenaRealm(); dark.fillStyle = RR >= 6 ? 'rgba(2,3,14,.5)' : RR === 5 ? 'rgba(8,12,30,.3)' : RR === 4 ? 'rgba(0,0,4,.66)' : RR === 3 ? 'rgba(8,3,26,.5)' : RR === 2 ? 'rgba(2,16,5,.55)' : RR === 1 ? 'rgba(22,3,0,.55)' : state === S.HUB || state === S.TITLE ? 'rgba(4,3,10,.62)' : 'rgba(4,3,10,.58)'; dark.fillRect(0, 0, W, H);
     dark.globalCompositeOperation = 'destination-out';
     if (!bigCut) { bigCut = document.createElement('canvas'); bigCut.width = bigCut.height = 256; const g = bigCut.getContext('2d'), gr = g.createRadialGradient(128, 128, 12, 128, 128, 128); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); }
     const cut = (x, y, r, a) => { dark.globalAlpha = a; dark.drawImage(bigCut, x - r, y - r, r * 2, r * 2); dark.globalAlpha = 1; };
@@ -2417,10 +2417,10 @@
     if (!cutSprite) { cutSprite = document.createElement('canvas'); cutSprite.width = cutSprite.height = 76; const g = cutSprite.getContext('2d'), gr = g.createRadialGradient(38, 38, 4, 38, 38, 38); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 76, 76); }
     dark.globalAlpha = 0.35; for (let i = 0; i < eBul.length; i += eBul.length > 90 ? 2 : 1) { const b = eBul[i]; dark.drawImage(cutSprite, b.x - 38, b.y - 38); } dark.globalAlpha = 1;
     for (const h of hazards) if (h.k === 'beam') cut(h.x + Math.cos(h.a) * 200, h.y + Math.sin(h.a) * 200, 220, 0.3);
-    ctx.drawImage(darkC, 0, 0);
+    ctx.drawImage(darkC, 0, 0, W, H);
   }
 
-  const darkC = document.createElement('canvas'); darkC.width = W; darkC.height = H; const dark = darkC.getContext('2d');
+  const darkC = document.createElement('canvas'); darkC.width = W / 2; darkC.height = H / 2; const dark = darkC.getContext('2d');   // half-res darkness layer (it is soft anyway) = much cheaper
 
   // ------------------------------------------------------------------ intro cutscene (plays when you start a new game)
   const STORY_INTRO = [
