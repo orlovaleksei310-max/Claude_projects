@@ -1616,17 +1616,17 @@
     };
     return b;
   }
-  function newHero() { const p = newPlayer(); Object.assign(p, { hp: 18, maxHp: 18, speed: 260, shots: 2, fireDelay: 0.12, dashCd: 0.85, dmg: 1.3, invDur: 0.8 }); return p; }
+  function newHero() { const p = newPlayer(); Object.assign(p, { hp: 8, maxHp: 8, speed: 205, shots: 1, fireDelay: 0.2, dashCd: 2.2, dmg: 1.1, invDur: 0.8 }); return p; }
   function startBossMode() {
     bossMode = true; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); player = newHero(); player.x = ARENA.x; player.y = ARENA.y + ARENA.r - 60; player.inv = 1;
     boss = mkOverlord(); introT = 0; runTime = 0; ai.dir = { x: 0, y: 0 }; toastMsg('You are the boss! Kill the hero.', 3.5);
   }
   function endBossMode(win) { state = S.OVER; deadT = 0; overTitle = win ? 'THE HERO HAS FALLEN!' : 'YOU WERE SLAIN'; blip(win ? 600 : 90, 0.8, win ? 'square' : 'sawtooth', 0.1, win ? 2 : 0.4); }
   const ai = { dir: { x: 0, y: 0 }, prev: null, dashCheck: 0 };
-  function heroAI(dt) {                                   // a very good dodger: scores 17 moves against everything that will hit in the next half second
+  function heroAI(dt) {                                   // a mediocre dodger: scores 16 moves against everything that will hit in the next half second
     const p = player; p.inv = Math.max(0, p.inv - dt); p.dashCdT = Math.max(0, p.dashCdT - dt); p.slow = Math.max(0, p.slow - dt);
     const bs = boss, bv = ai.prev ? { x: (bs.x - ai.prev.x) / Math.max(dt, 0.001), y: (bs.y - ai.prev.y) / Math.max(dt, 0.001) } : { x: 0, y: 0 }; ai.prev = { x: bs.x, y: bs.y };
-    const spd = p.speed * (p.slow > 0 ? 0.5 : 1), HZ = [0.08, 0.16, 0.24, 0.32, 0.42, 0.55];
+    const spd = p.speed * (p.slow > 0 ? 0.5 : 1), HZ = [0.08, 0.16, 0.24];
     const danger = (cx, cy, vx, vy) => {                  // cost of standing at (cx,cy) while moving with velocity (vx,vy)
       let c = 0; const R = p.r + 6;
       for (const b of eBul) for (let i = 0; i < HZ.length; i++) { const t = HZ[i], bx = b.x + b.vx * t, by = b.y + b.vy * t, px = cx + vx * t, py = cy + vy * t, d = Math.hypot(bx - px, by - py), lim = b.r + R; if (d < lim) c += 9 * (1 - d / lim) + 2; }
@@ -1643,16 +1643,16 @@
       return c;
     };
     let best = null, bestC = 1e9, stayC = danger(p.x, p.y, 0, 0);
-    for (let i = 0; i < 16; i++) { const a = i * TAU / 16, dx = Math.cos(a), dy = Math.sin(a), c = danger(p.x + dx * spd * 0.2, p.y + dy * spd * 0.2, dx * spd, dy * spd) + (ai.dir.x * dx + ai.dir.y * dy < 0 ? 0.3 : 0) + (Math.random() * 0.2); if (c < bestC) { bestC = c; best = { x: dx, y: dy }; } }
-    let dx = 0, dy = 0; if (best && (bestC < stayC - 0.15 || stayC > 0.4)) { dx = best.x; dy = best.y; ai.dir = best; }
+    for (let i = 0; i < 16; i++) { const a = i * TAU / 16, dx = Math.cos(a), dy = Math.sin(a), c = danger(p.x + dx * spd * 0.2, p.y + dy * spd * 0.2, dx * spd, dy * spd) + (ai.dir.x * dx + ai.dir.y * dy < 0 ? 0.3 : 0) + (Math.random() * 1.2); if (c < bestC) { bestC = c; best = { x: dx, y: dy }; } }
+    ai.rt = (ai.rt || 0) - dt; if (ai.rt <= 0) { ai.rt = 0.22; ai.pick = (best && (bestC < stayC - 0.15 || stayC > 0.4)) ? best : null; if (Math.random() < 0.12) ai.pick = null; } let dx = 0, dy = 0; if (ai.pick) { dx = ai.pick.x; dy = ai.pick.y; ai.dir = ai.pick; }
     let sp = spd;
     if (p.dashT > 0) { p.dashT -= dt; sp = 640; dx = p.dashDir.x; dy = p.dashDir.y; if (Math.random() < 0.8) parts.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.25, max: 0.25, c: '#9deaff', r: 6 }); }
-    else if (p.dashCdT <= 0 && stayC > 6 && bestC < stayC - 5 && (dx || dy)) { p.dashT = 0.17; p.dashCdT = p.dashCd; p.dashDir = { x: dx, y: dy }; }
+    else if (p.dashCdT <= 0 && stayC > 9 && bestC < stayC - 6 && (dx || dy) && Math.random() < 0.35) { p.dashT = 0.17; p.dashCdT = p.dashCd; p.dashDir = { x: dx, y: dy }; }
     p.x += dx * sp * dt; p.y += dy * sp * dt;
     for (const s of pillars) { const d = Math.hypot(p.x - s.x, p.y - s.y), m = s.r + p.r; if (d < m) { p.x = s.x + (p.x - s.x) / d * m; p.y = s.y + (p.y - s.y) / d * m; } }
     inArena(p, p.r + 6);
     // aim with lead and fire
-    const tt = Math.hypot(bs.x - p.x, bs.y - p.y) / 560, ax = bs.x + bv.x * tt * 0.9 - p.x, ay = bs.y + bv.y * tt * 0.9 - p.y; p.face = Math.atan2(ay, ax); p.fireT -= dt;
+    const tt = Math.hypot(bs.x - p.x, bs.y - p.y) / 560, ax = bs.x + bv.x * tt * 0.4 - p.x, ay = bs.y + bv.y * tt * 0.4 - p.y; p.face = Math.atan2(ay, ax) + Math.sin(time * 1.7) * 0.12; p.fireT -= dt;
     if (p.fireT <= 0) { p.fireT = p.fireDelay; for (let i = 0; i < p.shots; i++) { const a = p.face + (i - (p.shots - 1) / 2) * 0.07; pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * 560, vy: Math.sin(a) * 560, r: 5, life: 0.9, dmg: p.dmg, hits: [] }); } }
   }
 
