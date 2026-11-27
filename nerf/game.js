@@ -8,6 +8,9 @@
   const ARENA = { x: 20, y: 20, w: W - 40, h: H - 40 };
   const WIN_ROUNDS = 3;
 
+  const hexA = h => { const n = parseInt(h.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',A)'; };
+  function glowRing(x, y, r, c, a) { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, c.replace('A', a)); g.addColorStop(1, c.replace('A', 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+
   // ------------------------------------------------------------------ audio
   let actx = null, muted = false;
   function blip(f, d, type, v, slide) {
@@ -38,9 +41,9 @@
     const r = [], doors = [];
     const hw = (y, x0, x1, gaps) => { let x = x0; for (const g of gaps.concat([x1 + DW])) { const gx0 = g - DW / 2; if (gx0 > x) r.push({ x, y: y - WT / 2, w: Math.min(gx0, x1) - x, h: WT, wall: true }); x = g + DW / 2; if (g <= x1) doors.push({ x: g, y }); } };
     const vw = (x, y0, y1, gaps) => { let y = y0; for (const g of gaps.concat([y1 + DW])) { const gy0 = g - DW / 2; if (gy0 > y) r.push({ x: x - WT / 2, y, w: WT, h: Math.min(gy0, y1) - y, wall: true }); y = g + DW / 2; if (g <= y1) doors.push({ x, y: g }); } };
-    def.h.forEach(a => hw(a[0], a[1], a[2], a[3])); def.v.forEach(a => vw(a[0], a[1], a[2], a[3]));
-    def.f.forEach(a => r.push({ x: a[0], y: a[1], w: a[2], h: a[3], f: true }));
-    return { name, r, doors, rooms: def.rooms };
+    (def.h || []).forEach(a => hw(a[0], a[1], a[2], a[3])); (def.v || []).forEach(a => vw(a[0], a[1], a[2], a[3]));
+    def.f.forEach(a => r.push({ x: a[0], y: a[1], w: a[2], h: a[3], f: true, kind: a[4] || '' }));
+    return { name, r, doors, rooms: def.rooms || [], type: def.type || 'house', spawns: def.spawns || [[70, 80], [890, 80], [70, 560], [890, 560]], base: def.base || '#555b66', wallCol: def.wallCol || '#efe6d4', portals: def.portals || [] };
   }
   const MAPS = [
     houseMap('Long Halls', {   // a long central corridor with uneven rooms off it, open halls at both ends
@@ -64,13 +67,51 @@
       rooms: [[20, 20, 180, 250, '#6b4a2e'], [200, 20, 270, 250, '#3d5a6b'], [470, 20, 290, 250, '#6b3d5a'], [760, 20, 180, 250, '#4a6b3d'], [20, 270, 920, 100, '#555b66'], [20, 370, 280, 250, '#7a6b3a'], [300, 370, 260, 250, '#3a4a7a'], [560, 370, 140, 250, '#6b4a2e'], [700, 370, 240, 250, '#3d5a6b']],
       f: [[40, 120, 70, 50], [260, 150, 100, 50], [520, 60, 50, 90], [820, 130, 80, 50], [150, 520, 100, 60], [350, 450, 60, 90], [590, 520, 60, 50], [800, 440, 80, 80]] })
   ];
+  const TYPES = [
+    { id: 'normal', name: 'NORMAL', col: '#ffb347', desc: ['Open arena with inflatable', 'bunkers for cover'] },
+    { id: 'house', name: 'HOUSE', col: '#9fd8ff', desc: ['Homes with rooms, halls', 'and even a backyard'] },
+    { id: 'village', name: 'VILLAGE', col: '#7affd2', desc: ['A mini town: streets,', 'shops and houses to enter'] },
+    { id: 'portals', name: 'PORTALS', col: '#c77dff', desc: ['Step in a portal, pop out', 'of its twin. Bullets too!'] }
+  ];
+  MAPS.forEach(m => { m.type = 'house'; });
+  MAPS.push(
+    houseMap('Backyard', {     // a house on the left, a garden with a pool and trees on the right
+      v: [[300, 20, 620, [120, 500]], [560, 20, 620, [330]]], h: [[320, 20, 300, [160]], [320, 300, 560, [430]]],
+      base: '#4f8a3a', rooms: [[20, 20, 280, 300, '#6b4a2e'], [20, 320, 280, 300, '#4a6b3d'], [300, 20, 260, 300, '#3d5a6b'], [300, 320, 260, 300, '#7a6b3a']],
+      f: [[110, 150, 90, 50], [60, 480, 100, 50], [380, 90, 120, 44], [390, 440, 100, 60], [660, 250, 190, 110, 'pool'], [620, 70, 56, 56, 'tree'], [800, 150, 56, 56, 'tree'], [620, 480, 56, 56, 'tree'], [800, 470, 56, 56, 'tree'], [760, 540, 60, 40, 'bench'], [850, 270, 80, 70, 'shed']] }),
+    houseMap('Normal: Bunker Yard', { type: 'normal', base: '#2f6b3a', f: [[430, 270, 100, 100], [200, 140, 70, 70], [690, 140, 70, 70], [200, 430, 70, 70], [690, 430, 70, 70], [330, 70, 14, 130], [616, 70, 14, 130], [330, 440, 14, 130], [616, 440, 14, 130]] }),
+    houseMap('Normal: Crossfire', { type: 'normal', base: '#2f6b3a', f: [[300, 190, 360, 26], [300, 424, 360, 26], [120, 300, 110, 40], [730, 300, 110, 40], [455, 300, 50, 40]] }),
+    houseMap('Normal: Pillar Park', { type: 'normal', base: '#2f6b3a', f: [[190, 110, 56, 56], [452, 110, 56, 56], [714, 110, 56, 56], [190, 292, 56, 56], [452, 292, 56, 56], [714, 292, 56, 56], [190, 474, 56, 56], [452, 474, 56, 56], [714, 474, 56, 56]] }),
+    houseMap('Normal: The Maze', { type: 'normal', base: '#2f6b3a', f: [[160, 100, 240, 24], [560, 100, 240, 24], [160, 516, 240, 24], [560, 516, 240, 24], [120, 200, 24, 240], [816, 200, 24, 240], [400, 260, 160, 24], [400, 356, 160, 24]] }),
+    houseMap('Mini Town', {    // streets, enterable houses and shops, a fountain
+      type: 'village', base: '#4f7a3a', wallCol: '#b5654a',
+      h: [[60, 330, 520, []], [230, 330, 520, [425]], [400, 120, 300, [210]], [570, 120, 300, [210]], [400, 660, 860, [760]], [570, 660, 860, [760]]], v: [[330, 60, 230, []], [520, 60, 230, []], [120, 400, 570, []], [300, 400, 570, []], [660, 400, 570, []], [860, 400, 570, []]],
+      rooms: [[20, 290, 920, 90, '#6b6b70'], [200, 20, 80, 600, '#6b6b70'], [680, 20, 80, 600, '#6b6b70'], [330, 60, 190, 170, '#7a5a3a'], [120, 400, 180, 170, '#6b4a2e'], [660, 400, 200, 170, '#7a6b3a']],
+      f: [[440, 305, 80, 60, 'fountain'], [40, 140, 70, 70, 'bld'], [880, 130, 50, 70, 'bld'], [560, 120, 60, 40, 'stall'], [140, 150, 40, 40, 'tree'], [780, 200, 44, 44, 'tree'], [440, 470, 70, 40, 'hedge'], [440, 140, 70, 40, 'hedge']] }),
+    houseMap('Market Square', { type: 'village', base: '#5a7a4a', wallCol: '#a8754f', spawns: [[100, 60], [860, 60], [100, 570], [860, 570]],
+      h: [[110, 20, 260, [140]], [110, 700, 940, [820]], [510, 20, 260, [140]], [510, 700, 940, [820]]], v: [[260, 20, 110, []], [700, 20, 110, []], [260, 510, 620, []], [700, 510, 620, []]],
+      rooms: [[20, 20, 240, 90, '#7a5a3a'], [700, 20, 240, 90, '#7a5a3a'], [20, 510, 240, 110, '#6b4a2e'], [700, 510, 240, 110, '#7a6b3a'], [260, 110, 440, 400, '#8a8a8a']],
+      f: [[360, 170, 70, 40, 'stall'], [530, 170, 70, 40, 'stall'], [360, 430, 70, 40, 'stall'], [530, 430, 70, 40, 'stall'], [450, 280, 60, 80, 'fountain'], [80, 250, 60, 60, 'tree'], [820, 250, 60, 60, 'tree'], [80, 390, 60, 60, 'tree'], [820, 390, 60, 60, 'tree'], [300, 300, 50, 50, 'hedge'], [610, 300, 50, 50, 'hedge']] }),
+    houseMap('Portal Lab', { type: 'portals', base: '#232a3a', wallCol: '#8a96b0',
+      h: [[200, 20, 330, [120]], [440, 630, 940, [830]], [320, 380, 580, [480]]], v: [[330, 20, 200, []], [630, 440, 620, []], [380, 200, 440, [320]], [580, 200, 440, [320]]],
+      rooms: [[20, 20, 310, 180, '#2f3d5a'], [630, 440, 310, 180, '#5a3d2f']],
+      portals: [{ x: 150, y: 110, pair: 1, c: '#3ab0ff' }, { x: 810, y: 530, pair: 0, c: '#3ab0ff' }, { x: 810, y: 110, pair: 3, c: '#ff9a3a' }, { x: 150, y: 530, pair: 2, c: '#ff9a3a' }],
+      f: [[440, 90, 80, 40, 'crate'], [440, 510, 80, 40, 'crate'], [200, 300, 50, 50, 'crate'], [710, 300, 50, 50, 'crate']] }),
+    houseMap('Portal Maze', { type: 'portals', base: '#232a3a', wallCol: '#8a96b0',
+      h: [[160, 20, 400, [200]], [480, 560, 940, [760]], [320, 250, 710, [480]]], v: [[400, 20, 160, []], [560, 480, 620, []], [250, 160, 480, [200]], [710, 160, 480, [760]]],
+      rooms: [[20, 20, 380, 140, '#2f3d5a'], [560, 480, 380, 140, '#5a3d2f']],
+      portals: [{ x: 90, y: 90, pair: 1, c: '#c77dff' }, { x: 870, y: 550, pair: 0, c: '#c77dff' }, { x: 480, y: 250, pair: 3, c: '#5aff7a' }, { x: 480, y: 400, pair: 2, c: '#5aff7a' }, { x: 100, y: 430, pair: 5, c: '#ffd23f' }, { x: 860, y: 210, pair: 4, c: '#ffd23f' }],
+      f: [[170, 270, 60, 60, 'crate'], [730, 310, 60, 60, 'crate'], [440, 90, 60, 50, 'crate'], [440, 500, 60, 50, 'crate']] })
+  );
+
   const BOTNAMES = ['Red Rex', 'Green Gus', 'Yellow Yuki'], PCOL = ['#3a8dff', '#ff4a4a', '#3ad65a', '#ffd23f'];
   const DIFF = [{ name: 'EASY', err: 0.3, turn: 4, speed: 150, react: 0.35 }, { name: 'NORMAL', err: 0.15, turn: 7, speed: 175, react: 0.2 }, { name: 'HARD', err: 0.06, turn: 12, speed: 195, react: 0.08 }];
 
   // ------------------------------------------------------------------ state
-  const S = { MENU: 0, WHEEL: 1, INTRO: 2, FIGHT: 3, ROUNDEND: 4, MATCHEND: 5, ONLINE: 6, LOBBY: 7 };
+  const S = { MENU: 0, WHEEL: 1, INTRO: 2, FIGHT: 3, ROUNDEND: 4, MATCHEND: 5, ONLINE: 6, LOBBY: 7, VOTE: 8 };
   let state = S.MENU, stateT = 0, time = 0;
   let opts = { bots: 3, diff: 1 };
+  let forceMap = -1, mapType = 0, vote = { opts: [0, 1, 2], votes: {}, t: 15, res: -1, mine: -1, endT: 0 };
   let myIdx = 0, nav = null, ents = [], bullets = [], parts = [], rects = [], feed = [], map = null, roundNo = 0, winner = null, shake = 0;
   const keys = new Set(), mouse = { x: W / 2, y: H / 2, down: false };
   const paintC = document.createElement('canvas'); paintC.width = W; paintC.height = H; const paint = paintC.getContext('2d');
@@ -87,7 +128,7 @@
   function newMatch() {
     ents = [mkEnt(0, 'You', false)];
     for (let i = 1; i <= opts.bots; i++) ents.push(mkEnt(i, BOTNAMES[i - 1], true));
-    roundNo = 0; startWheel();
+    roundNo = 0; startVote();
   }
 
   function startWheel() {
@@ -104,6 +145,31 @@
     blip(300, 0.1, 'triangle', 0.05);
   }
 
+  function portalTick(o, dt, isBullet) {
+    if (!map || !map.portals.length) return; o.ptc = (o.ptc || 0) - dt; if (o.ptc > 0) return;
+    for (const p of map.portals) if (Math.hypot(o.x - p.x, o.y - p.y) < (isBullet ? 20 : 22)) {
+      const q = map.portals[p.pair], m = Math.hypot(o.vx, o.vy) || 1, off = isBullet ? 30 : 36; o.x = q.x + o.vx / m * off; o.y = q.y + o.vy / m * off; o.ptc = isBullet ? 0.25 : 0.8;
+      spark(p.x, p.y, p.c, 10, 150); spark(q.x, q.y, q.c, 10, 150); if (!isBullet) blip(420, 0.15, 'sine', 0.05, 2.2); break;
+    }
+  }
+  // ------------------------------------------------------------------ map vote (3 of the 4 map types, once per match)
+  function voteCounts() { const c = [0, 0, 0]; for (const k in vote.votes) c[vote.votes[k]]++; return c; }
+  function startVote() {
+    const o = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 3).sort((a, b) => a - b); vote = { opts: o, votes: {}, t: 15, res: -1, mine: -1, endT: 0 }; state = S.VOTE; stateT = 0;
+    for (const e of ents) if (e.isBot) e.voteAt = rnd(0.6, 4);
+  }
+  function castVote(i, k) { if (state === S.VOTE && vote.res < 0 && k >= 0 && k < 3) vote.votes[i] = k; }
+  function myVote(k) { if (state !== S.VOTE || vote.res >= 0) return; vote.mine = k; if (net.role === 'client') netSend({ t: 'vote', k }); else castVote(myIdx, k); blip(560, 0.06, 'triangle', 0.04); }
+  function voteTick(dt) {
+    vote.t -= dt;
+    for (const e of ents) if (e.isBot && vote.votes[e.i] === undefined && stateT > (e.voteAt || 0)) vote.votes[e.i] = Math.floor(Math.random() * 3);
+    if (vote.res >= 0) { vote.endT -= dt; if (vote.endT <= 0) { mapType = vote.res; startWheel(); } return; }
+    const hs = ents.filter(e => !e.isBot), all = hs.every(e => vote.votes[e.i] !== undefined);
+    if (vote.t <= 0 || (all && stateT > 1.2 && stateT > Math.max(0, ...ents.filter(e => e.isBot).map(e => e.voteAt || 0)) + 0.3)) {
+      for (const e of ents) if (e.isBot && vote.votes[e.i] === undefined) vote.votes[e.i] = Math.floor(Math.random() * 3);
+      const c = voteCounts(), mx = Math.max(...c), best = [0, 1, 2].filter(k => c[k] === mx); vote.res = vote.opts[pick(best)]; vote.endT = 2.4; blip(700, 0.25, 'triangle', 0.06, 1.4);
+    }
+  }
   function wheelTick(dt) {
     if (wheel.spin > 0) {
       wheel.spin -= dt; const k = 1 - clamp(wheel.spin / wheel.dur, 0, 1), e = 1 - Math.pow(1 - k, 3.2); wheel.rot = wheel.from + (wheel.to - wheel.from) * e;
@@ -112,9 +178,9 @@
     }
   }
   function startRound() {
-    state = S.INTRO; stateT = 0; map = pick(MAPS); rects = map.r.map(a => Object.assign({}, a));
+    state = S.INTRO; stateT = 0; { const pool = MAPS.filter(m => m.type === TYPES[mapType].id), fresh = pool.filter(m => m !== map); map = forceMap >= 0 ? MAPS[forceMap] : pick(fresh.length ? fresh : pool); } rects = map.r.map(a => Object.assign({}, a));
     bullets = []; parts = []; paint.clearRect(0, 0, W, H);
-    const sp = [[70, 80], [890, 80], [70, 560], [890, 560]].sort(() => Math.random() - 0.5);
+    const sp = map.spawns.slice().sort(() => Math.random() - 0.5);
     ents.forEach((e, i) => {
       e.x = sp[i][0]; e.y = sp[i][1]; e.vx = e.vy = 0; e.hp = 3; e.alive = true; e.stains = []; e.rel = 0; e.fireT = 0.4; e.burstLeft = 0; e.dashT = 0; e.dashCd = 0; e.flash = 0;
       e.face = Math.atan2(H / 2 - e.y, W / 2 - e.x); e.gun = e.isBot ? pick(GUNS) : GUNS[e.wres >= 0 ? e.wres : 0]; e.rw = null; e.ammo = e.gun.mag; e.ai.react = 0; e.ai.sd = Math.random() < 0.5 ? 1 : -1;
@@ -222,7 +288,7 @@
   function pickSpot(e) {
     const taken = ents.filter(o => o !== e && o.ai.spot).map(o => o.ai.spot), reach = flowTo(e.x, e.y);
     for (let t = 0; t < 120; t++) {
-      const dr = pick(map.doors), a = rnd(0, TAU), dd = rnd(130, 330), x = dr.x + Math.cos(a) * dd, y = dr.y + Math.sin(a) * dd;
+      const dr = map.doors.length ? pick(map.doors) : { x: rnd(160, 800), y: rnd(120, 520) }, a = rnd(0, TAU), dd = rnd(130, 330), x = dr.x + Math.cos(a) * dd, y = dr.y + Math.sin(a) * dd;
       if (x < 40 || x > W - 40 || y < 40 || y > H - 40 || !nav.free[cellOf(x, y)] || reach[cellOf(x, y)] >= 9999 || !los(x, y, dr.x, dr.y)) continue;
       let near = false; for (const r of rects) { const cx = clamp(x, r.x, r.x + r.w), cy = clamp(y, r.y, r.y + r.h); if (Math.hypot(x - cx, y - cy) < 38) { near = true; break; } }
       if (!near || taken.some(s => Math.hypot(s.x - x, s.y - y) < 150)) continue;
@@ -282,7 +348,7 @@
     } else botThink(e, dt);
     e.x += e.vx * dt; e.y += e.vy * dt;
     e.x = clamp(e.x, ARENA.x + e.r, ARENA.x + ARENA.w - e.r); e.y = clamp(e.y, ARENA.y + e.r, ARENA.y + ARENA.h - e.r);
-    for (const r of rects) rectPush(e, r);
+    portalTick(e, dt, false); for (const r of rects) rectPush(e, r);
     for (const o of ents) if (o !== e && o.alive) { const d = Math.hypot(o.x - e.x, o.y - e.y); if (d < e.r + o.r && d > 0.01) { const p = (e.r + o.r - d) / 2; e.x += (e.x - o.x) / d * p; e.y += (e.y - o.y) / d * p; } }
   }
 
@@ -290,7 +356,7 @@
     for (const b of bullets) {
       b.t += dt; b.life -= dt;
       if (b.home) { let t = null, bd = 260; for (const e of ents) if (e.alive && e !== b.own) { const d = Math.hypot(e.x - b.x, e.y - b.y); if (d < bd && los(b.x, b.y, e.x, e.y)) { bd = d; t = e; } } if (t) { const cur = Math.atan2(b.vy, b.vx), sp = Math.hypot(b.vx, b.vy), na = cur + clamp(angDiff(Math.atan2(t.y - b.y, t.x - b.x), cur), -b.home * dt, b.home * dt); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp; } }
-      const px = b.x, py = b.y; b.x += b.vx * dt; b.y += b.vy * dt;
+      const px = b.x, py = b.y; b.x += b.vx * dt; b.y += b.vy * dt; portalTick(b, dt, true);
       if (b.lob) { b.h = Math.sin(clamp(b.t / (b.t + b.life + 0.0001), 0, 1) * Math.PI) * 26; if (b.life <= 0) { explode(b); b.dead = true; continue; } }
       else {
         let hit = false;
@@ -311,7 +377,8 @@
     for (const e of ents) if (e.rw) { e.rw.t -= dt; if ((e.rw.e && !e.rw.e.alive) || state !== S.FIGHT) e.rw = null; }
     for (const f of feed) f.t -= dt; feed = feed.filter(f => f.t > 0);
     for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.93; p.vy *= 0.93; p.life -= dt; } parts = parts.filter(p => p.life > 0);
-    if (state === S.WHEEL) {
+    if (state === S.VOTE) voteTick(dt);
+    else if (state === S.WHEEL) {
       wheelTick(dt);
       if (net.role === 'off') { if (wheel.res >= 0 && wheel.spin <= 0 && stateT > 2.2) startRound(); }
       else if (net.role === 'host') {
@@ -336,18 +403,34 @@
   function drawField() {
     ctx.fillStyle = '#0e1f15'; ctx.fillRect(0, 0, W, H);
     if (map && state !== S.MENU && state !== S.ONLINE && state !== S.LOBBY) {
-      ctx.fillStyle = '#555b66'; ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); ctx.fillStyle = 'rgba(0,0,0,.12)'; for (let x = ARENA.x; x < ARENA.x + ARENA.w; x += 40) for (let y = ARENA.y; y < ARENA.y + ARENA.h; y += 40) if (((x - ARENA.x) / 40 + (y - ARENA.y) / 40) % 2 === 0) ctx.fillRect(x, y, 40, 40);
+      ctx.fillStyle = map.base; ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); ctx.fillStyle = 'rgba(0,0,0,.12)'; for (let x = ARENA.x; x < ARENA.x + ARENA.w; x += 40) for (let y = ARENA.y; y < ARENA.y + ARENA.h; y += 40) if (((x - ARENA.x) / 40 + (y - ARENA.y) / 40) % 2 === 0) ctx.fillRect(x, y, 40, 40);
       for (const r of map.rooms) { ctx.fillStyle = r[4]; ctx.fillRect(r[0], r[1], r[2], r[3]); ctx.fillStyle = 'rgba(0,0,0,.13)'; for (let x = r[0]; x < r[0] + r[2]; x += 40) for (let y = r[1]; y < r[1] + r[3]; y += 40) if (((x - r[0]) / 40 + (y - r[1]) / 40) % 2 === 0) ctx.fillRect(x, y, Math.min(40, r[0] + r[2] - x), Math.min(40, r[1] + r[3] - y)); }
       ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 3; for (const d of map.doors) { ctx.beginPath(); if (rects.some(q => q.wall && Math.abs(q.y + q.h / 2 - d.y) < 2 && q.w > q.h)) { ctx.moveTo(d.x - DW / 2, d.y); ctx.lineTo(d.x + DW / 2, d.y); } else { ctx.moveTo(d.x, d.y - DW / 2); ctx.lineTo(d.x, d.y + DW / 2); } ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]); }
     } else { ctx.fillStyle = '#16301f'; ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); ctx.fillStyle = '#1b3a26'; for (let i = 0; i < 12; i++) ctx.fillRect(ARENA.x + i * 80 + 40, ARENA.y, 40, ARENA.h); }
     ctx.fillStyle = '#0e1f15'; ctx.fillRect(0, 0, W, ARENA.y); ctx.fillRect(0, H - ARENA.y, W, ARENA.y); ctx.fillRect(0, 0, ARENA.x, H); ctx.fillRect(W - ARENA.x, 0, ARENA.x, H);
     ctx.strokeStyle = '#e8dcc8'; ctx.lineWidth = 6; ctx.strokeRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
   }
+  function drawPortals() {
+    if (!map) return;
+    for (const p of map.portals) {
+      glowRing(p.x, p.y, 46, hexA(p.c), 0.55 + Math.sin(time * 5) * 0.12); ctx.fillStyle = '#05060c'; ctx.beginPath(); ctx.arc(p.x, p.y, 17, 0, TAU); ctx.fill();
+      for (let k = 0; k < 3; k++) { ctx.strokeStyle = p.c; ctx.globalAlpha = 0.9 - k * 0.25; ctx.lineWidth = 4 - k; ctx.beginPath(); ctx.arc(p.x, p.y, 18 + k * 5 + Math.sin(time * 6 + k) * 1.5, time * (k % 2 ? -3 : 3), time * (k % 2 ? -3 : 3) + 4.2); ctx.stroke(); } ctx.globalAlpha = 1;
+    }
+  }
   function drawRects() {
     const cols = ['#ff8a3a', '#3ac8ff', '#ffd23f', '#c77dff'];
     rects.forEach((r, i) => {
       ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(r.x + 4, r.y + 6, r.w, r.h);
-      if (r.wall) { ctx.fillStyle = '#efe6d4'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#6a5a48'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
+      if (r.wall) { ctx.fillStyle = map ? map.wallCol : '#efe6d4'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#4a3a30'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2, k = r.kind;
+      if (k === 'tree') { ctx.fillStyle = '#5a3a1e'; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, TAU); ctx.fill(); ctx.fillStyle = '#2a6a2a'; ctx.beginPath(); ctx.arc(cx, cy, Math.min(r.w, r.h) / 2 + 2, 0, TAU); ctx.fill(); ctx.fillStyle = '#3a8a3a'; ctx.beginPath(); ctx.arc(cx - 4, cy - 4, Math.min(r.w, r.h) / 3, 0, TAU); ctx.fill(); return; }
+      if (k === 'fountain') { ctx.fillStyle = '#9aa0aa'; ctx.beginPath(); ctx.ellipse(cx, cy, r.w / 2, r.h / 2, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#4ab0e8'; ctx.beginPath(); ctx.ellipse(cx, cy, r.w / 2 - 6, r.h / 2 - 6, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#d8f0ff'; ctx.beginPath(); ctx.arc(cx, cy, 6 + Math.sin(time * 4) * 1.5, 0, TAU); ctx.fill(); return; }
+      if (k === 'pool') { ctx.fillStyle = '#e8f4ff'; ctx.beginPath(); ctx.roundRect(r.x - 4, r.y - 4, r.w + 8, r.h + 8, 14); ctx.fill(); ctx.fillStyle = '#3ab0e0'; ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(r.x + 14, r.y + 18 + i * 22); for (let x = 0; x < r.w - 28; x += 12) ctx.lineTo(r.x + 14 + x + 6, r.y + 18 + i * 22 + Math.sin(time * 3 + x) * 3); ctx.stroke(); } return; }
+      if (k === 'bld' || k === 'shed') { ctx.fillStyle = k === 'shed' ? '#7a5a3a' : ['#b5654a', '#7a8aa8', '#c0a060', '#a06a8a'][i % 4]; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(r.x, r.y + r.h * 0.55, r.w, r.h * 0.45); ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#3a2a1a'; ctx.fillRect(cx - 6, r.y + r.h - 16, 12, 16); return; }
+      if (k === 'stall') { for (let q = 0; q < r.w; q += 10) { ctx.fillStyle = (q / 10) % 2 ? '#fff' : '#e8403a'; ctx.fillRect(r.x + q, r.y, Math.min(10, r.w - q), r.h * 0.5); } ctx.fillStyle = '#7a5a3a'; ctx.fillRect(r.x, r.y + r.h * 0.5, r.w, r.h * 0.5); ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
+      if (k === 'hedge') { ctx.fillStyle = '#2a7a34'; ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fill(); ctx.fillStyle = '#3a9a44'; ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + 3, r.w - 8, r.h / 2 - 3, 8); ctx.fill(); return; }
+      if (k === 'bench') { ctx.fillStyle = '#8a5a2a'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
+      if (k === 'crate') { ctx.fillStyle = '#4a5468'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#9fd8ff'; ctx.lineWidth = 2; ctx.strokeRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6); ctx.beginPath(); ctx.moveTo(r.x + 3, r.y + 3); ctx.lineTo(r.x + r.w - 3, r.y + r.h - 3); ctx.stroke(); return; }
       const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h); g.addColorStop(0, cols[i % 4]); g.addColorStop(1, '#222'); ctx.fillStyle = g;
       const rr = Math.min(10, r.w / 2, r.h / 2); ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, rr); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2; ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + 3, r.w - 8, Math.min(8, r.h / 3), 4); ctx.fill();
@@ -461,9 +544,33 @@
     button('LEAVE', W / 2 - 70, 590, 140, 40, () => leaveOnline(''), '#ccc');
   }
 
+  function preview(id, x, y, w, h) {
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.clip();
+    if (id === 'normal') { ctx.fillStyle = '#2f6b3a'; ctx.fillRect(x, y, w, h); [[.2, .25], [.7, .2], [.45, .5], [.2, .75], [.72, .72]].forEach((p, i) => { ctx.fillStyle = ['#ff8a3a', '#3ac8ff', '#ffd23f', '#c77dff', '#ff7ad9'][i]; ctx.beginPath(); ctx.roundRect(x + p[0] * w - 14, y + p[1] * h - 14, 28, 28, 6); ctx.fill(); }); }
+    else if (id === 'house') { ctx.fillStyle = '#555b66'; ctx.fillRect(x, y, w, h); [['#6b4a2e', 0, 0, .4, .55], ['#3d5a6b', .4, 0, .6, .55], ['#4a6b3d', 0, .55, .6, .45], ['#7a6b3a', .6, .55, .4, .45]].forEach(r => { ctx.fillStyle = r[0]; ctx.fillRect(x + r[1] * w + 3, y + r[2] * h + 3, r[3] * w - 6, r[4] * h - 6); }); ctx.fillStyle = '#efe6d4'; ctx.fillRect(x + w * .4 - 3, y, 6, h * .22); ctx.fillRect(x + w * .4 - 3, y + h * .34, 6, h * .21); ctx.fillRect(x, y + h * .55 - 3, w * .22, 6); ctx.fillRect(x + w * .34, y + h * .55 - 3, w * .66, 6); }
+    else if (id === 'village') { ctx.fillStyle = '#4f7a3a'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#6b6b70'; ctx.fillRect(x, y + h * .42, w, h * .16); ctx.fillRect(x + w * .42, y, w * .16, h); [['#b5654a', .08, .08], ['#7a8aa8', .66, .1], ['#c0a060', .1, .66], ['#a06a8a', .68, .68]].forEach(b => { ctx.fillStyle = b[0]; ctx.fillRect(x + b[1] * w, y + b[2] * h, w * .24, h * .24); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(x + b[1] * w, y + b[2] * h + h * .12, w * .24, h * .12); }); ctx.fillStyle = '#8ad0ff'; ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, 12, 0, TAU); ctx.fill(); }
+    else { ctx.fillStyle = '#232a3a'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#8a96b0'; ctx.fillRect(x + w * .4, y, 5, h * .4); ctx.fillRect(x + w * .4, y + h * .6, 5, h * .4); [[.15, .25, '#3ab0ff'], [.85, .75, '#3ab0ff'], [.85, .25, '#ff9a3a'], [.15, .75, '#ff9a3a']].forEach(p => { glowRing(x + p[0] * w, y + p[1] * h, 28, hexA(p[2]), 0.9); ctx.strokeStyle = p[2]; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + p[0] * w, y + p[1] * h, 13, 0, TAU); ctx.stroke(); }); ctx.setLineDash([5, 6]); ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + .15 * w, y + .25 * h); ctx.lineTo(x + .85 * w, y + .75 * h); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.restore();
+  }
+  function drawVote() {
+    drawField(); ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(0, 0, W, H);
+    label('VOTE FOR THE MAP TYPE', W / 2, 72, 38, '#ffd23f'); label(vote.res >= 0 ? 'The votes are in!' : 'Click a card or press 1 / 2 / 3  -  ' + Math.max(0, Math.ceil(vote.t)) + 's', W / 2, 104, 16, '#cfe');
+    const counts = voteCounts(); vote.opts.forEach((tid, k) => {
+      const T = TYPES[tid], x = 45 + k * 290, y = 140, w = 270, h = 380, win = vote.res === tid, mine = vote.mine === k;
+      buttons.push({ x, y, w, h, fn: () => myVote(k) });
+      ctx.fillStyle = 'rgba(10,20,16,.85)'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fill(); ctx.strokeStyle = win ? '#ffd23f' : mine ? '#fff' : T.col; ctx.lineWidth = win ? 7 : mine ? 5 : 2; ctx.stroke();
+      if (win) { glowRing(x + w / 2, y + h / 2, 230, 'rgba(255,210,63,A)', 0.25); }
+      label(String(k + 1), x + 24, y + 34, 22, '#789', 'left'); label(T.name, x + w / 2, y + 40, 28, T.col); preview(T.id, x + 20, y + 58, w - 40, 150);
+      label(T.desc[0], x + w / 2, y + 246, 15, '#ddd'); label(T.desc[1], x + w / 2, y + 268, 15, '#ddd');
+      label(counts[k] + (counts[k] === 1 ? ' vote' : ' votes'), x + w / 2, y + 312, 20, '#fff');
+      let n = 0; for (const e in vote.votes) if (vote.votes[e] === k) { ctx.fillStyle = PCOL[e % 4]; ctx.beginPath(); ctx.arc(x + w / 2 - (counts[k] - 1) * 14 + n * 28, y + 346, 10, 0, TAU); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); n++; }
+    });
+    if (vote.res >= 0) label('MAP TYPE: ' + TYPES[vote.res].name + '!', W / 2, 570, 34, '#ffd23f');
+  }
+
   function drawFight() {
     ctx.save(); if (shake > 0) ctx.translate(rnd(-shake, shake) * 0.5, rnd(-shake, shake) * 0.5);
-    drawField(); drawRects(); ctx.drawImage(paintC, 0, 0); for (const e of ents) drawEnt(e); drawBullets();
+    drawField(); drawRects(); drawPortals(); ctx.drawImage(paintC, 0, 0); for (const e of ents) drawEnt(e); drawBullets();
     if (state === S.FIGHT || state === S.INTRO) { const p = player(); if (p.alive) { ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 10, 0, TAU); ctx.moveTo(mouse.x - 15, mouse.y); ctx.lineTo(mouse.x - 5, mouse.y); ctx.moveTo(mouse.x + 5, mouse.y); ctx.lineTo(mouse.x + 15, mouse.y); ctx.moveTo(mouse.x, mouse.y - 15); ctx.lineTo(mouse.x, mouse.y - 5); ctx.moveTo(mouse.x, mouse.y + 5); ctx.lineTo(mouse.x, mouse.y + 15); ctx.stroke(); } }
     ctx.restore();
     drawHUD();
@@ -489,7 +596,7 @@
 
   function draw() {
     buttons = [];
-    if (state === S.MENU) drawMenu(); else if (state === S.ONLINE) drawOnline(); else if (state === S.LOBBY) drawLobby(); else if (state === S.WHEEL) drawWheel(); else if (state === S.MATCHEND) drawMatchEnd(); else drawFight();
+    if (state === S.MENU) drawMenu(); else if (state === S.VOTE) drawVote(); else if (state === S.ONLINE) drawOnline(); else if (state === S.LOBBY) drawLobby(); else if (state === S.WHEEL) drawWheel(); else if (state === S.MATCHEND) drawMatchEnd(); else drawFight();
   }
 
   // ------------------------------------------------------------------ online (peer-to-peer via PeerJS; the host runs the game)
@@ -552,6 +659,7 @@
     } else if (!cl || !cl.e) return;
     else if (m.t === 'in') cl.e.inp = { mx: clamp(+m.mx || 0, -1, 1), my: clamp(+m.my || 0, -1, 1), ax: clamp(+m.ax || 0, 0, W), ay: clamp(+m.ay || 0, 0, H), f: m.f ? 1 : 0 };
     else if (m.t === 'dash') { if (state === S.FIGHT) doDash(cl.e); } else if (m.t === 'rel') { if (state === S.FIGHT) doReload(cl.e); }
+    else if (m.t === 'vote') castVote(cl.e.i, m.k | 0);
     else if (m.t === 'spin') { if (state === S.WHEEL && cl.e.wres < 0) { const r = Math.floor(Math.random() * GUNS.length); cl.e.wres = r; cl.e.spunAt = time; c.send({ t: 'wres', r }); } }
   }
   function hostDrop(c) {
@@ -563,12 +671,12 @@
     net.clients.forEach((cl, i) => { cl.e = ents[i + 1]; ents[i + 1].remote = cl.conn; });
     while (ents.length < 4 && net.fill) { const i = ents.length; ents.push(mkEnt(i, BOTNAMES[i - names.length] || 'Bot ' + i, true)); }
     myIdx = 0; roundNo = 0; winner = null; const all = ents.map(e => e.name);
-    net.clients.forEach((cl, i) => cl.conn.send({ t: 'go', names: all, nh: names.length, you: i + 1 })); startWheel();
+    net.clients.forEach((cl, i) => cl.conn.send({ t: 'go', names: all, nh: names.length, you: i + 1 })); startVote();
   }
   function buildSnap() {
     const sn = { t: 's', st: state, sT: +stateT.toFixed(2), mp: MAPS.indexOf(map), rn: roundNo, rc: net.rc, w: winner ? winner.i : -1,
       e: ents.map(e => [Math.round(e.x), Math.round(e.y), +e.face.toFixed(2), +e.hp.toFixed(2), e.alive ? 1 : 0, GUNS.indexOf(e.gun), e.ammo, +Math.max(0, e.rel).toFixed(2), e.wins, +e.flash.toFixed(2), +Math.max(0, e.dashCd).toFixed(1), e.kills || 0]),
-      b: bullets.map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), b.r, b.own.i, b.lob ? 1 : 0, Math.round(b.h)]), sp: net.ev.sp, hs: net.ev.hs, fd: net.ev.fd };
+      b: bullets.map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.vx), Math.round(b.vy), b.r, b.own.i, b.lob ? 1 : 0, Math.round(b.h)]), sp: net.ev.sp, hs: net.ev.hs, fd: net.ev.fd, vo: state === S.VOTE ? { o: vote.opts, v: vote.votes, r: vote.res, t: +vote.t.toFixed(1) } : null };
     net.ev = { sp: [], hs: [], fd: [] }; return sn;
   }
   function hostNet(dt) {
@@ -588,7 +696,7 @@
     else if (m.t === 'bye') leaveOnline('The host closed the room.');
     else if (m.t === 'go') {
       ents = m.names.map((n, i) => { const e = mkEnt(i, n, i >= m.nh); e.tx = e.x = 480; e.ty = e.y = 320; return e; }); myIdx = m.you; roundNo = 0; winner = null; bullets = []; parts = []; feed = []; paint.clearRect(0, 0, W, H);
-      state = S.WHEEL; wheel.res = -1; wheel.spin = 0; wheel.wait = false;
+      state = S.VOTE; vote = { opts: [0, 1, 2], votes: {}, t: 15, res: -1, mine: -1, endT: 0 }; wheel.res = -1; wheel.spin = 0; wheel.wait = false;
     } else if (m.t === 'wres') spinWheel(m.r);
     else if (m.t === 's') applySnap(m);
   }
@@ -596,6 +704,7 @@
     if (!ents.length) return; const was = state;
     if (m.st === S.WHEEL && was !== S.WHEEL) { wheel.res = -1; wheel.spin = 0; wheel.wait = false; }
     state = m.st; stateT = m.sT; roundNo = m.rn;
+    if (m.vo) vote = { opts: m.vo.o, votes: m.vo.v, res: m.vo.r, t: m.vo.t, mine: vote.mine, endT: 0 };
     if (m.mp >= 0 && MAPS[m.mp] !== map) { map = MAPS[m.mp]; rects = map.r.map(a => Object.assign({}, a)); }
     if (m.rc !== net.rc) { net.rc = m.rc; paint.clearRect(0, 0, W, H); bullets = []; for (const e of ents) e.stains = []; }
     m.e.forEach((a, i) => {
@@ -614,7 +723,7 @@
     time += dt; shake = Math.max(0, shake - dt * 30);
     for (const f of feed) f.t -= dt; feed = feed.filter(f => f.t > 0);
     for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.93; p.vy *= 0.93; p.life -= dt; } parts = parts.filter(p => p.life > 0);
-    if (state === S.WHEEL) wheelTick(dt); else stateT += dt;
+    if (state === S.WHEEL) wheelTick(dt); else stateT += dt; if (state === S.VOTE) vote.t -= dt;
     for (const e of ents) { if (e.tx !== undefined) { const k = Math.min(1, 16 * dt); e.x += (e.tx - e.x) * k; e.y += (e.ty - e.y) * k; } if (e.rw) { e.rw.t -= dt; if (e.rw.t <= 0) e.rw = null; } }
     for (const b of bullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
     net.inT += dt; if (net.inT > 0.033 && (state === S.FIGHT || state === S.INTRO)) { net.inT = 0; const c = localInput(); const me = player(); if (me) { me.face = Math.atan2(c.ay - me.y, c.ax - me.x); } netSend({ t: 'in', mx: c.mx, my: c.my, ax: Math.round(c.ax), ay: Math.round(c.ay), f: c.f }); }
@@ -637,7 +746,8 @@
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(ev.code)) ev.preventDefault();
     keys.add(ev.code);
     if (ev.code === 'KeyM') muted = !muted;
-    if (state === S.WHEEL && (ev.code === 'Space' || ev.code === 'Enter')) spinWheel();
+    if (state === S.VOTE) { if (ev.code === 'Digit1' || ev.code === 'Numpad1') myVote(0); else if (ev.code === 'Digit2' || ev.code === 'Numpad2') myVote(1); else if (ev.code === 'Digit3' || ev.code === 'Numpad3') myVote(2); }
+    else if (state === S.WHEEL && (ev.code === 'Space' || ev.code === 'Enter')) spinWheel();
     else if (state === S.MENU && ev.code === 'Enter') newMatch();
     else if (state === S.FIGHT) { const p = player(); if (ev.code === 'KeyR') { if (net.role === 'client') netSend({ t: 'rel' }); else doReload(p); } if (ev.code === 'Space' || ev.code === 'ShiftLeft' || ev.code === 'ShiftRight') { if (net.role === 'client') netSend({ t: 'dash' }); else doDash(p); } }
     else if (state === S.MATCHEND && ev.code === 'Enter') newMatch();
@@ -653,5 +763,5 @@
   }
   requestAnimationFrame(frame);
 
-  if (location.hash === '#debug') window.__nerf = { net, hostStart: startOnlineMatch, setName: n => { nameStr = n; }, quick: quickMatch, create: createRoom, join: c => { codeStr = c; joinCode(); }, me: () => myIdx, checkMaps: () => MAPS.map(m => { map = m; rects = m.r.map(a => Object.assign({}, a)); buildNav(); const d = flowTo(70, 80); let free = 0, reach = 0; nav.free.forEach((f, i) => { if (f) { free++; if (d[i] < 9999) reach++; } }); return [m.name, [[890, 80], [70, 560], [890, 560]].map(p => d[cellOf(p[0], p[1])]), free, reach, m.doors.length, [[70, 80], [890, 80], [70, 560], [890, 560]].map(p => nav.free[cellOf(p[0], p[1])])]; }), step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name, rush: ents[myIdx] && ents[myIdx].rw && ents[myIdx].rw.t, modes: ents.map(e => e.ai.mode) }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
+  if (location.hash === '#debug') window.__nerf = { play: i => { forceMap = i; if (!ents.length) { opts.bots = 3; newMatch(); } state = S.WHEEL; wheel.res = 0; ents[0].wres = 0; startRound(); }, net, castVote, vote: () => vote, myVote, net, hostStart: startOnlineMatch, setName: n => { nameStr = n; }, quick: quickMatch, create: createRoom, join: c => { codeStr = c; joinCode(); }, me: () => myIdx, checkMaps: () => MAPS.map(m => { map = m; rects = m.r.map(a => Object.assign({}, a)); buildNav(); const sp0 = m.spawns, d = flowTo(sp0[0][0], sp0[0][1]); let free = 0, reach = 0; nav.free.forEach((f, i) => { if (f) { free++; if (d[i] < 9999) reach++; } }); return [m.name, sp0.slice(1).map(p => d[cellOf(p[0], p[1])]), free, reach, m.doors.length, sp0.map(p => nav.free[cellOf(p[0], p[1])])]; }), step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name, rush: ents[myIdx] && ents[myIdx].rw && ents[myIdx].rw.t, modes: ents.map(e => e.ai.mode) }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
 })();
