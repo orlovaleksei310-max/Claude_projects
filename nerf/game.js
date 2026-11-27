@@ -32,12 +32,30 @@
   ];
   GUNS.forEach(g => { g.range = g.speed * g.life; });
 
-  // ------------------------------------------------------------------ arenas: [x, y, w, h] bunkers
+  // ------------------------------------------------------------------ houses: rooms, walls with doorways, furniture
+  const WT = 16, DW = 84;                                // wall thickness, doorway width
+  function houseMap(name, def) {
+    const r = [], doors = [];
+    const hw = (y, x0, x1, gaps) => { let x = x0; for (const g of gaps.concat([x1 + DW])) { const gx0 = g - DW / 2; if (gx0 > x) r.push({ x, y: y - WT / 2, w: Math.min(gx0, x1) - x, h: WT, wall: true }); x = g + DW / 2; if (g <= x1) doors.push({ x: g, y }); } };
+    const vw = (x, y0, y1, gaps) => { let y = y0; for (const g of gaps.concat([y1 + DW])) { const gy0 = g - DW / 2; if (gy0 > y) r.push({ x: x - WT / 2, y, w: WT, h: Math.min(gy0, y1) - y, wall: true }); y = g + DW / 2; if (g <= y1) doors.push({ x, y: g }); } };
+    def.h.forEach(a => hw(a[0], a[1], a[2], a[3])); def.v.forEach(a => vw(a[0], a[1], a[2], a[3]));
+    def.f.forEach(a => r.push({ x: a[0], y: a[1], w: a[2], h: a[3], f: true }));
+    return { name, r, doors, rooms: def.rooms };
+  }
   const MAPS = [
-    { name: 'Bunker Yard', col: ['#ff8a3a', '#ffd23f'], r: [[430, 270, 100, 100], [200, 140, 70, 70], [690, 140, 70, 70], [200, 430, 70, 70], [690, 430, 70, 70], [330, 70, 14, 130], [616, 70, 14, 130], [330, 440, 14, 130], [616, 440, 14, 130]] },
-    { name: 'Crossfire', col: ['#3ac8ff', '#7affd2'], r: [[300, 190, 360, 26], [300, 424, 360, 26], [120, 300, 110, 40], [730, 300, 110, 40], [455, 300, 50, 40]] },
-    { name: 'Pillar Park', col: ['#c77dff', '#ff7ad9'], r: [[190, 110, 56, 56], [452, 110, 56, 56], [714, 110, 56, 56], [190, 292, 56, 56], [452, 292, 56, 56], [714, 292, 56, 56], [190, 474, 56, 56], [452, 474, 56, 56], [714, 474, 56, 56]] },
-    { name: 'The Maze', col: ['#5aff7a', '#ffe27a'], r: [[160, 100, 240, 24], [560, 100, 240, 24], [160, 516, 240, 24], [560, 516, 240, 24], [120, 200, 24, 240], [816, 200, 24, 240], [400, 260, 160, 24], [400, 356, 160, 24]] }
+    houseMap('The House', {
+      v: [[320, 20, 620, [130, 480]], [640, 20, 620, [170, 440]]], h: [[320, 20, 320, [170]], [320, 320, 640, [480]], [320, 640, 940, [790]]],
+      rooms: [[20, 20, 300, 300, '#6b4a2e'], [320, 20, 320, 300, '#3d5a6b'], [640, 20, 300, 300, '#6b3d5a'], [20, 320, 300, 300, '#4a6b3d'], [320, 320, 320, 300, '#7a6b3a'], [640, 320, 300, 300, '#3a4a7a']],
+      f: [[110, 120, 90, 50], [60, 230, 50, 50], [410, 110, 110, 44], [560, 200, 44, 70], [700, 90, 80, 44], [840, 210, 50, 70], [90, 440, 100, 44], [230, 520, 60, 50], [400, 410, 60, 60], [540, 520, 70, 44], [730, 410, 100, 44], [850, 520, 50, 60]] }),
+    houseMap('Mansion', {
+      v: [[330, 20, 620, [120, 320, 520]], [630, 20, 620, [120, 320, 520]]], h: [[215, 20, 330, [100]], [420, 20, 330, [240]], [215, 630, 940, [850]], [420, 630, 940, [720]]],
+      rooms: [[20, 20, 310, 195, '#6b4a2e'], [20, 215, 310, 205, '#3d5a6b'], [20, 420, 310, 200, '#4a6b3d'], [330, 20, 300, 600, '#8a7a5a'], [630, 20, 310, 195, '#6b3d5a'], [630, 215, 310, 205, '#7a6b3a'], [630, 420, 310, 200, '#3a4a7a']],
+      f: [[450, 150, 60, 60], [450, 430, 60, 60], [400, 290, 160, 44], [80, 110, 90, 44], [220, 300, 70, 70], [70, 520, 100, 44], [760, 110, 90, 44], [700, 300, 70, 70], [790, 520, 100, 44]] }),
+    houseMap('Apartment', {
+      v: [[240, 20, 270, []], [480, 20, 270, []], [720, 20, 270, []], [240, 370, 620, []], [480, 370, 620, []], [720, 370, 620, []]],
+      h: [[270, 20, 940, [130, 360, 600, 830]], [370, 20, 940, [130, 360, 600, 830]]],
+      rooms: [[20, 20, 220, 250, '#6b4a2e'], [240, 20, 240, 250, '#3d5a6b'], [480, 20, 240, 250, '#6b3d5a'], [720, 20, 220, 250, '#4a6b3d'], [20, 270, 920, 100, '#555b66'], [20, 370, 220, 250, '#7a6b3a'], [240, 370, 240, 250, '#3a4a7a'], [480, 370, 240, 250, '#6b4a2e'], [720, 370, 220, 250, '#3d5a6b']],
+      f: [[60, 40, 100, 60], [290, 150, 100, 50], [520, 60, 50, 90], [820, 130, 80, 50], [60, 520, 100, 60], [350, 440, 60, 90], [600, 520, 100, 50], [820, 440, 60, 80]] })
   ];
   const BOTNAMES = ['Red Rex', 'Green Gus', 'Yellow Yuki'], PCOL = ['#3a8dff', '#ff4a4a', '#3ad65a', '#ffd23f'];
   const DIFF = [{ name: 'EASY', err: 0.3, turn: 4, speed: 150, react: 0.35 }, { name: 'NORMAL', err: 0.15, turn: 7, speed: 175, react: 0.2 }, { name: 'HARD', err: 0.06, turn: 12, speed: 195, react: 0.08 }];
@@ -46,7 +64,7 @@
   const S = { MENU: 0, WHEEL: 1, INTRO: 2, FIGHT: 3, ROUNDEND: 4, MATCHEND: 5 };
   let state = S.MENU, stateT = 0, time = 0;
   let opts = { bots: 3, diff: 1 };
-  let ents = [], bullets = [], parts = [], rects = [], feed = [], map = null, roundNo = 0, banner = '', winner = null, shake = 0;
+  let rushWarn = null, nav = null, ents = [], bullets = [], parts = [], rects = [], feed = [], map = null, roundNo = 0, banner = '', winner = null, shake = 0;
   const keys = new Set(), mouse = { x: W / 2, y: H / 2, down: false };
   const paintC = document.createElement('canvas'); paintC.width = W; paintC.height = H; const paint = paintC.getContext('2d');
   let wheel = { rot: 0, spin: 0, dur: 0, from: 0, to: 0, res: -1, lastSeg: 0, bots: [] };
@@ -78,14 +96,15 @@
   }
 
   function startRound() {
-    state = S.INTRO; stateT = 0; map = pick(MAPS); rects = map.r.map(a => ({ x: a[0], y: a[1], w: a[2], h: a[3] }));
+    state = S.INTRO; stateT = 0; map = pick(MAPS); rects = map.r.map(a => Object.assign({}, a));
     bullets = []; parts = []; paint.clearRect(0, 0, W, H);
-    const sp = [[70, 70], [890, 70], [70, 570], [890, 570]].sort(() => Math.random() - 0.5);
+    const sp = [[70, 80], [890, 80], [70, 560], [890, 560]].sort(() => Math.random() - 0.5);
     ents.forEach((e, i) => {
       e.x = sp[i][0]; e.y = sp[i][1]; e.vx = e.vy = 0; e.hp = 3; e.alive = true; e.stains = []; e.rel = 0; e.fireT = 0.4; e.burstLeft = 0; e.dashT = 0; e.dashCd = 0; e.flash = 0;
       e.face = Math.atan2(H / 2 - e.y, W / 2 - e.x); if (e.isBot || i > 0) { e.gun = i === 0 ? e.gun : pick(GUNS); } e.ammo = e.gun.mag; e.ai.react = 0; e.ai.sd = Math.random() < 0.5 ? 1 : -1;
     });
-    ents[0].gun = GUNS[wheel.res]; ents[0].ammo = ents[0].gun.mag;
+    ents[0].gun = GUNS[wheel.res]; ents[0].ammo = ents[0].gun.mag; buildNav(); rushWarn = null;
+    for (const e of ents) if (e.isBot) { const a = e.ai; a.mode = Math.random() < 0.6 ? 'camp' : 'rush'; a.modeT = rnd(9, 17); a.flow = null; a.lastHp = 3; a.spot = null; if (a.mode === 'camp') a.spot = pickSpot(e); }
     wheel.bots = ents.slice(1).map(e => e.gun);
   }
 
@@ -147,30 +166,79 @@
     for (const e of ents) if (e.alive && e.i !== b.own.i && Math.hypot(e.x - b.x, e.y - b.y) < b.splash + e.r) damage(e, b.dmg * (1 - Math.hypot(e.x - b.x, e.y - b.y) / (b.splash + e.r) * 0.45), b.own, b.x, b.y);
   }
 
+  // ------------------------------------------------------------------ navigation (grid flow fields so bots can walk through doorways)
+  const NC = 20, NX = W / NC, NY = H / NC;
+  function buildNav() {
+    nav = { free: new Uint8Array(NX * NY) };
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+      const x = i * NC + NC / 2, y = j * NC + NC / 2; let ok = x > ARENA.x + 16 && x < ARENA.x + ARENA.w - 16 && y > ARENA.y + 16 && y < ARENA.y + ARENA.h - 16;
+      if (ok) for (const r of rects) { const cx = clamp(x, r.x, r.x + r.w), cy = clamp(y, r.y, r.y + r.h); if (Math.hypot(x - cx, y - cy) < 17) { ok = false; break; } }
+      nav.free[j * NX + i] = ok ? 1 : 0;
+    }
+  }
+  const cellOf = (x, y) => clamp(Math.floor(y / NC), 0, NY - 1) * NX + clamp(Math.floor(x / NC), 0, NX - 1);
+  function nearFree(c) { if (nav.free[c]) return c; for (let k = 1; k < 6; k++) for (let dj = -k; dj <= k; dj++) for (let di = -k; di <= k; di++) { const i = (c % NX) + di, j = Math.floor(c / NX) + dj; if (i >= 0 && j >= 0 && i < NX && j < NY && nav.free[j * NX + i]) return j * NX + i; } return c; }
+  function flowTo(tx, ty) {
+    const d = new Int16Array(NX * NY).fill(9999), start = nearFree(cellOf(tx, ty)), q = [start]; d[start] = 0;
+    for (let h = 0; h < q.length; h++) {
+      const c = q[h], ci = c % NX, cj = Math.floor(c / NX);
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue; const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= NX || j >= NY) continue; const n = j * NX + i; if (!nav.free[n] || d[n] <= d[c] + 1) continue;
+        if (di && dj && (!nav.free[cj * NX + i] || !nav.free[j * NX + ci])) continue; d[n] = d[c] + 1; q.push(n);
+      }
+    }
+    return d;
+  }
+  function navDir(e, tx, ty) {                            // unit vector toward the next cell on the way to (tx,ty)
+    const a = e.ai, key = cellOf(tx, ty);
+    if (!a.flow || a.flow.key !== key || a.flow.age > 0.6) a.flow = { key, d: flowTo(tx, ty), age: 0 };
+    const c = cellOf(e.x, e.y), ci = c % NX, cj = Math.floor(c / NX), d = a.flow.d; let best = c, bv = d[c];
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= NX || j >= NY) continue; const n = j * NX + i; if (d[n] < bv && (!(di && dj) || (nav.free[cj * NX + i] && nav.free[j * NX + ci]))) { bv = d[n]; best = n; } }
+    if (best === c) { const dx = tx - e.x, dy = ty - e.y, m = Math.hypot(dx, dy) || 1; return [dx / m, dy / m]; }
+    const px = (best % NX) * NC + NC / 2, py = Math.floor(best / NX) * NC + NC / 2, dx = px - e.x, dy = py - e.y, m = Math.hypot(dx, dy) || 1; return [dx / m, dy / m];
+  }
+  // a camping spot: a spot against a wall with a clear view of a doorway
+  function pickSpot(e) {
+    const taken = ents.filter(o => o !== e && o.ai.spot).map(o => o.ai.spot);
+    for (let t = 0; t < 120; t++) {
+      const dr = pick(map.doors), a = rnd(0, TAU), dd = rnd(130, 330), x = dr.x + Math.cos(a) * dd, y = dr.y + Math.sin(a) * dd;
+      if (x < 40 || x > W - 40 || y < 40 || y > H - 40 || !nav.free[cellOf(x, y)] || !los(x, y, dr.x, dr.y)) continue;
+      let near = false; for (const r of rects) { const cx = clamp(x, r.x, r.x + r.w), cy = clamp(y, r.y, r.y + r.h); if (Math.hypot(x - cx, y - cy) < 38) { near = true; break; } }
+      if (!near || taken.some(s => Math.hypot(s.x - x, s.y - y) < 150)) continue;
+      return { x, y, ax: dr.x, ay: dr.y };
+    }
+    return { x: W / 2, y: H / 2, ax: W / 2, ay: H / 2 - 100 };
+  }
+  function warnRush(e) { if (player().alive && !(rushWarn && rushWarn.t > 0.2)) { rushWarn = { t: 2.2, e }; blip(980, 0.12, 'square', 0.06); setTimeout(() => blip(780, 0.16, 'square', 0.06), 130); } }
+  function setRush(e, tgt) { e.ai.mode = 'rush'; e.ai.flow = null; if (tgt === player()) warnRush(e); }
+
   // ------------------------------------------------------------------ AI
   function botThink(e, dt) {
     const D = DIFF[opts.diff], ai = e.ai; let tgt = null, bd = 1e9;
     for (const o of ents) if (o.alive && o !== e) { const d = Math.hypot(o.x - e.x, o.y - e.y) * (los(e.x, e.y, o.x, o.y) ? 1 : 1.6); if (d < bd) { bd = d; tgt = o; } }
-    let mx = 0, my = 0;
     ai.sdT -= dt; if (ai.sdT <= 0) { ai.sd = -ai.sd; ai.sdT = rnd(0.7, 2.2); }
     ai.errT -= dt; if (ai.errT <= 0) { ai.err = rnd(-1, 1) * D.err; ai.errT = rnd(0.25, 0.6); }
-    if (ai.react > 0) ai.react -= dt;
-    if (tgt) {
-      const dx = tgt.x - e.x, dy = tgt.y - e.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, vis = los(e.x, e.y, tgt.x, tgt.y), pref = e.gun.pref;
-      if (!vis) { mx = ux + -uy * ai.sd * 0.5; my = uy + ux * ai.sd * 0.5; }
-      else { const k = d > pref + 40 ? 1 : d < pref - 50 ? -1 : 0; mx = ux * k + -uy * ai.sd * 0.85; my = uy * k + ux * ai.sd * 0.85; }
-      for (const b of bullets) if (b.own !== e && !b.lob && Math.hypot(b.x - e.x, b.y - e.y) < 130) { const bs = Math.hypot(b.vx, b.vy), dot = (b.vx * (e.x - b.x) + b.vy * (e.y - b.y)) / (bs * (Math.hypot(b.x - e.x, b.y - e.y) || 1)); if (dot > 0.92 && Math.random() < dt * 4) { ai.sd = -ai.sd; ai.sdT = rnd(0.5, 1.2); if (e.dashCd <= 0 && opts.diff > 0 && Math.random() < 0.4) { e.dashT = 0.16; e.dashCd = 2.2; } } }
-      const lead = e.gun.lob ? 0 : clamp(d / e.gun.speed, 0, 1.2) * (0.5 + opts.diff * 0.35), ax = tgt.x + tgt.vx * lead, ay = tgt.y + tgt.vy * lead;
-      e.aimX = ax; e.aimY = ay;
-      const want = Math.atan2(ay - e.y, ax - e.x) + ai.err, df = angDiff(want, e.face);
-      e.face += clamp(df, -D.turn * dt, D.turn * dt);
-      if (vis && ai.react <= 0 && d < e.gun.range * 0.95 && Math.abs(angDiff(want, e.face)) < 0.1 + 0.2 / (d / 100 + 1)) tryFire(e);
-      if (!vis && e.ammo < e.gun.mag * 0.4 && e.rel <= 0) e.rel = e.gun.reload * 0.7;
-      if (ai.react <= 0 && !vis) ai.react = 0;
-      if (vis && ai.react <= 0 && !ai.saw) { ai.saw = true; ai.react = D.react; } if (!vis) ai.saw = false;
-    }
-    ai.stuck += dt; if (ai.stuck > 0.5) { if (Math.hypot(e.x - ai.lx, e.y - ai.ly) < 6) { ai.sd = -ai.sd; ai.sdT = rnd(0.8, 1.6); mx += rnd(-1, 1); my += rnd(-1, 1); e.stuckK = 0.6; } ai.lx = e.x; ai.ly = e.y; ai.stuck = 0; }
-    const m = Math.hypot(mx, my) || 1, sp = D.speed * (e.dashT > 0 ? 3 : 1); e.vx += ((mx / m) * sp - e.vx) * Math.min(1, 9 * dt); e.vy += ((my / m) * sp - e.vy) * Math.min(1, 9 * dt);
+    if (ai.react > 0) ai.react -= dt; if (ai.flow) ai.flow.age += dt;
+    if (e.hp < ai.lastHp - 0.01 && ai.mode === 'camp' && Math.random() < 0.5) setRush(e, tgt); ai.lastHp = e.hp;
+    ai.modeT -= dt; if (ai.modeT <= 0 && ai.mode === 'camp') { if (Math.random() < 0.55) setRush(e, tgt); else { ai.spot = pickSpot(e); ai.flow = null; ai.modeT = rnd(9, 17); } }
+    let mx = 0, my = 0, hold = false, spd = D.speed;
+    const vis = tgt && los(e.x, e.y, tgt.x, tgt.y), d = tgt ? Math.hypot(tgt.x - e.x, tgt.y - e.y) : 0;
+    if (ai.mode === 'camp') {
+      const sp = ai.spot; if (Math.hypot(sp.x - e.x, sp.y - e.y) > 14) [mx, my] = navDir(e, sp.x, sp.y); else hold = true;
+    } else if (tgt && vis && d < 270) {                   // close enough to fight: strafe around the target
+      const ux = (tgt.x - e.x) / d, uy = (tgt.y - e.y) / d, pref = e.gun.pref, k = d > pref + 40 ? 1 : d < pref - 50 ? -1 : 0; mx = ux * k + -uy * ai.sd * 0.85; my = uy * k + ux * ai.sd * 0.85;
+    } else if (tgt) { [mx, my] = navDir(e, tgt.x, tgt.y); spd *= 1.28; }   // rush: run straight at them
+    if (!hold) for (const b of bullets) if (b.own !== e && !b.lob && Math.hypot(b.x - e.x, b.y - e.y) < 130) { const bs = Math.hypot(b.vx, b.vy), dot = (b.vx * (e.x - b.x) + b.vy * (e.y - b.y)) / (bs * (Math.hypot(b.x - e.x, b.y - e.y) || 1)); if (dot > 0.92 && Math.random() < dt * 4) { mx += -b.vy / bs * ai.sd * 1.5; my += b.vx / bs * ai.sd * 1.5; if (e.dashCd <= 0 && opts.diff > 0 && Math.random() < 0.4) { e.dashT = 0.16; e.dashCd = 2.2; } } }
+    let want = e.face;
+    if (tgt && vis) {
+      const lead = e.gun.lob ? 0 : clamp(d / e.gun.speed, 0, 1.2) * (0.5 + opts.diff * 0.35), ax = tgt.x + tgt.vx * lead, ay = tgt.y + tgt.vy * lead; e.aimX = ax; e.aimY = ay; want = Math.atan2(ay - e.y, ax - e.x) + ai.err;
+      if (ai.react <= 0 && !ai.saw) { ai.saw = true; ai.react = D.react; }
+    } else { ai.saw = false; if (hold) want = Math.atan2(ai.spot.ay - e.y, ai.spot.ax - e.x); else if (mx || my) want = Math.atan2(my, mx); }
+    e.face += clamp(angDiff(want, e.face), -D.turn * dt, D.turn * dt);
+    if (tgt && vis && ai.react <= 0 && d < e.gun.range * 0.95 && Math.abs(angDiff(want, e.face)) < 0.1 + 0.2 / (d / 100 + 1)) tryFire(e);
+    if (!vis && e.ammo < e.gun.mag * 0.4 && e.rel <= 0) e.rel = e.gun.reload * 0.7;
+    ai.stuck += dt; if (ai.stuck > 0.6) { if (!hold && Math.hypot(e.x - ai.lx, e.y - ai.ly) < 6) { ai.sd = -ai.sd; ai.flow = null; mx += rnd(-1, 1); my += rnd(-1, 1); } ai.lx = e.x; ai.ly = e.y; ai.stuck = 0; }
+    const m = Math.hypot(mx, my) || 1, sp = (hold ? 0 : spd) * (e.dashT > 0 ? 3 : 1); e.vx += ((mx / m) * sp - e.vx) * Math.min(1, 9 * dt); e.vy += ((my / m) * sp - e.vy) * Math.min(1, 9 * dt);
   }
 
   // ------------------------------------------------------------------ update
@@ -212,6 +280,7 @@
 
   function update(dt) {
     time += dt; stateT += dt; shake = Math.max(0, shake - dt * 30);
+    if (rushWarn) { rushWarn.t -= dt; if (!rushWarn.e.alive || state !== S.FIGHT) rushWarn = null; }
     for (const f of feed) f.t -= dt; feed = feed.filter(f => f.t > 0);
     for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.93; p.vy *= 0.93; p.life -= dt; } parts = parts.filter(p => p.life > 0);
     if (state === S.WHEEL) {
@@ -222,7 +291,7 @@
       } else if (wheel.res >= 0 && stateT > 2.2) startRound();
     } else if (state === S.INTRO) {
       for (const e of ents) if (e.alive) { e.vx *= 0.8; e.vy *= 0.8; if (!e.isBot) { e.aimX = mouse.x; e.aimY = mouse.y; e.face = Math.atan2(mouse.y - e.y, mouse.x - e.x); } }
-      if (stateT > 3) { state = S.FIGHT; stateT = 0; blip(880, 0.3, 'square', 0.06); }
+      if (stateT > 3) { state = S.FIGHT; stateT = 0; blip(880, 0.3, 'square', 0.06); const r0 = ents.find(e => e.isBot && e.ai.mode === 'rush' && e.alive); if (r0) setTimeout(() => { if (state === S.FIGHT) warnRush(r0); }, 900); }
     } else if (state === S.FIGHT) {
       for (const e of ents) if (e.alive) updateEnt(e, dt);
       updateBullets(dt);
@@ -235,17 +304,20 @@
 
   // ------------------------------------------------------------------ drawing
   function drawField() {
-    ctx.fillStyle = '#16301f'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#1b3a26'; for (let i = 0; i < 12; i++) ctx.fillRect(ARENA.x + i * 80 + 40, ARENA.y, 40, ARENA.h);
-    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 3; ctx.strokeRect(ARENA.x + 6, ARENA.y + 6, ARENA.w - 12, ARENA.h - 12); ctx.beginPath(); ctx.moveTo(W / 2, ARENA.y + 6); ctx.lineTo(W / 2, ARENA.y + ARENA.h - 6); ctx.stroke(); ctx.beginPath(); ctx.arc(W / 2, H / 2, 70, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#0e1f15'; ctx.fillRect(0, 0, W, H);
+    if (map && state !== S.MENU) {
+      for (const r of map.rooms) { ctx.fillStyle = r[4]; ctx.fillRect(r[0], r[1], r[2], r[3]); ctx.fillStyle = 'rgba(0,0,0,.13)'; for (let x = r[0]; x < r[0] + r[2]; x += 40) for (let y = r[1]; y < r[1] + r[3]; y += 40) if (((x - r[0]) / 40 + (y - r[1]) / 40) % 2 === 0) ctx.fillRect(x, y, Math.min(40, r[0] + r[2] - x), Math.min(40, r[1] + r[3] - y)); }
+      ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 3; for (const d of map.doors) { ctx.beginPath(); if (rects.some(q => q.wall && Math.abs(q.y + q.h / 2 - d.y) < 2 && q.w > q.h)) { ctx.moveTo(d.x - DW / 2, d.y); ctx.lineTo(d.x + DW / 2, d.y); } else { ctx.moveTo(d.x, d.y - DW / 2); ctx.lineTo(d.x, d.y + DW / 2); } ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]); }
+    } else { ctx.fillStyle = '#16301f'; ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); ctx.fillStyle = '#1b3a26'; for (let i = 0; i < 12; i++) ctx.fillRect(ARENA.x + i * 80 + 40, ARENA.y, 40, ARENA.h); }
     ctx.fillStyle = '#0e1f15'; ctx.fillRect(0, 0, W, ARENA.y); ctx.fillRect(0, H - ARENA.y, W, ARENA.y); ctx.fillRect(0, 0, ARENA.x, H); ctx.fillRect(W - ARENA.x, 0, ARENA.x, H);
-    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 4; ctx.strokeRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+    ctx.strokeStyle = '#e8dcc8'; ctx.lineWidth = 6; ctx.strokeRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
   }
   function drawRects() {
-    const cols = map ? map.col : ['#ff8a3a', '#ffd23f'];
+    const cols = ['#ff8a3a', '#3ac8ff', '#ffd23f', '#c77dff'];
     rects.forEach((r, i) => {
-      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(r.x + 5, r.y + 7, r.w, r.h);
-      const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h); g.addColorStop(0, cols[i % 2]); g.addColorStop(1, '#222'); ctx.fillStyle = g;
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(r.x + 4, r.y + 6, r.w, r.h);
+      if (r.wall) { ctx.fillStyle = '#efe6d4'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#6a5a48'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
+      const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h); g.addColorStop(0, cols[i % 4]); g.addColorStop(1, '#222'); ctx.fillStyle = g;
       const rr = Math.min(10, r.w / 2, r.h / 2); ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, rr); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2; ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + 3, r.w - 8, Math.min(8, r.h / 3), 4); ctx.fill();
     });
@@ -319,7 +391,7 @@
     drawField(); ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
     for (let i = 0; i < 14; i++) { const a = time * 0.4 + i, x = W / 2 + Math.cos(a * 1.3) * 330, y = 150 + Math.sin(a * 1.7) * 60; ctx.fillStyle = PCOL[i % 4]; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(x, y, 14 + (i % 3) * 8, 0, TAU); ctx.fill(); } ctx.globalAlpha = 1;
     label('NERF', W / 2, 150, 90, '#ffb347'); label('SPIN & SPLAT', W / 2, 200, 34, '#fff');
-    label('Spin the wheel for a blaster, then fight a paintball round!', W / 2, 238, 16, '#cfe');
+    label('Spin the wheel for a blaster, then fight room to room. Camp a doorway or rush!', W / 2, 238, 16, '#cfe');
     button('PLAY', W / 2 - 120, 280, 240, 64, newMatch, '#ffd23f');
     button('Opponents: ' + opts.bots, W / 2 - 160, 370, 320, 46, () => { opts.bots = opts.bots % 3 + 1; }, '#9fd8ff');
     button('Difficulty: ' + DIFF[opts.diff].name, W / 2 - 160, 428, 320, 46, () => { opts.diff = (opts.diff + 1) % 3; }, '#ff9ae0');
@@ -334,6 +406,12 @@
     ctx.restore();
     drawHUD();
     if (state === S.INTRO) { const n = Math.ceil(3 - stateT); label(map.name.toUpperCase(), W / 2, 130, 28, '#ffd23f'); label(n > 0 ? String(n) : 'GO!', W / 2, 330, 110, '#fff'); label('Bots: ' + ents.slice(1).map(e => e.name.split(' ')[0] + ' ' + e.gun.name).join(' · '), W / 2, 590, 13, '#ddd'); }
+    if (rushWarn && rushWarn.t > 0 && player().alive) {
+      const p = player(), e = rushWarn.e, a = Math.atan2(e.y - p.y, e.x - p.x), k = Math.min(1, rushWarn.t * 2), pulse = 0.65 + Math.sin(time * 22) * 0.35;
+      const gr = ctx.createRadialGradient(W / 2, H / 2, 230, W / 2, H / 2, 520); gr.addColorStop(0, 'rgba(255,40,40,0)'); gr.addColorStop(1, 'rgba(255,40,40,' + 0.45 * k * pulse + ')'); ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = k; label('RUSH!', W / 2, 150, 84, '#ff3a3a'); label(e.name + ' is rushing you', W / 2, 180, 16, '#fff');
+      ctx.save(); ctx.translate(p.x + Math.cos(a) * 46, p.y + Math.sin(a) * 46); ctx.rotate(a); ctx.fillStyle = '#ff3a3a'; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-8, 10); ctx.fill(); ctx.restore(); ctx.globalAlpha = 1;
+    }
     if (state === S.FIGHT && !player().alive) label('You are out! Watching the round...', W / 2, 600, 16, '#ffd23f');
     if (state === S.ROUNDEND) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, H / 2 - 60, W, 120); label(banner, W / 2, H / 2 + 12, 44, winner && !winner.isBot ? '#7affd2' : '#ff9a9a'); }
   }
@@ -377,5 +455,5 @@
   }
   requestAnimationFrame(frame);
 
-  if (location.hash === '#debug') window.__nerf = { step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
+  if (location.hash === '#debug') window.__nerf = { step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name, rush: rushWarn && rushWarn.t, modes: ents.map(e => e.ai.mode) }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
 })();
