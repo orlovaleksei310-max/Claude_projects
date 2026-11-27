@@ -42,43 +42,47 @@
     const hw = (y, x0, x1, gaps) => { let x = x0; for (const g of gaps.concat([x1 + DW])) { const gx0 = g - DW / 2; if (gx0 > x) r.push({ x, y: y - WT / 2, w: Math.min(gx0, x1) - x, h: WT, wall: true }); x = g + DW / 2; if (g <= x1) doors.push({ x: g, y }); } };
     const vw = (x, y0, y1, gaps) => { let y = y0; for (const g of gaps.concat([y1 + DW])) { const gy0 = g - DW / 2; if (gy0 > y) r.push({ x: x - WT / 2, y, w: WT, h: Math.min(gy0, y1) - y, wall: true }); y = g + DW / 2; if (g <= y1) doors.push({ x, y: g }); } };
     (def.h || []).forEach(a => hw(a[0], a[1], a[2], a[3])); (def.v || []).forEach(a => vw(a[0], a[1], a[2], a[3]));
+    (def.d || []).forEach(a => r.push({ x: a[0], y: a[1], w: 18, h: 18, wall: true, dot: true }));
     def.f.forEach(a => r.push({ x: a[0], y: a[1], w: a[2], h: a[3], f: true, kind: a[4] || '' }));
-    return { name, r, doors, rooms: def.rooms || [], type: def.type || 'house', spawns: def.spawns || [[70, 80], [890, 80], [70, 560], [890, 560]], base: def.base || '#555b66', wallCol: def.wallCol || '#efe6d4', portals: def.portals || [] };
+    return { name, r, doors, rooms: def.rooms || [], type: def.type || 'house', spawns: def.spawns || [[70, 80], [890, 80], [70, 560], [890, 560]], base: def.base || '#555b66', wallCol: def.wallCol || '#efe6d4', portals: def.portals || [], dp: (def.dp || []).map(a => ({ x: a[0], y: a[1] })), circ: def.circ || [], dotCol: def.dotCol || null };
   }
+  // curved walls are chains of small squares (the game only has rectangle collision); gaps are doorways
+  function dotsArc(cx, cy, r, a0, a1, gaps) { const o = []; for (let a = a0; a < a1; a += 9 / r) { if ((gaps || []).some(g => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < 44 / r)) continue; o.push([Math.round(cx + Math.cos(a) * r - 9), Math.round(cy + Math.sin(a) * r - 9)]); } return o; }
+  function dotsWave(x0, x1, fy, gaps) { const o = []; for (let x = x0; x <= x1; x += 6) { if ((gaps || []).some(g => Math.abs(x - g) < 44)) continue; o.push([Math.round(x - 9), Math.round(fy(x) - 9)]); } return o; }
+  const RR = x => 320 + 105 * Math.sin((x - 130) / 700 * Math.PI * 3);   // centre line of the winding hall
   const MAPS = [
-    houseMap('Long Halls', {   // a long central corridor with uneven rooms off it, open halls at both ends
-      v: [[150, 20, 250, [135]], [150, 340, 620, [480]], [810, 20, 250, [135]], [810, 340, 620, [480]], [380, 20, 250, []], [600, 20, 250, []], [400, 340, 620, []], [650, 340, 620, []]],
-      h: [[250, 150, 810, [260, 480, 700]], [340, 150, 810, [220, 560, 740]]],
-      rooms: [[20, 20, 130, 600, '#555b66'], [810, 20, 130, 600, '#555b66'], [150, 20, 230, 230, '#6b4a2e'], [380, 20, 220, 230, '#3d5a6b'], [600, 20, 210, 230, '#6b3d5a'], [150, 340, 250, 280, '#4a6b3d'], [400, 340, 250, 280, '#7a6b3a'], [650, 340, 160, 280, '#3a4a7a']],
-      f: [[190, 70, 100, 44], [420, 150, 60, 60], [660, 60, 80, 70], [190, 480, 100, 50], [450, 520, 120, 44], [690, 440, 60, 90], [20, 150, 40, 50], [20, 430, 40, 50], [900, 150, 40, 50], [900, 430, 40, 50]] }),
-    houseMap('Zigzag', {       // a winding route: top strip, a middle band and two rooms below
-      v: [[640, 20, 210, []], [320, 430, 620, []], [600, 430, 620, []]],
-      h: [[210, 20, 640, [100, 330]], [430, 320, 940, [450, 800]]],
-      rooms: [[20, 20, 620, 190, '#6b4a2e'], [640, 20, 300, 410, '#3d5a6b'], [20, 210, 920, 220, '#555b66'], [20, 430, 300, 190, '#4a6b3d'], [320, 430, 280, 190, '#7a6b3a'], [600, 430, 340, 190, '#6b3d5a']],
-      f: [[200, 80, 80, 50], [450, 60, 50, 90], [760, 100, 90, 50], [800, 250, 60, 90], [180, 270, 70, 70], [540, 290, 60, 60], [90, 520, 100, 44], [400, 510, 90, 50], [700, 500, 120, 44]] }),
-    houseMap('Crossroads', {   // four closets of different sizes around an open centre
-      v: [[360, 20, 250, [130]], [600, 20, 200, []], [300, 400, 620, [520]], [660, 440, 620, []]],
-      h: [[250, 20, 360, [200]], [200, 600, 940, [760]], [400, 20, 300, [150]], [440, 660, 940, [800]]],
-      rooms: [[20, 20, 340, 230, '#6b4a2e'], [600, 20, 340, 180, '#6b3d5a'], [20, 400, 280, 220, '#4a6b3d'], [660, 440, 280, 180, '#3a4a7a']],
-      f: [[90, 90, 100, 50], [740, 90, 100, 44], [80, 480, 90, 60], [740, 520, 120, 44], [440, 160, 80, 80], [440, 420, 80, 80], [220, 300, 60, 60], [680, 300, 60, 60]] }),
-    houseMap('Apartment', {    // a corridor with uneven rooms above and below
-      v: [[200, 20, 270, []], [470, 20, 270, []], [760, 20, 270, []], [300, 370, 620, []], [560, 370, 620, []], [700, 370, 620, []]],
-      h: [[270, 20, 940, [110, 330, 610, 850]], [370, 20, 940, [160, 430, 630, 820]]],
-      rooms: [[20, 20, 180, 250, '#6b4a2e'], [200, 20, 270, 250, '#3d5a6b'], [470, 20, 290, 250, '#6b3d5a'], [760, 20, 180, 250, '#4a6b3d'], [20, 270, 920, 100, '#555b66'], [20, 370, 280, 250, '#7a6b3a'], [300, 370, 260, 250, '#3a4a7a'], [560, 370, 140, 250, '#6b4a2e'], [700, 370, 240, 250, '#3d5a6b']],
-      f: [[40, 120, 70, 50], [260, 150, 100, 50], [520, 60, 50, 90], [820, 130, 80, 50], [150, 520, 100, 60], [350, 450, 60, 90], [590, 520, 60, 50], [800, 440, 80, 80]] })
+    houseMap('Curvy Mansion', {   // a round hall winds around a circular lounge; wings with bedrooms on both sides
+      v: [[240, 20, 620, [110, 320, 530]], [720, 20, 620, [110, 320, 530]]], h: [[215, 20, 240, [130]], [425, 20, 240, [130]], [215, 720, 940, [830]], [425, 720, 940, [830]]],
+      d: dotsArc(480, 320, 200, 0, Math.PI * 2, [0, Math.PI / 2, Math.PI, Math.PI * 1.5]).concat(dotsArc(480, 320, 120, 0, Math.PI * 2, [Math.PI / 4, Math.PI * 1.25])),
+      dp: [[480, 120], [480, 520], [280, 320], [680, 320], [565, 405], [395, 235]], base: '#6b5a44',
+      circ: [[480, 320, 200, '#8a7a5a'], [480, 320, 120, '#5a3a5a']],
+      rooms: [[20, 20, 220, 195, '#6b4a2e'], [20, 215, 220, 210, '#3d5a6b'], [20, 425, 220, 195, '#4a6b3d'], [720, 20, 220, 195, '#6b3d5a'], [720, 215, 220, 210, '#7a6b3a'], [720, 425, 220, 195, '#3a4a7a']],
+      f: [[110, 120, 100, 50, 'bed'], [30, 330, 50, 70, 'plant'], [140, 270, 80, 40, 'sofa'], [120, 500, 100, 70, 'table'], [850, 140, 70, 50, 'bed'], [760, 330, 80, 50, 'sofa'], [870, 250, 50, 40, 'plant'], [780, 510, 90, 60, 'table'], [440, 280, 80, 80, 'table'], [330, 40, 40, 40, 'plant'], [590, 560, 40, 40, 'plant']] }),
+    houseMap('Winding Hall', {    // a snaking hallway with rooms above and below it
+      v: [[130, 20, 268, [110]], [130, 372, 620, [530]], [330, 20, 313, [110]], [630, 20, 313, [110]], [330, 418, 620, [530]], [630, 418, 620, [530]]],
+      d: dotsWave(130, 830, x => RR(x) - 52, [240, 480, 740]).concat(dotsWave(130, 830, x => RR(x) + 52, [200, 530, 760])),
+      dp: [[240, RR(240) - 52], [480, RR(480) - 52], [740, RR(740) - 52], [200, RR(200) + 52], [530, RR(530) + 52], [760, RR(760) + 52]], base: '#6b5a44',
+      rooms: [[20, 20, 110, 600, '#555b66'], [130, 20, 200, 300, '#6b4a2e'], [330, 20, 300, 300, '#3d5a6b'], [630, 20, 200, 300, '#6b3d5a'], [130, 420, 200, 200, '#4a6b3d'], [330, 420, 300, 200, '#7a6b3a'], [630, 420, 200, 200, '#3a4a7a'], [830, 20, 110, 600, '#555b66']],
+      f: [[160, 60, 100, 50, 'bed'], [420, 60, 110, 44, 'counter'], [380, 170, 70, 60, 'table'], [690, 60, 100, 50, 'bed'], [750, 160, 40, 70, 'plant'], [160, 540, 90, 50, 'sofa'], [380, 540, 120, 44, 'counter'], [540, 470, 60, 60, 'table'], [670, 530, 60, 60, 'tub'], [30, 270, 50, 80, 'plant'], [870, 270, 50, 80, 'plant']] }),
+    houseMap('Family Home', {     // bedrooms, kitchen and a living room, with a garden out the back
+      v: [[640, 20, 620, [160, 480]], [300, 20, 210, [110]], [240, 430, 620, [530]]], h: [[210, 20, 640, [120, 470]], [430, 20, 640, [140, 460]]],
+      base: '#4f8a3a', rooms: [[20, 20, 280, 190, '#6b4a2e'], [300, 20, 340, 190, '#c9b26a'], [20, 210, 620, 220, '#7a5a3a'], [20, 430, 220, 190, '#8fc0d0'], [240, 430, 400, 190, '#3d5a6b']],
+      f: [[40, 120, 100, 50, 'bed'], [340, 50, 120, 44, 'counter'], [520, 70, 60, 70, 'table'], [60, 260, 120, 44, 'sofa'], [260, 290, 90, 60, 'table'], [480, 240, 40, 90, 'tv'], [110, 540, 70, 50, 'tub'], [340, 480, 100, 50, 'bed'], [530, 560, 70, 40, 'plant'],
+        [780, 250, 130, 100, 'pool'], [700, 70, 56, 56, 'tree'], [790, 130, 56, 56, 'tree'], [700, 500, 56, 56, 'tree'], [800, 470, 56, 56, 'tree'], [700, 330, 50, 24, 'bench'], [850, 440, 60, 50, 'shed']] }),
+    houseMap('Backyard', {        // a small house and a big garden: curved hedges, a pool and trees
+      v: [[300, 20, 620, [120, 500]], [560, 20, 620, [330]]], h: [[320, 20, 300, [160]], [320, 300, 560, [430]]],
+      d: dotsWave(600, 840, x => 150 + 32 * Math.sin((x - 600) / 280 * Math.PI * 2), []).concat(dotsWave(600, 840, x => 490 - 32 * Math.sin((x - 600) / 280 * Math.PI * 2), [])), dotCol: '#2f8a3a',
+      base: '#4f8a3a', rooms: [[20, 20, 280, 300, '#6b4a2e'], [20, 320, 280, 300, '#4a6b3d'], [300, 20, 260, 300, '#3d5a6b'], [300, 320, 260, 300, '#7a6b3a']],
+      f: [[110, 150, 90, 50, 'bed'], [60, 480, 100, 50, 'sofa'], [380, 90, 120, 44, 'counter'], [390, 440, 100, 60, 'table'], [680, 250, 190, 110, 'pool'], [630, 60, 56, 56, 'tree'], [760, 60, 56, 56, 'tree'], [630, 530, 56, 56, 'tree'], [760, 540, 56, 56, 'tree'], [770, 400, 60, 28, 'bench'], [880, 280, 50, 70, 'shed']] })
   ];
   const TYPES = [
     { id: 'normal', name: 'NORMAL', col: '#ffb347', desc: ['Open arena with inflatable', 'bunkers for cover'] },
-    { id: 'house', name: 'HOUSE', col: '#9fd8ff', desc: ['Homes with rooms, halls', 'and even a backyard'] },
+    { id: 'house', name: 'HOUSE', col: '#9fd8ff', desc: ['Homes with bedrooms, curving', 'halls and a backyard'] },
     { id: 'village', name: 'VILLAGE', col: '#7affd2', desc: ['A mini town: streets,', 'shops and houses to enter'] },
     { id: 'portals', name: 'PORTALS', col: '#c77dff', desc: ['Step in a portal, pop out', 'of its twin. Bullets too!'] }
   ];
   MAPS.forEach(m => { m.type = 'house'; });
   MAPS.push(
-    houseMap('Backyard', {     // a house on the left, a garden with a pool and trees on the right
-      v: [[300, 20, 620, [120, 500]], [560, 20, 620, [330]]], h: [[320, 20, 300, [160]], [320, 300, 560, [430]]],
-      base: '#4f8a3a', rooms: [[20, 20, 280, 300, '#6b4a2e'], [20, 320, 280, 300, '#4a6b3d'], [300, 20, 260, 300, '#3d5a6b'], [300, 320, 260, 300, '#7a6b3a']],
-      f: [[110, 150, 90, 50], [60, 480, 100, 50], [380, 90, 120, 44], [390, 440, 100, 60], [660, 250, 190, 110, 'pool'], [620, 70, 56, 56, 'tree'], [800, 150, 56, 56, 'tree'], [620, 480, 56, 56, 'tree'], [800, 470, 56, 56, 'tree'], [760, 540, 60, 40, 'bench'], [850, 270, 80, 70, 'shed']] }),
     houseMap('Normal: Bunker Yard', { type: 'normal', base: '#2f6b3a', f: [[430, 270, 100, 100], [200, 140, 70, 70], [690, 140, 70, 70], [200, 430, 70, 70], [690, 430, 70, 70], [330, 70, 14, 130], [616, 70, 14, 130], [330, 440, 14, 130], [616, 440, 14, 130]] }),
     houseMap('Normal: Crossfire', { type: 'normal', base: '#2f6b3a', f: [[300, 190, 360, 26], [300, 424, 360, 26], [120, 300, 110, 40], [730, 300, 110, 40], [455, 300, 50, 40]] }),
     houseMap('Normal: Pillar Park', { type: 'normal', base: '#2f6b3a', f: [[190, 110, 56, 56], [452, 110, 56, 56], [714, 110, 56, 56], [190, 292, 56, 56], [452, 292, 56, 56], [714, 292, 56, 56], [190, 474, 56, 56], [452, 474, 56, 56], [714, 474, 56, 56]] }),
@@ -288,7 +292,7 @@
   function pickSpot(e) {
     const taken = ents.filter(o => o !== e && o.ai.spot).map(o => o.ai.spot), reach = flowTo(e.x, e.y);
     for (let t = 0; t < 120; t++) {
-      const dr = map.doors.length ? pick(map.doors) : { x: rnd(160, 800), y: rnd(120, 520) }, a = rnd(0, TAU), dd = rnd(130, 330), x = dr.x + Math.cos(a) * dd, y = dr.y + Math.sin(a) * dd;
+      const dl = map.doors.concat(map.dp), dr = dl.length ? pick(dl) : { x: rnd(160, 800), y: rnd(120, 520) }, a = rnd(0, TAU), dd = rnd(130, 330), x = dr.x + Math.cos(a) * dd, y = dr.y + Math.sin(a) * dd;
       if (x < 40 || x > W - 40 || y < 40 || y > H - 40 || !nav.free[cellOf(x, y)] || reach[cellOf(x, y)] >= 9999 || !los(x, y, dr.x, dr.y)) continue;
       let near = false; for (const r of rects) { const cx = clamp(x, r.x, r.x + r.w), cy = clamp(y, r.y, r.y + r.h); if (Math.hypot(x - cx, y - cy) < 38) { near = true; break; } }
       if (!near || taken.some(s => Math.hypot(s.x - x, s.y - y) < 150)) continue;
@@ -405,6 +409,7 @@
     if (map && state !== S.MENU && state !== S.ONLINE && state !== S.LOBBY) {
       ctx.fillStyle = map.base; ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); ctx.fillStyle = 'rgba(0,0,0,.12)'; for (let x = ARENA.x; x < ARENA.x + ARENA.w; x += 40) for (let y = ARENA.y; y < ARENA.y + ARENA.h; y += 40) if (((x - ARENA.x) / 40 + (y - ARENA.y) / 40) % 2 === 0) ctx.fillRect(x, y, 40, 40);
       for (const r of map.rooms) { ctx.fillStyle = r[4]; ctx.fillRect(r[0], r[1], r[2], r[3]); ctx.fillStyle = 'rgba(0,0,0,.13)'; for (let x = r[0]; x < r[0] + r[2]; x += 40) for (let y = r[1]; y < r[1] + r[3]; y += 40) if (((x - r[0]) / 40 + (y - r[1]) / 40) % 2 === 0) ctx.fillRect(x, y, Math.min(40, r[0] + r[2] - x), Math.min(40, r[1] + r[3] - y)); }
+      for (const c of map.circ) { ctx.fillStyle = c[3]; ctx.beginPath(); ctx.arc(c[0], c[1], c[2], 0, TAU); ctx.fill(); }
       ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 3; for (const d of map.doors) { ctx.beginPath(); if (rects.some(q => q.wall && Math.abs(q.y + q.h / 2 - d.y) < 2 && q.w > q.h)) { ctx.moveTo(d.x - DW / 2, d.y); ctx.lineTo(d.x + DW / 2, d.y); } else { ctx.moveTo(d.x, d.y - DW / 2); ctx.lineTo(d.x, d.y + DW / 2); } ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]); }
     } else { ctx.fillStyle = '#16301f'; ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h); ctx.fillStyle = '#1b3a26'; for (let i = 0; i < 12; i++) ctx.fillRect(ARENA.x + i * 80 + 40, ARENA.y, 40, ARENA.h); }
     ctx.fillStyle = '#0e1f15'; ctx.fillRect(0, 0, W, ARENA.y); ctx.fillRect(0, H - ARENA.y, W, ARENA.y); ctx.fillRect(0, 0, ARENA.x, H); ctx.fillRect(W - ARENA.x, 0, ARENA.x, H);
@@ -419,7 +424,12 @@
   }
   function drawRects() {
     const cols = ['#ff8a3a', '#3ac8ff', '#ffd23f', '#c77dff'];
+    const dots = rects.filter(r => r.dot);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; for (const r of dots) { ctx.beginPath(); ctx.arc(r.x + 13, r.y + 15, 10, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = '#4a3a30'; for (const r of dots) { ctx.beginPath(); ctx.arc(r.x + 9, r.y + 9, 11, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = map.dotCol || map.wallCol; for (const r of dots) { ctx.beginPath(); ctx.arc(r.x + 9, r.y + 9, 9.5, 0, TAU); ctx.fill(); }
     rects.forEach((r, i) => {
+      if (r.dot) return;
       ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(r.x + 4, r.y + 6, r.w, r.h);
       if (r.wall) { ctx.fillStyle = map ? map.wallCol : '#efe6d4'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#4a3a30'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
       const cx = r.x + r.w / 2, cy = r.y + r.h / 2, k = r.kind;
@@ -429,6 +439,13 @@
       if (k === 'bld' || k === 'shed') { ctx.fillStyle = k === 'shed' ? '#7a5a3a' : ['#b5654a', '#7a8aa8', '#c0a060', '#a06a8a'][i % 4]; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(r.x, r.y + r.h * 0.55, r.w, r.h * 0.45); ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#3a2a1a'; ctx.fillRect(cx - 6, r.y + r.h - 16, 12, 16); return; }
       if (k === 'stall') { for (let q = 0; q < r.w; q += 10) { ctx.fillStyle = (q / 10) % 2 ? '#fff' : '#e8403a'; ctx.fillRect(r.x + q, r.y, Math.min(10, r.w - q), r.h * 0.5); } ctx.fillStyle = '#7a5a3a'; ctx.fillRect(r.x, r.y + r.h * 0.5, r.w, r.h * 0.5); ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
       if (k === 'hedge') { ctx.fillStyle = '#2a7a34'; ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 12); ctx.fill(); ctx.fillStyle = '#3a9a44'; ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + 3, r.w - 8, r.h / 2 - 3, 8); ctx.fill(); return; }
+      if (k === 'bed') { ctx.fillStyle = '#e8e0d0'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#5a7ac0'; ctx.fillRect(r.x + r.w * 0.28, r.y, r.w * 0.72, r.h); ctx.fillStyle = '#fff'; ctx.fillRect(r.x + 4, r.y + 5, r.w * 0.2, r.h - 10); ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
+      if (k === 'sofa') { ctx.fillStyle = '#a04a4a'; ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 8); ctx.fill(); ctx.fillStyle = '#c06a6a'; ctx.beginPath(); ctx.roundRect(r.x + 5, r.y + 12, r.w - 10, r.h - 17, 6); ctx.fill(); return; }
+      if (k === 'table') { ctx.fillStyle = '#9a6a3a'; ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill(); ctx.fillStyle = '#b88a56'; ctx.beginPath(); ctx.roundRect(r.x + 5, r.y + 5, r.w - 10, r.h - 10, 8); ctx.fill(); return; }
+      if (k === 'counter') { ctx.fillStyle = '#d8d8d8'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#6a6a72'; for (let q = 10; q < r.w - 10; q += 28) { ctx.beginPath(); ctx.arc(r.x + q + 8, cy, 7, 0, TAU); ctx.fill(); } ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
+      if (k === 'tv') { ctx.fillStyle = '#222'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#4ab0ff'; ctx.fillRect(r.x + 4, r.y + 6, r.w - 8, r.h - 12); return; }
+      if (k === 'plant') { ctx.fillStyle = '#7a4a2a'; ctx.beginPath(); ctx.arc(cx, cy, Math.min(r.w, r.h) / 2, 0, TAU); ctx.fill(); ctx.fillStyle = '#3aa04a'; for (let q = 0; q < 6; q++) { ctx.beginPath(); ctx.arc(cx + Math.cos(q * 1.05) * 9, cy + Math.sin(q * 1.05) * 9, 9, 0, TAU); ctx.fill(); } return; }
+      if (k === 'tub') { ctx.fillStyle = '#f2f6f8'; ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 16); ctx.fill(); ctx.fillStyle = '#8fd0f0'; ctx.beginPath(); ctx.roundRect(r.x + 7, r.y + 7, r.w - 14, r.h - 14, 12); ctx.fill(); return; }
       if (k === 'bench') { ctx.fillStyle = '#8a5a2a'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#3a2410'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); return; }
       if (k === 'crate') { ctx.fillStyle = '#4a5468'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeStyle = '#9fd8ff'; ctx.lineWidth = 2; ctx.strokeRect(r.x + 3, r.y + 3, r.w - 6, r.h - 6); ctx.beginPath(); ctx.moveTo(r.x + 3, r.y + 3); ctx.lineTo(r.x + r.w - 3, r.y + r.h - 3); ctx.stroke(); return; }
       const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h); g.addColorStop(0, cols[i % 4]); g.addColorStop(1, '#222'); ctx.fillStyle = g;
