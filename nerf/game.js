@@ -145,7 +145,8 @@
   }
 
   // ------------------------------------------------------------------ paint & particles
-  function splat(x, y, r, col, a) { if (net.role === 'host') net.ev.sp.push([Math.round(x), Math.round(y), Math.round(r), PCOL.indexOf(col), a || 0.85]); drawSplat(x, y, r, col, a); }
+  function splat() { /* no paint is left on the floor or walls any more */ }
+  function splatOld(x, y, r, col, a) { if (net.role === 'host') net.ev.sp.push([Math.round(x), Math.round(y), Math.round(r), PCOL.indexOf(col), a || 0.85]); drawSplat(x, y, r, col, a); }
   function drawSplat(x, y, r, col, a) {
     paint.globalAlpha = a || 0.85; paint.fillStyle = col; paint.beginPath(); paint.arc(x, y, r, 0, TAU); paint.fill();
     const n = 5 + Math.floor(r / 4);
