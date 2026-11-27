@@ -118,6 +118,8 @@
   let forceMap = -1, mapType = 0, vote = { opts: [0, 1, 2], votes: {}, t: 15, res: -1, mine: -1, endT: 0 };
   let myIdx = 0, nav = null, ents = [], bullets = [], parts = [], rects = [], feed = [], map = null, roundNo = 0, winner = null, shake = 0;
   const keys = new Set(), mouse = { x: W / 2, y: H / 2, down: false };
+  const touch = { on: false, mv: null, aim: null, mx: 0, my: 0, ax: 0, ay: 0, btn: {} };   // on-screen controls for phones and tablets
+  const TB = { rel: { x: 880, y: 290, r: 36, t: 'R' }, dash: { x: 880, y: 390, r: 36, t: 'DASH' } };
   const paintC = document.createElement('canvas'); paintC.width = W; paintC.height = H; const paint = paintC.getContext('2d');
   let wheel = { rot: 0, spin: 0, dur: 0, from: 0, to: 0, res: -1, lastSeg: 0, bots: [] };
   let buttons = [];
@@ -334,7 +336,14 @@
 
   // ------------------------------------------------------------------ input
   function localInput() {
-    return { mx: (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), my: (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0), ax: mouse.x, ay: mouse.y, f: mouse.down && state === S.FIGHT ? 1 : 0 };
+    const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0), ky = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+    if (touch.on) {
+      const p = player(); let ax = p ? p.x + Math.cos(p.face) * 200 : W / 2, ay = p ? p.y + Math.sin(p.face) * 200 : H / 2, f = 0;
+      if (touch.aim !== null) { ax = p.x + touch.ax * 200; ay = p.y + touch.ay * 200; f = state === S.FIGHT ? 1 : 0; }
+      else if (p && (touch.mx || touch.my) && state === S.FIGHT) { const m = Math.hypot(touch.mx, touch.my); ax = p.x + touch.mx / m * 200; ay = p.y + touch.my / m * 200; }
+      return { mx: touch.mx + kx, my: touch.my + ky, ax, ay, f };
+    }
+    return { mx: kx, my: ky, ax: mouse.x, ay: mouse.y, f: mouse.down && state === S.FIGHT ? 1 : 0 };
   }
   function doReload(p) { if (p.alive && p.rel <= 0 && p.ammo < p.gun.mag) p.rel = p.gun.reload; }
   function doDash(p) { if (!p.alive || p.dashCd > 0) return; p.dashT = 0.16; p.dashCd = 1.6; const m = Math.hypot(p.vx, p.vy); if (m < 10) { p.vx = Math.cos(p.face) * 100; p.vy = Math.sin(p.face) * 100; } if (p === player()) blip(260, 0.12, 'sawtooth', 0.04, 2); }
@@ -561,7 +570,7 @@
   }
 
   function field(x, y, w, h, text, key, ph) {
-    buttons.push({ x, y, w, h, fn: () => { focusF = key; } }); const on = focusF === key;
+    buttons.push({ x, y, w, h, fn: () => { focusF = key; if (touch.on) { askText(key); focusF = null; } } }); const on = focusF === key;
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 8); ctx.fill(); ctx.strokeStyle = on ? '#ffd23f' : '#6a8a7a'; ctx.lineWidth = on ? 3 : 2; ctx.stroke();
     label((text || ph) + (on && Math.floor(time * 2) % 2 ? '|' : ''), x + 14, y + h / 2 + 7, 20, text ? '#fff' : '#789', 'left');
   }
@@ -642,6 +651,7 @@
   function draw() {
     buttons = [];
     if (state === S.MENU) drawMenu(); else if (state === S.VOTE) drawVote(); else if (state === S.ONLINE) drawOnline(); else if (state === S.LOBBY) drawLobby(); else if (state === S.WHEEL) drawWheel(); else if (state === S.MATCHEND) drawMatchEnd(); else drawFight();
+    drawTouch();
   }
 
   // ------------------------------------------------------------------ online (peer-to-peer via PeerJS; the host runs the game)
@@ -776,10 +786,47 @@
 
   // ------------------------------------------------------------------ input & loop
   function mpos(ev) { const r = cv.getBoundingClientRect(); mouse.x = (ev.clientX - r.left) / r.width * W; mouse.y = (ev.clientY - r.top) / r.height * H; }
-  cv.addEventListener('mousemove', mpos);
-  cv.addEventListener('mousedown', ev => { mpos(ev); mouse.down = true; for (const b of buttons) if (mouse.x > b.x && mouse.x < b.x + b.w && mouse.y > b.y && mouse.y < b.y + b.h) { b.fn(); mouse.down = false; blip(520, 0.06, 'triangle', 0.04); return; } });
+  cv.addEventListener('mousemove', ev => { touch.on = false; mpos(ev); });
+  cv.addEventListener('mousedown', ev => { touch.on = false; mpos(ev); mouse.down = true; for (const b of buttons) if (mouse.x > b.x && mouse.x < b.x + b.w && mouse.y > b.y && mouse.y < b.y + b.h) { b.fn(); mouse.down = false; blip(520, 0.06, 'triangle', 0.04); return; } });
   window.addEventListener('mouseup', () => { mouse.down = false; });
   cv.addEventListener('contextmenu', ev => ev.preventDefault());
+  // ---- touch: left side = move stick, right side = aim + fire stick, buttons for reload and dash; taps work on every menu
+  const tpos = t => { const r = cv.getBoundingClientRect(); return { x: (t.clientX - r.left) / r.width * W, y: (t.clientY - r.top) / r.height * H }; };
+  const stickVec = (o, p, id) => { let dx = p.x - o.ox, dy = p.y - o.oy; const m = Math.hypot(dx, dy), R = 60; if (m > R) { dx = dx / m * R; dy = dy / m * R; } return { x: dx / R, y: dy / R, kx: o.ox + dx, ky: o.oy + dy }; };
+  function tAct(k) { const p = player(); if (state !== S.FIGHT || !p) return; if (k === 'rel') { if (net.role === 'client') netSend({ t: 'rel' }); else doReload(p); } else { if (net.role === 'client') netSend({ t: 'dash' }); else doDash(p); } }
+  cv.addEventListener('touchstart', ev => {
+    ev.preventDefault(); touch.on = true;
+    for (const t of ev.changedTouches) {
+      const p = tpos(t);
+      if (state === S.FIGHT || state === S.INTRO) {
+        let hit = false; for (const k in TB) if (Math.hypot(p.x - TB[k].x, p.y - TB[k].y) < TB[k].r + 14) { touch.btn[t.identifier] = k; tAct(k); hit = true; }
+        if (hit) continue;
+        if (p.x < W / 2) { if (touch.mv === null) touch.mv = { id: t.identifier, ox: p.x, oy: p.y, kx: p.x, ky: p.y }; }
+        else if (touch.aim === null) { touch.aim = { id: t.identifier, ox: p.x, oy: p.y, kx: p.x, ky: p.y }; touch.ax = 1; touch.ay = 0; const me = player(); if (me) { touch.ax = Math.cos(me.face); touch.ay = Math.sin(me.face); } }
+      } else for (const b of buttons) if (p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h) { b.fn(); blip(520, 0.06, 'triangle', 0.04); break; }
+    }
+  }, { passive: false });
+  cv.addEventListener('touchmove', ev => {
+    ev.preventDefault();
+    for (const t of ev.changedTouches) {
+      const p = tpos(t);
+      if (touch.mv && touch.mv.id === t.identifier) { const v = stickVec(touch.mv, p); touch.mx = Math.abs(v.x) < 0.12 ? 0 : v.x; touch.my = Math.abs(v.y) < 0.12 ? 0 : v.y; touch.mv.kx = v.kx; touch.mv.ky = v.ky; }
+      else if (touch.aim && touch.aim.id === t.identifier) { const v = stickVec(touch.aim, p); if (Math.hypot(v.x, v.y) > 0.2) { const m = Math.hypot(v.x, v.y); touch.ax = v.x / m; touch.ay = v.y / m; } touch.aim.kx = v.kx; touch.aim.ky = v.ky; }
+    }
+  }, { passive: false });
+  const tEnd = ev => {
+    ev.preventDefault();
+    for (const t of ev.changedTouches) { if (touch.mv && touch.mv.id === t.identifier) { touch.mv = null; touch.mx = 0; touch.my = 0; } if (touch.aim && touch.aim.id === t.identifier) touch.aim = null; delete touch.btn[t.identifier]; }
+  };
+  cv.addEventListener('touchend', tEnd, { passive: false }); cv.addEventListener('touchcancel', tEnd, { passive: false });
+  function drawTouch() {
+    if (!touch.on || (state !== S.FIGHT && state !== S.INTRO)) return;
+    const stick = (o, col) => { ctx.globalAlpha = 0.28; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(o.ox, o.oy, 60, 0, TAU); ctx.fill(); ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.arc(o.kx, o.ky, 28, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; };
+    if (touch.mv) stick(touch.mv, '#9fd8ff'); else { ctx.globalAlpha = 0.18; ctx.fillStyle = '#9fd8ff'; ctx.beginPath(); ctx.arc(130, 500, 50, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; label('MOVE', 130, 506, 14, 'rgba(255,255,255,.5)'); }
+    if (touch.aim) stick(touch.aim, '#ff9a8a'); else { ctx.globalAlpha = 0.18; ctx.fillStyle = '#ff9a8a'; ctx.beginPath(); ctx.arc(780, 500, 50, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; label('AIM+FIRE', 780, 506, 14, 'rgba(255,255,255,.5)'); }
+    const p = player(); for (const k in TB) { const b = TB[k], busy = k === 'dash' && p && p.dashCd > 0; ctx.globalAlpha = busy ? 0.25 : 0.5; ctx.fillStyle = k === 'rel' ? '#ffd23f' : '#7affd2'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; label(k === 'rel' ? 'RELOAD' : 'DASH', b.x, b.y + 5, 13, '#101810'); }
+  }
+  function askText(key) { const v = window.prompt(key === 'name' ? 'Pick a username (2-12 letters/numbers):' : 'Enter the 5-letter room code:', key === 'name' ? nameStr : codeStr); if (v === null) return; if (key === 'name') nameStr = sanitize(v).slice(0, 12); else codeStr = String(v).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); }
   window.addEventListener('keydown', ev => {
     if (state === S.ONLINE && focusF) {
       if (ev.key === 'Backspace') { if (focusF === 'name') nameStr = nameStr.slice(0, -1); else codeStr = codeStr.slice(0, -1); ev.preventDefault(); }
@@ -808,5 +855,5 @@
   }
   requestAnimationFrame(frame);
 
-  if (location.hash === '#debug') window.__nerf = { guns: GUNS, sheet: () => { ctx.fillStyle = '#2a3a30'; ctx.fillRect(0, 0, W, H); GUNS.forEach((g, i) => { ctx.save(); ctx.translate(60 + (i % 2) * 460, 80 + Math.floor(i / 2) * 140); ctx.fillStyle = '#c33'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill(); ctx.scale(2.6, 2.6); drawGun(g); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = '16px sans-serif'; ctx.fillText(g.name, 200 + (i % 2) * 460, 90 + Math.floor(i / 2) * 140); }); }, play: i => { forceMap = i; if (!ents.length) { opts.bots = 3; newMatch(); } state = S.WHEEL; wheel.res = 0; ents[0].wres = 0; startRound(); }, net, castVote, vote: () => vote, myVote, net, hostStart: startOnlineMatch, setName: n => { nameStr = n; }, quick: quickMatch, create: createRoom, join: c => { codeStr = c; joinCode(); }, me: () => myIdx, checkMaps: () => MAPS.map(m => { map = m; rects = m.r.map(a => Object.assign({}, a)); buildNav(); const sp0 = m.spawns, d = flowTo(sp0[0][0], sp0[0][1]); let free = 0, reach = 0; nav.free.forEach((f, i) => { if (f) { free++; if (d[i] < 9999) reach++; } }); return [m.name, sp0.slice(1).map(p => d[cellOf(p[0], p[1])]), free, reach, m.doors.length, sp0.map(p => nav.free[cellOf(p[0], p[1])])]; }), step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name, rush: ents[myIdx] && ents[myIdx].rw && ents[myIdx].rw.t, modes: ents.map(e => e.ai.mode) }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
+  if (location.hash === '#debug') window.__nerf = { touch, input: localInput, guns: GUNS, sheet: () => { ctx.fillStyle = '#2a3a30'; ctx.fillRect(0, 0, W, H); GUNS.forEach((g, i) => { ctx.save(); ctx.translate(60 + (i % 2) * 460, 80 + Math.floor(i / 2) * 140); ctx.fillStyle = '#c33'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill(); ctx.scale(2.6, 2.6); drawGun(g); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = '16px sans-serif'; ctx.fillText(g.name, 200 + (i % 2) * 460, 90 + Math.floor(i / 2) * 140); }); }, play: i => { forceMap = i; if (!ents.length) { opts.bots = 3; newMatch(); } state = S.WHEEL; wheel.res = 0; ents[0].wres = 0; startRound(); }, net, castVote, vote: () => vote, myVote, net, hostStart: startOnlineMatch, setName: n => { nameStr = n; }, quick: quickMatch, create: createRoom, join: c => { codeStr = c; joinCode(); }, me: () => myIdx, checkMaps: () => MAPS.map(m => { map = m; rects = m.r.map(a => Object.assign({}, a)); buildNav(); const sp0 = m.spawns, d = flowTo(sp0[0][0], sp0[0][1]); let free = 0, reach = 0; nav.free.forEach((f, i) => { if (f) { free++; if (d[i] < 9999) reach++; } }); return [m.name, sp0.slice(1).map(p => d[cellOf(p[0], p[1])]), free, reach, m.doors.length, sp0.map(p => nav.free[cellOf(p[0], p[1])])]; }), step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name, rush: ents[myIdx] && ents[myIdx].rw && ents[myIdx].rw.t, modes: ents.map(e => e.ai.mode) }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
 })();
