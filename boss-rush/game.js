@@ -1730,7 +1730,7 @@
     eBul.length = 0; hazards.length = 0; for (const m of minions) burst(m.x, m.y, 8, '#fff', 120); minions.length = 0;
     bossIdx++; saveBest(bossIdx); boss.dead = true; deadT = 0; state = S.FIGHT; boss.dying = true; boss.air = 0; boss.line = DEFEAT_LINES[fightIdx] || 'The boss has been defeated.'; boss.deadEnd = 1.6 + boss.line.length / 38 + 2.2; boss.side = Math.random() < 0.5 ? -1 : 1; fanfare(); blip(420, 1.8, 'sawtooth', 0.08, 0.12);
   }
-  function offerUpgrades() { if (bossIdx === 30) { startStory('end'); return; } if (bossIdx >= BOSSES.length) { startStory('end2'); return; } const pool = (bossIdx >= 31 ? UPGRADES7 : bossIdx >= 26 ? UPGRADES6 : bossIdx >= 21 ? UPGRADES5 : bossIdx >= 16 ? UPGRADES4 : bossIdx >= 11 ? UPGRADES3 : bossIdx >= 6 ? UPGRADES2 : UPGRADES).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
+  function offerUpgrades() { if (bossIdx === 30) { startStory('end'); return; } if (bossIdx >= BOSSES.length) { startStory('end2'); return; } const pool = (bossIdx >= 31 ? UPGRADES7 : bossIdx >= 26 ? UPGRADES6 : bossIdx >= 21 ? UPGRADES5 : bossIdx >= 16 ? UPGRADES4 : bossIdx >= 11 ? UPGRADES3 : bossIdx >= 6 ? UPGRADES2 : UPGRADES).concat(player.laser ? LASER_UPG : []).filter(u => !u.ok || u.ok(player)); offered = []; while (offered.length < 3 && pool.length) offered.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]); state = S.UPGRADE; }
   function chooseUpgrade(i) { const u = offered[i]; if (!u) return; u.apply(player); blip(660, 0.15, 'square', 0.06); blip(990, 0.2, 'square', 0.05); if (bossIdx >= BOSSES.length) { state = S.WIN; saveBest(bossIdx); } else enterHub(false); }
 
   // ------------------------------------------------------------------ update
@@ -1752,11 +1752,38 @@
     if (kx || ky) { ax = kx; ay = ky; aiming = true; }
     p.face = Math.atan2(ay, ax);
     p.fireT -= dt;
+    p.laser = !bossMode && !!(p.maxed || p.shots >= 17);
+    if (p.laser && !p._lt) { p._lt = true; toastMsg('SUPER MAXED GUN: LASER unlocked! It takes its own upgrades.', 3); } if (!p.laser) p._lt = false;
+    p.beams = null;
+    if (p.laser && !p.ultra) { if (aiming && !(state === S.FIGHT && boss && boss.dying)) fireLaser(p, dt); return; }
     if (aiming && p.fireT <= 0 && !(state === S.FIGHT && boss && boss.dying)) {
       const ul = p.ultra; p.fireT = ul ? 0.035 : p.fireDelay; const n = ul ? Math.max(3, p.shots) : p.shots;
       for (let i = 0; i < n; i++) { const a = p.face + (n === 1 ? 0 : (i - (n - 1) / 2) * (ul ? 0.09 : 0.16)); pBul.push({ x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * (ul ? 900 : 560), vy: Math.sin(a) * (ul ? 900 : 560), r: ul ? 8 : 5, life: 0.9, dmg: admin.onehit ? 99999 : ul ? 30 : p.dmg, pierce: !!ul || !!p.pierce, hits: [], c: ul ? '#7fffd4' : p.maxed ? '#ff7ad9' : p.pierce ? '#ffb347' : null }); }
       blip(520 + Math.random() * 60, 0.06, 'square', 0.025, 0.6);
     }
+  }
+
+  function fireLaser(p, dt) {
+    const nb = 1 + 2 * (p.lb || 0), lw = p.lw || 1, dps = p.dmg * p.shots / Math.max(0.04, p.fireDelay) * 0.36 * (p.ld || 1);
+    p.beams = [];
+    for (let k = 0; k < nb; k++) {
+      const off = (k - (nb - 1) / 2) * 0.13, a = p.face + off, cx = Math.cos(a), cy = Math.sin(a), ox = p.x + cx * 14, oy = p.y + cy * 14;
+      let L = 1100; { const bx = ox - ARENA.x, by = oy - ARENA.y, bb = bx * cx + by * cy, cc = bx * bx + by * by - ARENA.r * ARENA.r, dd = bb * bb - cc; if (dd > 0) L = Math.min(L, -bb + Math.sqrt(dd)); }
+      for (const s of pillars) { const dx = s.x - ox, dy = s.y - oy, t = dx * cx + dy * cy, pr = Math.abs(-dx * cy + dy * cx); if (t > 0 && pr < s.r) L = Math.min(L, t - Math.sqrt(s.r * s.r - pr * pr)); }
+      L = Math.max(0, L); p.beams.push({ x: ox, y: oy, a, L });
+      const dist = o => { const dx = o.x - ox, dy = o.y - oy, t = clamp(dx * cx + dy * cy, 0, L); return Math.hypot(dx - cx * t, dy - cy * t); };
+      const per = dps * dt * (nb > 1 ? 0.7 : 1), wid = 7 * lw;
+      for (const m of minions) if (m.hp > 0 && dist(m) < m.r + wid) { m.hp -= per; m.flash = 0.08; if (m.hp <= 0) { burst(m.x, m.y, 10, '#fff', 150); blip(200, 0.1, 'square', 0.04, 0.5); } }
+      if (boss && boss.pylons) for (const q of boss.pylons) if (q.hp > 0 && dist(q) < q.r + wid) { q.hp -= per; q.flash = 0.08; if (q.hp <= 0) { burst(q.x, q.y, 24, '#7fd0ff', 220); blip(120, 0.3, 'sawtooth', 0.08); shake = 8; } }
+      if (boss && !boss.dying && !(boss.air > 0.3) && dist(boss) < boss.r + wid - 4) {
+        const fb = { vx: cx, vy: cy, x: ox, y: oy };
+        if (boss.reflect && boss.reflect(fb)) { if (Math.random() < 0.3) burst(boss.x, boss.y, 2, '#bfe8ff', 120); continue; }
+        boss.hp -= per * (boss.stun > 0 ? 1.5 : 1) * (boss.aegis ? 0.12 : 1) * (boss.dmgMul ? boss.dmgMul(fb) : 1); boss.flash = 0.07;
+        if (Math.random() < 0.5) burst(ox + cx * Math.min(L, Math.hypot(boss.x - ox, boss.y - oy)), oy + cy * Math.min(L, Math.hypot(boss.x - ox, boss.y - oy)), 1, '#ffd23f', 110);
+        if (boss.hp <= 0) { boss.hp = 0; if (bossMode) endBossMode(false); else bossDefeated(); }
+      }
+    }
+    if (Math.random() < dt * 14) blip(300 + Math.random() * 80, 0.05, 'sawtooth', 0.02, 0.6);
   }
 
   function hitCircle(a, b, extra) { return Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r + (extra || 0); }
@@ -1925,6 +1952,7 @@
   }
   let cutSprite = null, bigCut = null;
   function drawBullets() {
+    if (player && player.beams) for (const bm of player.beams) { const ex = bm.x + Math.cos(bm.a) * bm.L, ey = bm.y + Math.sin(bm.a) * bm.L, w = 7 * (player.lw || 1); ctx.save(); ctx.lineCap = 'round'; ctx.globalAlpha = 0.28; ctx.strokeStyle = '#ff7ad9'; ctx.lineWidth = w * 3.4; ctx.beginPath(); ctx.moveTo(bm.x, bm.y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ffd0f0'; ctx.lineWidth = w * 1.6 + Math.sin(time * 40) * 1.2; ctx.stroke(); ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = w * 0.6; ctx.beginPath(); ctx.moveTo(bm.x, bm.y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.restore(); glowRing(ex, ey, 18 + w, 'rgba(255,208,240,A)', 0.8); }
     for (const b of pBul) { const sp = glowSprite(b.c || '#fff3a0', b.r); ctx.drawImage(sp, b.x - sp.width / 2, b.y - sp.height / 2); }
     for (const b of eBul) { const sp = glowSprite(b.c, b.r); ctx.drawImage(sp, b.x - sp.width / 2, b.y - sp.height / 2); }
   }
@@ -2279,6 +2307,12 @@
     { id: 'c_multi', name: 'Cluster Cannon', desc: '+2 bullets per shot (max 17)', apply: p => { p.shots = Math.min(17, p.shots + 2); }, ok: p => p.shots < 17 },
     { id: 'c_heal', name: 'Cryo Pod', desc: 'Heal fully and +3 max hearts', apply: p => { p.maxHp += 3; p.hp = p.maxHp; } },
     { id: 'c_inv', name: 'Deflector Shield', desc: 'Stay invincible 0.8s longer after being hit', apply: p => { p.invDur = (p.invDur || 1.15) + 0.8; }, ok: p => (p.invDur || 1.15) < 5.2 }
+  ];
+  const LASER_UPG = [
+    { id: 'l_wide', name: 'Wide Beam', desc: 'LASER: +40% beam width', apply: p => { p.lw = (p.lw || 1) * 1.4; }, ok: p => p.laser && (p.lw || 1) < 3 },
+    { id: 'l_focus', name: 'Focus Lens', desc: 'LASER: +60% laser damage', apply: p => { p.ld = (p.ld || 1) * 1.6; }, ok: p => p.laser },
+    { id: 'l_twin', name: 'Twin Beams', desc: 'LASER: two more side beams (max 2 pairs)', apply: p => { p.lb = Math.min(2, (p.lb || 0) + 1); }, ok: p => p.laser && (p.lb || 0) < 2 },
+    { id: 'l_over', name: 'Overcharge', desc: 'LASER: +30% damage and +20% width', apply: p => { p.ld = (p.ld || 1) * 1.3; p.lw = (p.lw || 1) * 1.2; }, ok: p => p.laser && (p.lw || 1) < 3 }
   ];
   const HM = [1, 2.4, 3.2, 12, 36, 45, 54, 63, 72, 81, 90, 117];
   const PORT_SH = ['#c77dff', '#ff6a1a', '#9dff3a', '#ff9dd2', '#ff2d55', '#ffd23f'].concat(P2R.map(p => p.acc));
@@ -2652,6 +2686,7 @@
       g = sec('Free god upgrades');
       for (const u of UPGRADES6) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
       g = sec('Free space upgrades');
+      for (const u of LASER_UPG) g.append(row(u.name + ' (laser)', () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
       for (const u of UPGRADES7) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
       g = sec('Free shadow upgrades');
       for (const u of UPGRADES5) g.append(row(u.name, () => { u.apply(player); toastMsg('Free upgrade: ' + u.name); }));
