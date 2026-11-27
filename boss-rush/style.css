@@ -18,3 +18,7 @@ canvas { width: min(100%, calc((100vh - 70px) * 1.5)); aspect-ratio: 3 / 2; back
 .grid { display: flex; flex-wrap: wrap; gap: 6px; }
 .ab { padding: 7px 11px; font: 13px "Courier New", monospace; color: #fff; background: #3a2f27; border: 1px solid #6a5444; border-radius: 6px; cursor: pointer; }
 .ab:hover { background: #4d3f35; } .ab.on { background: #1f7a3a; border-color: #5dff9a; } .ab.go { background: #c0283c; }
+
+#laserBtn { display: none; position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 20; padding: 6px 14px; font: bold 13px "Courier New", monospace; letter-spacing: 1px; color: #fff; background: linear-gradient(#ff5ac8, #b0207f); border: 2px solid #ffd0f0; border-radius: 6px; cursor: pointer; box-shadow: 0 0 14px #ff7ad9; animation: lz 1s infinite alternate; }
+#laserBtn.on { background: #333; border-color: #ff7ad9; box-shadow: none; animation: none; font-size: 11px; }
+@keyframes lz { from { box-shadow: 0 0 6px #ff7ad9; } to { box-shadow: 0 0 20px #ffd0f0; } }
