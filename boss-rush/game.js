@@ -1689,7 +1689,7 @@
   function startFight() {
     bossMode = false;
     toast = null;
-    fightIdx = bossIdx; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); { const hm = HM[realmOf(bossIdx)] * (bossIdx >= 17 && bossIdx <= 19 ? 1.6 : bossIdx >= 23 && bossIdx <= 29 ? 2 : 1); boss.hp = boss.max = Math.round(boss.hp * hm); } introT = 2.2;
+    fightIdx = bossIdx; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); { const hm = HM[realmOf(bossIdx)] * (bossIdx >= 17 && bossIdx <= 19 ? 1.6 : bossIdx >= 23 && bossIdx <= 29 ? 4 : 1); boss.hp = boss.max = Math.round(boss.hp * hm); } introT = 2.2;
     player.x = ARENA.x; player.y = ARENA.y + ARENA.r - 50; player.inv = 1; player.dashT = 0;
     blip(120, 0.6, 'sawtooth', 0.08, 0.6);
   }
