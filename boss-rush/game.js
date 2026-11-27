@@ -2280,7 +2280,7 @@
     { id: 'c_heal', name: 'Cryo Pod', desc: 'Heal fully and +3 max hearts', apply: p => { p.maxHp += 3; p.hp = p.maxHp; } },
     { id: 'c_inv', name: 'Deflector Shield', desc: 'Stay invincible 0.8s longer after being hit', apply: p => { p.invDur = (p.invDur || 1.15) + 0.8; }, ok: p => (p.invDur || 1.15) < 5.2 }
   ];
-  const HM = [1, 2.4, 3.2, 6, 12, 15, 18, 21, 24, 27, 30, 39];
+  const HM = [1, 2.4, 3.2, 6, 24, 30, 36, 42, 48, 54, 60, 78];
   const PORT_SH = ['#c77dff', '#ff6a1a', '#9dff3a', '#ff9dd2', '#ff2d55', '#ffd23f'].concat(P2R.map(p => p.acc));
   const PORT_RING = [['#7fe3ff', '#c77dff', '#ff9dd2', '#fff'], ['#ffd23f', '#ff7a1a', '#ff3d3d', '#fff'], ['#d8ff7a', '#9dff3a', '#3affb0', '#fff'], ['#ff9dd2', '#c77dff', '#7fe3ff', '#fff'], ['#ff2d55', '#8a8aff', '#d0d4ff', '#fff'], ['#ffd23f', '#fff7d0', '#7fd0ff', '#fff']].concat(P2R.map(p => p.ring));
   const PORT_FILL = ['rgba(30,10,60,.85)', 'rgba(80,12,0,.9)', 'rgba(8,50,10,.9)', 'rgba(40,12,70,.9)', 'rgba(20,4,14,.92)', 'rgba(60,44,8,.9)'].concat(P2R.map(p => p.fill));
