@@ -1798,9 +1798,10 @@
     return false;
   }
   function updateFight(dt) {
-    if (introT > 0) { introT -= dt; if (!bossMode) movePlayer(dt); return; }
-    runTime += dt; if (bossMode) heroAI(dt); else movePlayer(dt);
-    if (!admin.freeze || bossMode) { if (boss && !boss.dying) boss.update(dt); for (const m of minions) m.update(dt); }
+    const intro = introT > 0; if (intro) introT -= dt;     // during the name card you can already move and shoot, the boss just doesn't act yet
+    if (intro && bossMode) return;
+    if (!intro) runTime += dt; if (bossMode) heroAI(dt); else movePlayer(dt);
+    if (!intro && (!admin.freeze || bossMode)) { if (boss && !boss.dying) boss.update(dt); for (const m of minions) m.update(dt); }
     // player bullets
     for (const b of pBul) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
