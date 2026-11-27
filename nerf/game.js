@@ -453,12 +453,40 @@
       ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.roundRect(r.x + 4, r.y + 3, r.w - 8, Math.min(8, r.h / 3), 4); ctx.fill();
     });
   }
+  // ------------------------------------------------------------------ gun art: every blaster has its own silhouette (drawn top-down, barrel pointing right from the hand)
+  function rr(x, y, w, h, r, f, st) { ctx.fillStyle = f; ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); if (st) { ctx.strokeStyle = st; ctx.lineWidth = 1.5; ctx.stroke(); } }
+  function drawGun(g, recoil) {
+    const C = g.col, D = '#23262e', M = '#4a4f5c', L = '#f4f4f4', k = g.name; ctx.save(); ctx.translate(-(recoil || 0), 0); ctx.lineJoin = 'round';
+    if (k === 'Foam Blaster') {
+      rr(8, -6, 24, 12, 4, C, D); rr(30, -4.5, 10, 9, 3, L, D); rr(38, -5, 4, 10, 2, '#ff5a3a'); rr(12, 4, 8, 7, 2, D); rr(14, -9, 8, 4, 2, M);
+    } else if (k === 'Scatter Shot') {
+      rr(8, -8, 20, 16, 4, D); rr(26, -9, 16, 7, 2, C, D); rr(26, 2, 16, 7, 2, C, D); rr(40, -10.5, 4, 10, 2, '#ffd0d0'); rr(40, 0.5, 4, 10, 2, '#ffd0d0'); rr(10, -6, 12, 12, 3, C, D);
+    } else if (k === 'Rapid Fire') {
+      rr(8, -5, 26, 10, 3, D); rr(32, -2.5, 14, 5, 1, C, D); rr(44, -4, 3, 8, 1, L);
+      ctx.fillStyle = C; ctx.strokeStyle = D; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(20, 9, 8, 0, TAU); ctx.fill(); ctx.stroke(); ctx.fillStyle = D; ctx.beginPath(); ctx.arc(20, 9, 3, 0, TAU); ctx.fill(); rr(12, -9, 14, 4, 2, C);
+    } else if (k === 'Sniper Dart') {
+      rr(6, -4, 18, 8, 3, D); rr(22, -2.5, 34, 5, 1, C, D); rr(54, -4, 4, 8, 1, L); rr(16, -10, 14, 6, 3, M, D); ctx.fillStyle = '#9fe8ff'; ctx.beginPath(); ctx.arc(30, -7, 3, 0, TAU); ctx.fill(); rr(8, 3, 6, 8, 2, D);
+    } else if (k === 'Burst Rifle') {
+      rr(8, -6, 20, 12, 4, D); for (const y of [-5, -1.5, 2]) rr(26, y - 0.5, 20, 3.5, 1, C, D); rr(44, -6.5, 4, 13, 2, L); rr(12, -8, 10, 4, 2, C); rr(12, 5, 8, 6, 2, M);
+    } else if (k === 'Splat Launcher') {
+      rr(8, -9, 22, 18, 6, C, D); ctx.fillStyle = L; ctx.strokeStyle = D; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(28, -6); ctx.lineTo(44, -12); ctx.lineTo(44, 12); ctx.lineTo(28, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C; ctx.beginPath(); ctx.arc(14, 0, 6, 0, TAU); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(12, -2, 2, 0, TAU); ctx.fill(); rr(40, -9, 4, 18, 2, '#ff7ad9');
+    } else if (k === 'Ricochet Gun') {
+      rr(8, -6, 16, 12, 4, D); ctx.strokeStyle = D; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(30, -6); ctx.lineTo(38, 5); ctx.lineTo(46, 0); ctx.stroke();
+      ctx.strokeStyle = C; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(30, -6); ctx.lineTo(38, 5); ctx.lineTo(46, 0); ctx.stroke(); ctx.lineCap = 'butt'; rr(11, -4, 8, 8, 2, C);
+    } else {   // Seeker Darts
+      rr(8, -6, 22, 12, 5, C, D); rr(26, -3.5, 10, 7, 2, D); ctx.fillStyle = L; ctx.strokeStyle = D; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(36, -4); ctx.lineTo(48, 0); ctx.lineTo(36, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#e8fff0'; ctx.beginPath(); ctx.arc(16, 0, 3.5, 0, TAU); ctx.fill(); ctx.fillStyle = D; ctx.beginPath(); ctx.arc(16, 0, 1.6, 0, TAU); ctx.fill(); ctx.strokeStyle = C; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(14, -6); ctx.lineTo(10, -12); ctx.moveTo(14, 6); ctx.lineTo(10, 12); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawEnt(e) {
     if (!e.alive) return;
     ctx.save(); ctx.translate(e.x, e.y);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(2, 6, e.r, e.r * 0.7, 0, 0, TAU); ctx.fill();
     ctx.rotate(e.face);
-    ctx.fillStyle = '#333'; ctx.fillRect(6, -4, 24, 8); ctx.fillStyle = e.gun.col; ctx.fillRect(22, -5, 10, 10); if (e.gun.big) ctx.fillRect(16, -7, 8, 14);
+    drawGun(e.gun, (e.fireT || 0) > e.gun.delay - 0.07 ? 3 : 0);
     ctx.fillStyle = e.flash > 0 ? '#fff' : e.col; ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU); ctx.fill();
     ctx.save(); ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU); ctx.clip(); ctx.rotate(-e.face); for (const s of e.stains) { ctx.fillStyle = s.col; ctx.beginPath(); ctx.arc(Math.cos(s.a) * e.r * s.d, Math.sin(s.a) * e.r * s.d, s.r, 0, TAU); ctx.fill(); } ctx.restore();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
@@ -503,7 +531,7 @@
     ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(0, 0, R + 12, 0, TAU); ctx.fill();
     GUNS.forEach((g, i) => {
       const a0 = wheel.rot + i * seg; ctx.fillStyle = g.col; ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R, a0, a0 + seg); ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.stroke();
-      ctx.save(); ctx.rotate(a0 + seg / 2); ctx.fillStyle = '#111'; ctx.font = 'bold 15px ' + FONT; ctx.textAlign = 'right'; ctx.fillText(g.name, R - 14, 5); ctx.restore();
+      ctx.save(); ctx.rotate(a0 + seg / 2); ctx.fillStyle = '#111'; ctx.font = 'bold 15px ' + FONT; ctx.textAlign = 'right'; ctx.fillText(g.name, R - 14, 5); ctx.translate(52, 0); ctx.scale(0.95, 0.95); drawGun(g); ctx.restore();
     });
     ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(0, 0, 34, 0, TAU); ctx.fill(); ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 4; ctx.stroke(); label('NERF', 0, 6, 14, '#ffd23f');
     ctx.restore();
@@ -780,5 +808,5 @@
   }
   requestAnimationFrame(frame);
 
-  if (location.hash === '#debug') window.__nerf = { play: i => { forceMap = i; if (!ents.length) { opts.bots = 3; newMatch(); } state = S.WHEEL; wheel.res = 0; ents[0].wres = 0; startRound(); }, net, castVote, vote: () => vote, myVote, net, hostStart: startOnlineMatch, setName: n => { nameStr = n; }, quick: quickMatch, create: createRoom, join: c => { codeStr = c; joinCode(); }, me: () => myIdx, checkMaps: () => MAPS.map(m => { map = m; rects = m.r.map(a => Object.assign({}, a)); buildNav(); const sp0 = m.spawns, d = flowTo(sp0[0][0], sp0[0][1]); let free = 0, reach = 0; nav.free.forEach((f, i) => { if (f) { free++; if (d[i] < 9999) reach++; } }); return [m.name, sp0.slice(1).map(p => d[cellOf(p[0], p[1])]), free, reach, m.doors.length, sp0.map(p => nav.free[cellOf(p[0], p[1])])]; }), step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name, rush: ents[myIdx] && ents[myIdx].rw && ents[myIdx].rw.t, modes: ents.map(e => e.ai.mode) }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
+  if (location.hash === '#debug') window.__nerf = { guns: GUNS, sheet: () => { ctx.fillStyle = '#2a3a30'; ctx.fillRect(0, 0, W, H); GUNS.forEach((g, i) => { ctx.save(); ctx.translate(60 + (i % 2) * 460, 80 + Math.floor(i / 2) * 140); ctx.fillStyle = '#c33'; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill(); ctx.scale(2.6, 2.6); drawGun(g); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = '16px sans-serif'; ctx.fillText(g.name, 200 + (i % 2) * 460, 90 + Math.floor(i / 2) * 140); }); }, play: i => { forceMap = i; if (!ents.length) { opts.bots = 3; newMatch(); } state = S.WHEEL; wheel.res = 0; ents[0].wres = 0; startRound(); }, net, castVote, vote: () => vote, myVote, net, hostStart: startOnlineMatch, setName: n => { nameStr = n; }, quick: quickMatch, create: createRoom, join: c => { codeStr = c; joinCode(); }, me: () => myIdx, checkMaps: () => MAPS.map(m => { map = m; rects = m.r.map(a => Object.assign({}, a)); buildNav(); const sp0 = m.spawns, d = flowTo(sp0[0][0], sp0[0][1]); let free = 0, reach = 0; nav.free.forEach((f, i) => { if (f) { free++; if (d[i] < 9999) reach++; } }); return [m.name, sp0.slice(1).map(p => d[cellOf(p[0], p[1])]), free, reach, m.doors.length, sp0.map(p => nav.free[cellOf(p[0], p[1])])]; }), step: dt => update(dt), st: () => ({ state, roundNo, wins: ents.map(e => e.wins), hp: ents.map(e => e.hp), alive: ents.map(e => e.alive), guns: ents.map(e => e.gun.name), map: map && map.name, rush: ents[myIdx] && ents[myIdx].rw && ents[myIdx].rw.t, modes: ents.map(e => e.ai.mode) }), ents: () => ents, newMatch, spin: spinWheel, wheel: () => wheel, opts, mouse, keys, S, setBot: () => { ents[0].isBot = true; }, bullets: () => bullets };
 })();
