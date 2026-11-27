@@ -159,7 +159,7 @@
   // ------------------------------------------------------------------ map vote (3 of the 4 map types, once per match)
   function voteCounts() { const c = [0, 0, 0]; for (const k in vote.votes) c[vote.votes[k]]++; return c; }
   function startVote() {
-    const o = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 3).sort((a, b) => a - b); vote = { opts: o, votes: {}, t: 15, res: -1, mine: -1, endT: 0 }; state = S.VOTE; stateT = 0;
+    const o = [0].concat([1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 2)).sort((a, b) => a - b);   // Normal is always on the ballot vote = { opts: o, votes: {}, t: 15, res: -1, mine: -1, endT: 0 }; state = S.VOTE; stateT = 0;
     for (const e of ents) if (e.isBot) e.voteAt = rnd(0.6, 4);
   }
   function castVote(i, k) { if (state === S.VOTE && vote.res < 0 && k >= 0 && k < 3) vote.votes[i] = k; }
