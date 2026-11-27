@@ -1689,7 +1689,7 @@
   function startFight() {
     bossMode = false;
     toast = null;
-    fightIdx = bossIdx; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); { const hm = HM[realmOf(bossIdx)] * (bossIdx >= 17 && bossIdx <= 19 ? 1.6 : bossIdx >= 23 && bossIdx <= 29 ? 32 : bossIdx >= 41 ? 3200 : bossIdx >= 31 ? 160 : bossIdx >= 30 ? 8 : 1); boss.hp = boss.max = Math.round(boss.hp * hm); } introT = 2.2;
+    fightIdx = bossIdx; state = S.FIGHT; resetWorld(); pillars = mkPillars('arena'); boss = BOSSES[bossIdx](); { const hm = HM[realmOf(bossIdx)] * (bossIdx >= 17 && bossIdx <= 19 ? 1.6 : bossIdx >= 23 && bossIdx <= 29 ? 32 : bossIdx >= 47 ? 32000 : bossIdx >= 41 ? 3200 : bossIdx >= 31 ? 160 : bossIdx >= 30 ? 8 : 1); boss.hp = boss.max = Math.round(boss.hp * hm); } introT = 2.2;
     player.x = ARENA.x; player.y = ARENA.y + ARENA.r - 50; player.inv = 1; player.dashT = 0;
     blip(120, 0.6, 'sawtooth', 0.08, 0.6);
   }
@@ -1754,7 +1754,7 @@
     p.fireT -= dt;
     lzCheck(p); p.laser = p.laserReady && !!p.laserOn;
     if (p.laserReady && !p._lt) { p._lt = true; toastMsg('Laser gun available! Click GET LASER GUN at the top of the screen.', 3.5); } if (!p.laserReady) p._lt = false;
-    p.beams = null;
+    p.beams = null; if (introT > 0) aiming = false;
     if (p.laser && !p.ultra) { if (aiming && !(state === S.FIGHT && boss && boss.dying)) fireLaser(p, dt); return; }
     if (aiming && p.fireT <= 0 && !(state === S.FIGHT && boss && boss.dying)) {
       const ul = p.ultra; p.fireT = ul ? 0.035 : p.fireDelay; const n = ul ? Math.max(3, p.shots) : p.shots;
@@ -1765,7 +1765,7 @@
 
   function lzCheck(p) {                                  // laser gun: super maxed gun, or automatically from Part Two on
     p.laserReady = !bossMode && !!(p.maxed || p.shots >= 17 || bossIdx >= 30);
-    if (p.laserReady && bossIdx >= 30 && !p._lzAuto) { p._lzAuto = true; p.laserOn = true; toastMsg('PART TWO: LASER GUN equipped! Use the button at the top to switch.', 3.5); }
+    if (p.laserReady && bossIdx >= 30) { if (!p._lzAuto) toastMsg('PART TWO: LASER GUN equipped for good!', 3.5); p._lzAuto = true; p.laserOn = true; }
   }
   function fireLaser(p, dt) {
     const nb = 1 + 2 * (p.lb || 0), lw = p.lw || 1, dps = p.dmg * p.shots / Math.max(0.04, p.fireDelay) * 0.36 * (p.ld || 1);
@@ -1798,10 +1798,9 @@
     return false;
   }
   function updateFight(dt) {
-    const intro = introT > 0; if (intro) introT -= dt;     // during the name card you can already move and shoot, the boss just doesn't act yet
-    if (intro && bossMode) return;
-    if (!intro) runTime += dt; if (bossMode) heroAI(dt); else movePlayer(dt);
-    if (!intro && (!admin.freeze || bossMode)) { if (boss && !boss.dying) boss.update(dt); for (const m of minions) m.update(dt); }
+    if (introT > 0) { introT -= dt; if (!bossMode) movePlayer(dt); return; }
+    runTime += dt; if (bossMode) heroAI(dt); else movePlayer(dt);
+    if (!admin.freeze || bossMode) { if (boss && !boss.dying) boss.update(dt); for (const m of minions) m.update(dt); }
     // player bullets
     for (const b of pBul) {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
@@ -2666,9 +2665,9 @@
   const ADMIN_PASSWORD = 'thisgameisgoated';
   (function initAdmin() {
     const lbtn = document.createElement('button'); lbtn.id = 'laserBtn'; document.body.append(lbtn);
-    lbtn.addEventListener('click', () => { if (player && player.laserReady) { player.laserOn = !player.laserOn; toastMsg(player.laserOn ? 'LASER GUN equipped!' : 'Normal gun equipped'); } lbtn.blur(); });
+    lbtn.addEventListener('click', () => { if (player && player.laserReady && bossIdx < 30) { player.laserOn = !player.laserOn; toastMsg(player.laserOn ? 'LASER GUN equipped!' : 'Normal gun equipped'); } lbtn.blur(); });
     let lbState = '';
-    setInterval(() => { if (player) lzCheck(player); const ok = !!(player && player.laserReady && (state === S.FIGHT || state === S.HUB || state === S.UPGRADE)), t = ok ? (player.laserOn ? 'LASER GUN: ON (click to switch back)' : 'GET LASER GUN') : ''; if (t !== lbState) { lbState = t; lbtn.style.display = ok ? 'block' : 'none'; lbtn.textContent = t; lbtn.className = ok && player.laserOn ? 'on' : ''; } }, 100);
+    setInterval(() => { if (player) lzCheck(player); const ok = !!(player && player.laserReady && bossIdx < 30 && (state === S.FIGHT || state === S.HUB || state === S.UPGRADE)), t = ok ? (player.laserOn ? 'LASER GUN: ON (click to switch back)' : 'GET LASER GUN') : ''; if (t !== lbState) { lbState = t; lbtn.style.display = ok ? 'block' : 'none'; lbtn.textContent = t; lbtn.className = ok && player.laserOn ? 'on' : ''; } }, 100);
     const btn = document.createElement('button'); btn.id = 'adminBtn'; btn.textContent = 'ADMIN'; btn.title = 'Admin';
     const box = document.createElement('div'); box.id = 'adminBox'; document.body.append(btn, box);
     const say = t => { const m = box.querySelector('.msg'); if (m) m.textContent = t; };
